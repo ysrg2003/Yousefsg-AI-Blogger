@@ -3,6 +3,8 @@ import json
 import time
 import requests
 import re
+import base64
+import random
 from google import genai
 from google.genai import types
 
@@ -104,6 +106,14 @@ Add 2–4 textual rich elements: a short comparison table (if none present, crea
 Extract one conceptual icon (1–2 English words).
 Create author byline and short author bio (40–60 words). Use placeholder if unknown.
 
+**IMAGE PROMPT GENERATION (MANDATORY):**
+Create a specific English prompt for an AI image generator to create a header image for this article.
+RULES:
+1. Abstract, futuristic, technological style (3D render, isometric, or digital art).
+2. NO HUMANS, NO FACES, NO ANIMALS, NO TEXT.
+3. Focus on concepts: data streams, neural nodes, silicon chips, glowing networks, abstract robotics.
+4. Field name in JSON: "imageGenPrompt".
+
 NETWORK-LEVEL OPTIMIZATION:
 Analyze knowledge_graph array and select 3–5 best internal articles to link. Provide exact HTML anchor tags using slugs from knowledge_graph. For each internal link, include a one-line note: which Section Focus point it fills.
 Propose 2 future article titles to fill content gaps.
@@ -120,7 +130,7 @@ Include breakdown for: Accuracy, E-E-A-T, YMYL risk, Ads placement risk.
 
 OUTPUT:
 Return single JSON ONLY with these fields:
-{{"finalTitle":"...","finalContent":"<html>...final polished HTML with inline links and sources...</html>","excerpt":"...short excerpt...","seo": {{ "metaTitle":"...","metaDescription":"...","imageAltText":"..." }},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[ "<a href='...'>...</a>", ... ],"schemaMarkup":"{{...JSON-LD...}}","adsenseReadinessScore":{{ "score":0-100, "breakdown": {{...}}, "notes":"..." }},"sources":[ ... ],"authorBio":{{ "name":"...", "bio":"...", "profileUrl":"..." }}}}
+{{"finalTitle":"...","finalContent":"<html>...final polished HTML with inline links and sources...</html>","excerpt":"...short excerpt...","imageGenPrompt":"...the prompt for image generator...","seo": {{ "metaTitle":"...","metaDescription":"...","imageAltText":"..." }},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[ "<a href='...'>...</a>", ... ],"schemaMarkup":"{{...JSON-LD...}}","adsenseReadinessScore":{{ "score":0-100, "breakdown": {{...}}, "notes":"..." }},"sources":[ ... ],"authorBio":{{ "name":"...", "bio":"...", "profileUrl":"..." }}}}
 """
 
 PROMPT_D_TEMPLATE = """
@@ -153,7 +163,7 @@ STEP 6 — Safety, Legal & Final Editorial Confirmation
 Include "humanEditorConfirmation" object.
 
 Output JSON ONLY:
-{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"...","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}},"edits":[ {{"type":"...", "original":"...", "new":"...", "reason":"..."}}...],"auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},"plagiarismFlag": false,"aiDetectionFlag": false,"citationCompleteness": true,"authorBioPresent": true,"humanEditorConfirmation": {{...}},"requiresAction": false, "requiredActions":[...],"notes":"..."}}
+{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve this field...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"...","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}},"edits":[ {{"type":"...", "original":"...", "new":"...", "reason":"..."}}...],"auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},"plagiarismFlag": false,"aiDetectionFlag": false,"citationCompleteness": true,"authorBioPresent": true,"humanEditorConfirmation": {{...}},"requiresAction": false, "requiredActions":[...],"notes":"..."}}
 """
 
 PROMPT_E_TEMPLATE = """
@@ -170,7 +180,7 @@ STEP-BY-STEP WORKFLOW:
 4. SEO & PUBLISHING PACKAGE: Validate meta tags, schema, internal links.
 5. FINAL OUTPUT: Return single JSON ONLY.
 
-{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio": {{...}},"edits":[...],"auditMetadata": {{...}},"requiredActions":[...]}}
+{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve this field...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio": {{...}},"edits":[...],"auditMetadata": {{...}},"requiredActions":[...]}}
 """
 
 # ==============================================================================
@@ -225,7 +235,6 @@ def generate_step(client, model, prompt_text, step_name):
     """Executes a single step with AGGRESSIVE retry logic for strict rate limits"""
     print(f"   👉 Executing {step_name}...")
     
-    # Increased retries to 5 to handle the strict 5 RPM limit
     max_retries = 5
     
     for i in range(max_retries):
@@ -241,9 +250,7 @@ def generate_step(client, model, prompt_text, step_name):
             
         except Exception as e:
             error_str = str(e)
-            # Handle 429 (Quota) and 503 (Overload)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "503" in error_str:
-                # Progressive wait: 60s, 90s, 120s, 150s, 180s
                 wait_time = 60 + (i * 30)
                 print(f"      ⏳ Quota Hit (Attempt {i+1}/{max_retries}). Waiting {wait_time}s to clear RPM...")
                 time.sleep(wait_time)
@@ -274,7 +281,63 @@ def update_knowledge_graph(slug, title, section):
         print(f"⚠️ Failed to update knowledge graph: {e}")
 
 # ==============================================================================
-# 3. MAIN PIPELINE LOGIC
+# 3. IMAGE GENERATION & HOSTING (NEW)
+# ==============================================================================
+
+def generate_and_upload_image(prompt_text):
+    """
+    1. Generates image via Pollinations.ai (Free, No API Key).
+    2. Uploads to ImgBB (Free, Direct Link).
+    """
+    imgbb_key = os.getenv('IMGBB_API_KEY')
+    if not imgbb_key:
+        print("⚠️ IMGBB_API_KEY not found. Skipping image generation.")
+        return None
+
+    print(f"   🎨 Generating Image for: {prompt_text[:50]}...")
+    
+    # 1. Construct Pollinations URL
+    # Enforce constraints: No humans, abstract, tech style
+    safe_prompt = f"{prompt_text}, abstract, futuristic, 3d render, high quality, 8k, technological, --no people, humans, animals, faces, text, words"
+    encoded_prompt = requests.utils.quote(safe_prompt)
+    seed = random.randint(1, 99999)
+    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&nologo=true&seed={seed}&model=flux"
+
+    try:
+        # 2. Download Image
+        img_response = requests.get(image_url, timeout=30)
+        if img_response.status_code != 200:
+            print(f"❌ Pollinations Error: {img_response.status_code}")
+            return None
+        
+        # 3. Upload to ImgBB
+        print("   ☁️ Uploading to ImgBB...")
+        upload_url = "https://api.imgbb.com/1/upload"
+        payload = {
+            "key": imgbb_key,
+            "expiration": 0 # 0 = Permanent
+        }
+        files = {
+            "image": img_response.content
+        }
+        
+        upload_res = requests.post(upload_url, data=payload, files=files)
+        result = upload_res.json()
+        
+        if result.get("success"):
+            direct_link = result["data"]["url"]
+            print(f"   ✅ Image Ready: {direct_link}")
+            return direct_link
+        else:
+            print(f"❌ ImgBB Error: {result}")
+            return None
+
+    except Exception as e:
+        print(f"❌ Image Gen/Upload Failed: {e}")
+        return None
+
+# ==============================================================================
+# 4. MAIN PIPELINE LOGIC
 # ==============================================================================
 
 def run_trending_pipeline(client, model, category, config):
@@ -291,8 +354,6 @@ def run_trending_pipeline(client, model, category, config):
     json_a = generate_step(client, model, prompt_a, "Step A (Research)")
     if not json_a: return
     
-    # MANDATORY WAIT: To respect 5 RPM limit (1 request every 12s minimum)
-    # We wait 20s to be safe.
     print("      ...Pacing: Waiting 20s...")
     time.sleep(20) 
 
@@ -303,7 +364,7 @@ def run_trending_pipeline(client, model, category, config):
     print("      ...Pacing: Waiting 20s...")
     time.sleep(20)
 
-    # --- Step C: SEO & Strategy ---
+    # --- Step C: SEO & Strategy (Includes Image Prompt) ---
     kg = load_knowledge_graph()
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b, knowledge_graph=kg)
     json_c = generate_step(client, model, prompt_c, "Step C (SEO)")
@@ -329,6 +390,16 @@ def run_trending_pipeline(client, model, category, config):
         title = final_data.get('finalTitle', f"New in {category}")
         content = final_data.get('finalContent', '')
         
+        # --- IMAGE GENERATION BLOCK ---
+        img_prompt = final_data.get('imageGenPrompt', f"Abstract technology background for {category}")
+        image_url = generate_and_upload_image(img_prompt)
+        
+        if image_url:
+            alt_text = final_data.get('seo', {}).get('imageAltText', title)
+            img_html = f'<div class="separator" style="clear: both; text-align: center;"><a href="{image_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{image_url}" alt="{alt_text}" data-original-width="1280" data-original-height="720" /></a></div><br />'
+            content = img_html + content
+        # ------------------------------
+
         if 'auditMetadata' in final_data:
             audit = final_data['auditMetadata']
             content += f"<hr><small><i>Audit Stats: AI Prob {audit.get('aiProbability')}%, Passes {audit.get('numberOfHumanizationPasses')}</i></small>"
@@ -347,8 +418,17 @@ def run_evergreen_pipeline(client, model, category, prompt_text):
         json_res = generate_step(client, model, wrapper, "Evergreen Generation")
         if json_res:
             data = json.loads(json_res)
-            publish_post(data['title'], data['content'], [category, "Guide", "Evergreen"])
-            update_knowledge_graph("guide-" + category.lower().replace(' ', '-'), data['title'], category)
+            content = data['content']
+            title = data['title']
+            
+            # Generate Image for Evergreen too
+            image_url = generate_and_upload_image(f"Abstract illustration of {category} concepts, educational, clean, 3d render")
+            if image_url:
+                img_html = f'<div class="separator" style="clear: both; text-align: center;"><a href="{image_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{image_url}" alt="{title}" data-original-width="1280" data-original-height="720" /></a></div><br />'
+                content = img_html + content
+            
+            publish_post(title, content, [category, "Guide", "Evergreen"])
+            update_knowledge_graph("guide-" + category.lower().replace(' ', '-'), title, category)
     except Exception as e:
         print(f"❌ Evergreen failed: {e}")
 
@@ -363,7 +443,6 @@ def main():
     with open('config_advanced.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     
-    # Using the model exactly as defined in the config
     model = config['settings'].get('model_name', 'models/gemini-2.5-flash')
 
     for category in config['categories']:
