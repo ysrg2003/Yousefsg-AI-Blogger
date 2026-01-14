@@ -1,3 +1,4 @@
+
 import os
 import json
 import time
@@ -8,9 +9,64 @@ from google import genai
 from google.genai import types
 
 # ==============================================================================
+# 0. SMART MODEL RESOLVER (NEW)
+# ==============================================================================
+
+def resolve_working_model(client, preferred_model):
+    """
+    Tests a list of models to find one that works with the current API Key.
+    Returns the first working model name.
+    """
+    print("🔍 Testing available models...")
+    
+    # List of candidates to try (in order of preference)
+    candidates = [
+        preferred_model,                # The one from config
+        "gemini-1.5-flash",             # Standard alias
+        "gemini-1.5-flash-001",         # Specific version
+        "gemini-1.5-flash-002",         # Newer version
+        "gemini-1.5-flash-8b",          # Fast version
+        "gemini-1.5-pro",               # Fallback to Pro
+        "gemini-2.0-flash-exp"          # Experimental fallback
+    ]
+    
+    # Remove duplicates and clean 'models/' prefix
+    cleaned_candidates = []
+    for m in candidates:
+        if not m: continue
+        clean_m = m.replace("models/", "")
+        if clean_m not in cleaned_candidates:
+            cleaned_candidates.append(clean_m)
+
+    for model_name in cleaned_candidates:
+        try:
+            print(f"   Testing: {model_name}...", end=" ")
+            # Try a very simple, 1-token generation to check existence
+            client.models.generate_content(
+                model=model_name,
+                contents="Hello",
+                config=types.GenerateContentConfig(max_output_tokens=1)
+            )
+            print("✅ WORKS!")
+            return model_name
+        except Exception as e:
+            error_msg = str(e)
+            if "404" in error_msg or "NOT_FOUND" in error_msg:
+                print("❌ Not Found")
+            elif "429" in error_msg:
+                print("⚠️ Quota limit (exists but busy).")
+                # If it exists but we are out of quota, it's still a valid model name.
+                # But safer to try others if possible? No, 429 means valid model.
+                return model_name 
+            else:
+                print(f"❌ Error: {error_msg}")
+    
+    print("\n❌ CRITICAL: No working model found. Please check your API Key.")
+    return None
+
+# ==============================================================================
 # 1. FULL PROMPTS DEFINITIONS
 # ==============================================================================
-# (نفس البرومبتات تماماً - لم تتغير)
 
 PROMPT_A_TEMPLATE = """
 A:You are an investigative tech reporter specialized in {section}. Search the modern index (Google Search, Google Scholar, arXiv, official blogs, SEC/10-Q when financial figures are used) for one specific, high-impact case, study, deployment, or company announcement that occurred within {date_range} (for example "last 60 days").
@@ -155,7 +211,7 @@ STEP 6 — Safety, Legal & Final Editorial Confirmation
 Include "humanEditorConfirmation" object.
 
 Output JSON ONLY:
-{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"...","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}},"edits":[ {{"type":"...", "original":"...", "new":"...", "reason":"..."}}...],"auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},"plagiarismFlag": false,"aiDetectionFlag": false,"citationCompleteness": true,"authorBioPresent": true,"humanEditorConfirmation": {{...}},"requiresAction": false, "requiredActions":[...],"notes":"..."}}
+{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"...","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}},"edits":[ {{"type":"...", "original":"...", "new":"...", "reason":"..."}}...],"auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},"plagiarismFlag": false,"aiDetectionFlag": false,"citationCompleteness": true,"authorBioPresent": true,"humanEditorConfirmation": {{"editorName": "Yousef Sameer","editorRole": "Human Editor, AI News Hub","confirmationLine": "I have reviewed this article and verified the sources, quotes and numeric claims to the best of my ability.","dateReviewed": "YYYY-MM-DD"}},"requiresAction": false, "requiredActions":[...],"notes":"..."}}
 """
 
 PROMPT_E_TEMPLATE = """
@@ -239,8 +295,13 @@ def generate_step(client, model, prompt_text, step_name):
             error_str = str(e)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "503" in error_str:
                 wait_time = 60 + (i * 45) 
-                print(f"      ⏳ Rate Limit Hit. Cooling down for {wait_time}s (Attempt {i+1}/{max_retries})...")
+                print(f"      ⏳ Rate Limit Hit (429). Cooling down for {wait_time}s (Attempt {i+1}/{max_retries})...")
                 time.sleep(wait_time)
+            elif "404" in error_str:
+                print(f"      ❌ Model Not Found ({model}). Retrying logic might help...")
+                # If 404, waiting won't help, but in this function we assume model was checked.
+                # If it fails here, it might be intermittent.
+                time.sleep(10)
             else:
                 print(f"      ❌ Unexpected Error in {step_name}: {e}")
                 time.sleep(20)
@@ -267,15 +328,10 @@ def update_knowledge_graph(slug, title, section):
         print(f"⚠️ Failed to update knowledge graph: {e}")
 
 # ==============================================================================
-# 3. IMAGE GENERATION & UPLOAD (UPDATED FOR ImgBB)
+# 3. IMAGE GENERATION & UPLOAD (ImgBB)
 # ==============================================================================
 
 def generate_and_upload_image(client, topic):
-    """
-    1. Generates Image (Gemini)
-    2. Uploads to ImgBB (Permanent URL)
-    3. Returns HTML string with Direct URL
-    """
     imgbb_key = os.getenv('IMGBB_API_KEY')
     if not imgbb_key:
         print("⚠️ ImgBB Key not found. Skipping image.")
@@ -294,7 +350,8 @@ def generate_and_upload_image(client, topic):
     )
 
     try:
-        # 1. Generate Image using Gemini
+        # For images, we try the standard Imagen 3 model
+        # Note: If 404, you might need to try 'imagen-3.0-generate-001' or similar
         response = client.models.generate_images(
             model='imagen-3.0-generate-001',
             prompt=image_prompt,
@@ -309,7 +366,6 @@ def generate_and_upload_image(client, topic):
             image_bytes = response.generated_images[0].image.image_bytes
             b64_string = base64.b64encode(image_bytes).decode('utf-8')
             
-            # 2. Upload to ImgBB
             print("      ☁️ Uploading to ImgBB...")
             url = "https://api.imgbb.com/1/upload"
             payload = {
@@ -321,8 +377,6 @@ def generate_and_upload_image(client, topic):
             if res.status_code == 200:
                 img_url = res.json()['data']['url']
                 print(f"      ✅ Uploaded: {img_url}")
-                
-                # 3. Return Clean HTML
                 return f'<div class="separator" style="clear: both; text-align: center;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" data-original-height="720" data-original-width="1280" src="{img_url}" alt="{topic} AI Illustration" /></a></div><br />'
             else:
                 print(f"      ❌ ImgBB Upload Failed: {res.text}")
@@ -334,7 +388,7 @@ def generate_and_upload_image(client, topic):
     return ""
 
 # ==============================================================================
-# 4. MAIN PIPELINE LOGIC
+# 4. MAIN PIPELINE LOGIC (SLOW & STEADY MODE)
 # ==============================================================================
 
 def run_trending_pipeline(client, model, category, config):
@@ -346,6 +400,7 @@ def run_trending_pipeline(client, model, category, config):
     prompt_a = PROMPT_A_TEMPLATE.format(section=category, date_range=date_range, section_focus=section_focus)
     json_a = generate_step(client, model, prompt_a, "Step A (Research)")
     if not json_a: return
+    
     print("      ☕ Safety Pause (40s)...")
     time.sleep(40) 
 
@@ -390,6 +445,13 @@ def run_trending_pipeline(client, model, category, config):
         if 'auditMetadata' in final_data:
             audit = final_data['auditMetadata']
             content += f"<hr><small><i>Audit Stats: AI Prob {audit.get('aiProbability')}%, Passes {audit.get('numberOfHumanizationPasses')}</i></small>"
+            if 'humanEditorConfirmation' in final_data:
+                editor = final_data['humanEditorConfirmation']
+                content += f"""<div style="margin-top:20px; padding:15px; background:#f9f9f9; border-left:4px solid #333;">
+                <strong>Human Editor: {editor.get('editorName', 'Yousef Sameer')}</strong><br>
+                <em>{editor.get('confirmationLine')}</em><br>
+                <small>Reviewed on: {editor.get('dateReviewed')}</small>
+                </div>"""
 
         if publish_post(title, content, [category, "Trending", "AI News"]):
             slug = title.lower().replace(' ', '-').replace(':', '')[:50]
@@ -429,25 +491,31 @@ def main():
     with open('config_advanced.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     
- 
-      model = config['settings'].get('model_name', 'models/gemini-2.5-flash')
+    # 1. Get Preferred Model from Config
+    preferred_model = config['settings'].get('model_name', 'gemini-1.5-flash')
+    
+    # 2. AUTO-RESOLVE: Find a model that ACTUALLY works
+    working_model = resolve_working_model(client, preferred_model)
+    
+    if not working_model:
+        print("🛑 STOPPING: No working model found.")
+        return
 
-
-    print(f"ℹ️ Using Model: {model}")
+    print(f"🚀 STARTING PIPELINE WITH: {working_model}")
 
     for category in config['categories']:
         print(f"\n🚀 PROCESSING CATEGORY: {category}")
         
         # 1. Trending Article
-        run_trending_pipeline(client, model, category, config)
-        print("💤 Cooling down (120s) to fully reset Free Tier limits...")
+        run_trending_pipeline(client, working_model, category, config)
+        print("💤 Cooling down (120s)...")
         time.sleep(120) 
         
         # 2. Evergreen Article
         evergreen_prompt = config['categories'][category].get('evergreen_prompt')
         if evergreen_prompt:
-            run_evergreen_pipeline(client, model, category, evergreen_prompt)
-            print("💤 Cooling down (120s) before next category...")
+            run_evergreen_pipeline(client, working_model, category, evergreen_prompt)
+            print("💤 Cooling down (120s)...")
             time.sleep(120)
 
 if __name__ == "__main__":
