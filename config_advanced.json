@@ -1,36 +1,36 @@
 {
   "categories": {
     "Machine Learning": {
-      "trending_prompt": "You are an investigative tech reporter specialized in Machine Learning. Search the modern index for one specific, high-impact case within {date_range}. SECTION FOCUS: SOTA comparisons, datasets, compute, energy cost, reproducibility. MANDATORY: Return JSON with headline and 2-3 verified sources following the strict schema provided previously.",
-      "evergreen_prompt": "Write a comprehensive, evergreen article about Machine Learning. Explain core concepts (supervised vs. unsupervised learning, neural networks), key datasets, reproducibility best practices, and practical applications. Use HTML format with <h2>, <h3> and <p>."
+      "trending_focus": "Machine Learning: SOTA comparisons, datasets, compute, energy cost, reproducibility.",
+      "evergreen_prompt": "Write a comprehensive, evergreen article about Machine Learning. Explain core concepts (supervised vs. unsupervised learning, neural networks, common architectures), key datasets, reproducibility best practices, compute and energy considerations, and practical applications. Tailor the piece to be useful to both beginners and experienced practitioners; include recommended further reading and resource links."
     },
     "Natural Language Processing": {
-      "trending_prompt": "You are an investigative tech reporter specialized in NLP. Search the modern index for one specific, high-impact case within {date_range}. SECTION FOCUS: eval metrics (BLEU/ROUGE/Hallucination), dataset biases, safety. MANDATORY: Return JSON with headline and 2-3 verified sources following the strict schema provided previously.",
-      "evergreen_prompt": "Write a clear, practical guide on Natural Language Processing (NLP). Cover tokenization, embeddings, transformers, and evaluation metrics. Include real-world examples like translation and QA. Use HTML format with <h2>, <h3> and <p>."
+      "trending_focus": "Natural Language Processing: eval metrics (BLEU/ROUGE/EM/Hallucination risk), dataset biases, safety.",
+      "evergreen_prompt": "Write a clear, practical guide that explains how Natural Language Processing works. Cover tokenization, word embeddings, transformers, common evaluation metrics (BLEU, ROUGE, EM), and provide real-world examples (translation, summarization, QA). Include commentary on dataset bias and safety considerations."
     },
     "Computer Vision": {
-      "trending_prompt": "You are an investigative tech reporter specialized in Computer Vision. Search the modern index for one specific, high-impact case within {date_range}. SECTION FOCUS: datasets (ImageNet/COCO), segmentation/tracking, edge vs cloud. MANDATORY: Return JSON with headline and 2-3 verified sources following the strict schema provided previously.",
-      "evergreen_prompt": "Write an accessible overview of Computer Vision. Cover image formation, CNNs vs Transformers, and edge deployment. Include real-world examples and benchmarks. Use HTML format with <h2>, <h3> and <p>."
+      "trending_focus": "Computer Vision: datasets (ImageNet/COCO/medical), segmentation/tracking benchmarks, edge vs cloud deployment.",
+      "evergreen_prompt": "Write an accessible overview of Computer Vision fundamentals. Cover image formation, common datasets (ImageNet, COCO, medical datasets), CNNs and modern transformer-based vision models, and practical considerations for edge vs cloud deployment. Include real-world examples and evaluation benchmarks."
     },
     "Robotics": {
-      "trending_prompt": "You are an investigative tech reporter specialized in Robotics. Search the modern index for one specific, high-impact case within {date_range}. SECTION FOCUS: sim2real, ISO safety standards, real deployments. MANDATORY: Return JSON with headline and 2-3 verified sources following the strict schema provided previously.",
-      "evergreen_prompt": "Write a clear primer on Robotics fundamentals. Cover robot types, sim-to-real transfer, safety standards (ISO), and control stacks. Use HTML format with <h2>, <h3> and <p>."
+      "trending_focus": "Robotics: sim2real, ISO safety standards, real deployments.",
+      "evergreen_prompt": "Write a clear primer on Robotics fundamentals. Cover robot types (industrial, service, autonomous), sim-to-real transfer, key safety standards (ISO), and examples of real-world deployments. Discuss control stacks and common sensors/actuators."
     },
     "Generative AI": {
-      "trending_prompt": "You are an investigative tech reporter specialized in Generative AI. Search the modern index for one specific, high-impact case within {date_range}. SECTION FOCUS: model provenance, licensing, watermarking, detectability. MANDATORY: Return JSON with headline and 2-3 verified sources following the strict schema provided previously.",
-      "evergreen_prompt": "Write an in-depth article on Generative AI. Cover transformers, diffusion models, GANs, licensing, and watermarking. Discuss ethical considerations. Use HTML format with <h2>, <h3> and <p>."
+      "trending_focus": "Generative AI: model provenance, licensing, watermarking, detectability.",
+      "evergreen_prompt": "Write an in-depth article on Generative AI. Cover model architectures (transformers, diffusion models, GANs), training methodologies, licensing and provenance issues, watermarking techniques, and detectability challenges. Include real-world applications and ethical considerations."
     },
     "AI Applications": {
-      "trending_prompt": "You are an investigative tech reporter specialized in AI Applications. Search the modern index for one specific, high-impact case within {date_range}. SECTION FOCUS: enterprise ROI, integration case studies, deployment cost. MANDATORY: Return JSON with headline and 2-3 verified sources following the strict schema provided previously.",
-      "evergreen_prompt": "Write a comprehensive guide to AI Applications across industries (healthcare, finance, retail). Explain ROI metrics, integration challenges, and case studies. Use HTML format with <h2>, <h3> and <p>."
+      "trending_focus": "AI Applications: enterprise ROI, integration case studies, deployment cost.",
+      "evergreen_prompt": "Write a comprehensive guide to AI Applications across industries. Cover healthcare, finance, manufacturing, retail, and education. For each domain, explain ROI metrics, integration challenges, deployment costs, and real-world case studies. Include best practices and lessons learned."
     },
     "AI Research": {
-      "trending_prompt": "You are an investigative tech reporter specialized in AI Research. Search the modern index for one specific, high-impact case within {date_range}. SECTION FOCUS: arXiv/NeurIPS/CVPR papers, ablations, reproducibility, code availability. MANDATORY: Return JSON with headline and 2-3 verified sources following the strict schema provided previously.",
-      "evergreen_prompt": "Write a detailed overview of recent AI research trends. Discuss scaling laws, few-shot learning, and reproducibility challenges. Use HTML format with <h2>, <h3> and <p>."
+      "trending_focus": "AI Research: arXiv/NeurIPS/CVPR papers, ablations, reproducibility, code availability.",
+      "evergreen_prompt": "Write a detailed overview of recent AI research trends. Discuss landmark papers from NeurIPS, CVPR, ICLR, and arXiv. Cover topics like scaling laws, few-shot learning, multimodal models, and reproducibility challenges. Include analysis of ablation studies and code availability in the research community."
     },
     "AI Ethics": {
-      "trending_prompt": "You are an investigative tech reporter specialized in AI Ethics. Search the modern index for one specific, high-impact case within {date_range}. SECTION FOCUS: audits, impact assessments, governance, legal cases. MANDATORY: Return JSON with headline and 2-3 verified sources following the strict schema provided previously.",
-      "evergreen_prompt": "Write a comprehensive article on AI Ethics. Cover algorithmic bias, fairness metrics, XAI, privacy (GDPR), and governance. Use HTML format with <h2>, <h3> and <p>."
+      "trending_focus": "AI Ethics: audits, impact assessments, governance, legal cases.",
+      "evergreen_prompt": "Write a comprehensive article on AI Ethics. Cover algorithmic bias, fairness metrics, transparency and explainability (XAI), privacy concerns (GDPR, CCPA), and governance frameworks. Include case studies of AI audits, impact assessments, and legal precedents. Discuss responsible AI principles."
     }
   },
   "settings": {
