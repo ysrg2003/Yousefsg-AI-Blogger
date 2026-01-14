@@ -16,10 +16,10 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      # ... (بداية الملف كما هي)
+      
       - name: Install dependencies
         run: |
-          pip install google-genai requests
+          pip install -r requirements_1.txt
       
       - name: Run article generator
         env:
@@ -29,4 +29,3 @@ jobs:
           BLOGGER_CLIENT_SECRET: ${{ secrets.BLOGGER_CLIENT_SECRET }}
           BLOGGER_REFRESH_TOKEN: ${{ secrets.BLOGGER_REFRESH_TOKEN }}
         run: python -u article_generator_advanced.py
-      
