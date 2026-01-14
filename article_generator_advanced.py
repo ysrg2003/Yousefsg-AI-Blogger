@@ -222,14 +222,14 @@ def clean_json_response(text):
     return text
 
 def generate_step(client, model, prompt_text, step_name):
-    """Executes a single step of the chain with robust retry logic matching old system style"""
+    """Executes a single step with AGGRESSIVE retry logic for strict rate limits"""
     print(f"   👉 Executing {step_name}...")
     
-    max_retries = 3
+    # Increased retries to 5 to handle the strict 5 RPM limit
+    max_retries = 5
     
     for i in range(max_retries):
         try:
-            # Using the new SDK syntax but with the OLD MODEL name
             response = client.models.generate_content(
                 model=model,
                 contents=prompt_text,
@@ -241,9 +241,11 @@ def generate_step(client, model, prompt_text, step_name):
             
         except Exception as e:
             error_str = str(e)
+            # Handle 429 (Quota) and 503 (Overload)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "503" in error_str:
-                wait_time = 70 if i == 0 else 120 # Matches your old system's 70s/120s logic
-                print(f"      ⏳ Server Busy/Quota (Attempt {i+1}/{max_retries}). Waiting {wait_time}s...")
+                # Progressive wait: 60s, 90s, 120s, 150s, 180s
+                wait_time = 60 + (i * 30)
+                print(f"      ⏳ Quota Hit (Attempt {i+1}/{max_retries}). Waiting {wait_time}s to clear RPM...")
                 time.sleep(wait_time)
             else:
                 print(f"      ❌ Unexpected Error in {step_name}: {e}")
@@ -288,26 +290,33 @@ def run_trending_pipeline(client, model, category, config):
     )
     json_a = generate_step(client, model, prompt_a, "Step A (Research)")
     if not json_a: return
-    time.sleep(5) 
+    
+    # MANDATORY WAIT: To respect 5 RPM limit (1 request every 12s minimum)
+    # We wait 20s to be safe.
+    print("      ...Pacing: Waiting 20s...")
+    time.sleep(20) 
 
     # --- Step B: Draft ---
     prompt_b = PROMPT_B_TEMPLATE.format(json_input=json_a)
     json_b = generate_step(client, model, prompt_b, "Step B (Drafting)")
     if not json_b: return
-    time.sleep(5)
+    print("      ...Pacing: Waiting 20s...")
+    time.sleep(20)
 
     # --- Step C: SEO & Strategy ---
     kg = load_knowledge_graph()
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b, knowledge_graph=kg)
     json_c = generate_step(client, model, prompt_c, "Step C (SEO)")
     if not json_c: return
-    time.sleep(5)
+    print("      ...Pacing: Waiting 20s...")
+    time.sleep(20)
 
     # --- Step D: Audit ---
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json_c)
     json_d = generate_step(client, model, prompt_d, "Step D (Audit)")
     if not json_d: return
-    time.sleep(5)
+    print("      ...Pacing: Waiting 20s...")
+    time.sleep(20)
 
     # --- Step E: Publisher ---
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
@@ -363,7 +372,7 @@ def main():
         # 1. Trending Article
         run_trending_pipeline(client, model, category, config)
         print("💤 Cooling down (60s)...")
-        time.sleep(60) # Increased cool down to match old system safety margins
+        time.sleep(60) 
         
         # 2. Evergreen Article
         evergreen_prompt = config['categories'][category].get('evergreen_prompt')
