@@ -28,59 +28,65 @@ def publish_post(title, content, labels):
 
 def main():
     api_key = os.getenv('GEMINI_API_KEY')
-    client = genai.Client(api_key=api_key)
     
-    # 🔍 الخطوة الأهم: اكتشاف النماذج المتاحة في حسابك حالياً
-    print("🔍 جاري البحث عن النماذج المتاحة في حسابك...")
+    # 🛠️ الحل الجذري: إجبار المكتبة على استخدام الإصدار v1 المستقر بدلاً من v1beta
+    client = genai.Client(
+        api_key=api_key,
+        http_options={'api_version': 'v1'}
+    )
+    
+    print("🔍 جاري فحص النماذج المتاحة في حسابك (إصدار v1)...")
     model_to_use = None
     try:
-        available_models = [m.name for m in client.models.list() if 'generateContent' in m.supported_methods]
-        print(f"📋 النماذج التي تدعم الكتابة في حسابك: {available_models}")
+        # تصحيح طريقة جلب النماذج للمكتبة الجديدة
+        for m in client.models.list():
+            # في المكتبة الجديدة نتحقق من supported_actions
+            if 'generateContent' in m.supported_actions or 'generate_content' in str(m.supported_actions):
+                print(f"Found: {m.name}")
+                # نفضل نماذج flash لأنها الأسرع في الحصة المجانية
+                if 'flash' in m.name.lower():
+                    model_to_use = m.name
+                    break
         
-        # ترتيب الأولويات: نبحث عن Flash أولاً لأنه الأسرع والأرخص
-        for m in available_models:
-            if 'flash' in m.lower():
-                model_to_use = m
-                break
-        
-        # إذا لم نجد Flash، نأخذ أول نموذج متاح
-        if not model_to_use and available_models:
-            model_to_use = available_models[0]
+        if not model_to_use:
+            # محاولة أخيرة: استخدام الاسم المباشر بدون بادئة models/
+            model_to_use = 'gemini-1.5-flash'
             
     except Exception as e:
-        print(f"⚠️ فشل استخراج قائمة النماذج: {e}")
-        model_to_use = 'gemini-1.5-flash' # محاولة أخيرة بالاسم التقليدي
+        print(f"⚠️ فشل الفحص التلقائي: {e}")
+        model_to_use = 'gemini-1.5-flash'
 
-    if not model_to_use:
-        print("❌ لم يتم العثور على أي نموذج متاح للكتابة!")
-        return
+    print(f"🎯 النموذج الذي سيتم استخدامه: {model_to_use}")
 
-    print(f"🎯 النموذج المختار للعمل: {model_to_use}")
-
+    # تحميل الإعدادات
     with open('config_advanced.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
 
-    # معالجة أول 3 أقسام فقط لضمان النجاح
-    categories = list(config['categories'].items())[:3]
+    # معالجة أول قسمين فقط للتأكد من تخطي الـ Quota
+    categories = list(config['categories'].items())[:2]
 
     for category, details in categories:
-        print(f"\n🚀 جاري توليد محتوى لـ: {category}")
+        print(f"\n🚀 جاري توليد مقال لـ: {category}")
         try:
+            # طلب التوليد
             response = client.models.generate_content(
                 model=model_to_use,
-                contents=f"Write a comprehensive professional blog post about {category} in HTML format. Detailed content is required."
+                contents=f"Write a very long professional blog post about {category} in HTML format. Include headers and lists."
             )
             
             if response and response.text:
-                publish_post(f"The Future of {category}", response.text, [category])
-                print("💤 انتظار 40 ثانية لتجنب ضغط الـ API...")
-                time.sleep(40)
+                publish_post(f"The Definitive Guide to {category}", response.text, [category])
+                print("💤 انتظار دقيقة كاملة لتجنب حظر الحصة المجانية...")
+                time.sleep(60)
             else:
-                print(f"⚠️ النموذج استجاب ولكن بدون نص لـ {category}")
+                print(f"⚠️ استجابة فارغة من النموذج لـ {category}")
                 
         except Exception as e:
-            print(f"❌ فشل التوليد لـ {category}: {e}")
-            time.sleep(30) # انتظار قبل المحاولة التالية
+            if "429" in str(e):
+                print("⏳ تم استهلاك الحصة. توقف مؤقت لمدة دقيقتين...")
+                time.sleep(120)
+            else:
+                print(f"❌ فشل التوليد: {e}")
 
 if __name__ == "__main__":
     main()
