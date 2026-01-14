@@ -429,7 +429,15 @@ def main():
     with open('config_advanced.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     
-    model = config['settings'].get('model_name', 'models/gemini-2.5-flash')
+ 
+    # model = config['settings'].get('model_name', 'models/gemini-2.5-flash')
+# --- CRITICAL FIX: Ensure model name is correct for New SDK ---
+    model = config['settings'].get('model_name', 'gemini-1.5-flash')
+    # Strip 'models/' prefix if it exists (avoids 404 error)
+    if model.startswith('models/'):
+        model = model.replace('models/', '')
+    
+    print(f"ℹ️ Using Model: {model}")
 
     for category in config['categories']:
         print(f"\n🚀 PROCESSING CATEGORY: {category}")
