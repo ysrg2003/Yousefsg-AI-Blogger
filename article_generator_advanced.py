@@ -8,21 +8,29 @@ from google import genai
 from google.genai import types
 
 # ==============================================================================
-# 1. PROMPTS DEFINITIONS
+# 1. PROMPTS DEFINITIONS (EXACT & DETAILED)
 # ==============================================================================
 
 # --- TRENDING RESEARCH (NEWS) ---
 PROMPT_A_TRENDING = """
-A:You are an investigative tech reporter specialized in {section}. Search the modern index (Google Search, Google Scholar, arXiv, official blogs) for one specific, high-impact case, study, or announcement from {date_range}.
+A:You are an investigative tech reporter specialized in {section}. Search the modern index (Google Search, Google Scholar, arXiv, official blogs, SEC/10-Q when financial figures are used) for one specific, high-impact case, study, deployment, or company announcement that occurred within {date_range} (for example "last 60 days").
 
-SECTION FOCUS: {section_focus}
+SECTION FOCUS (choose the relevant focus for {section}; these must guide your search terms):
+{section_focus}
 
-MANDATORY SOURCE & VERIFICATION RULES:
-1. Return exactly one headline (journalist-style).
-2. Provide 2–3 primary sources (Tech Source + Corroborating Source).
-3. For numeric claims, cite exact figures.
-4. Output JSON ONLY:
-{{"headline": "...", "sources": [{{"title":"...", "url":"...", "date":"...", "type":"...", "why":"...", "credibility":"..."}}], "riskNote":"..."}}
+MANDATORY SOURCE & VERIFICATION RULES (follow EXACTLY):
+1. Return exactly one headline (plain English, single line) — a journalist-style headline that connects technical advance to human/commercial impact.
+2. Provide 2–3 primary sources that verify the story. At least:
+   - One PRIMARY TECH SOURCE: (peer-reviewed DOI or arXiv paper with version/date OR official GitHub repo with commit/PR date OR official company technical blog post).
+   - One SECONDARY CORROBORATING SOURCE: (reputable news outlet, conference proceeding, or company press release).
+3. For each source, include:
+   - title, exact URL, publication date (YYYY-MM-DD), type (paper/blog/repo/press/SEC), and a one-line note: "why it verifies".
+4. For any numeric claim you will later assert (e.g., "88% of queries"), ensure the source actually contains that number. If the source gives a figure differently, report the exact figure and location of the figure in the source (e.g., "see Figure 2, page 6" or "arXiv v2, paragraph 3").
+5. If the story touches YMYL topics (health/finance/legal), include an immediate risk note listing which regulations may apply (e.g., HIPAA, FDA, CE, GDPR, SEC) and what kind of verification is required.
+6. Check basic credibility signals for each source and report them: (a) publisher credibility (Nature/IEEE/ACM/official corp blog), (b) if arXiv — indicate whether paper has code/benchmarks, (c) if GitHub — include last commit date and license, (d) if press release — confirm corporate domain and date/time.
+
+Output JSON only, EXACTLY in this format:
+{{"headline": "One-line headline","sources": [{{"title":"Exact source title","url":"https://...","date":"YYYY-MM-DD","type":"paper|arXiv|repo|blog|press|SEC","why":"One-line why this verifies (include exact page/figure if relevant)","credibility":"short note: Nature/IEEE/company blog/press/etc","notes":"any caveats about the source"}}],"riskNote":"If YMYL risk exists list regulators and verification steps; otherwise empty string"}}
 """
 
 # --- EVERGREEN RESEARCH (CONCEPTS) ---
@@ -41,63 +49,119 @@ MANDATORY SOURCE & VERIFICATION RULES:
 
 # --- COMMON STEPS (B, C, D, E) ---
 PROMPT_B_TEMPLATE = """
-B:You are Editor-in-Chief. Input: JSON from Prompt A. Write a polished HTML article (1500–2000 words).
+B:You are Editor-in-Chief of 'AI News Hub'. Input: the JSON output from Prompt A (headline + sources). Write a polished HTML article (1500–2000 words) using the provided headline and sources. Follow these rules exactly.
 INPUT: {json_input}
 
-RULES:
-- H1 = headline.
-- Intro: Human hook.
-- Tone: Journalistic/Educational.
-- 40% short, 45% medium, 15% long sentences.
-- 1 First-person sentence.
-- 1 Rhetorical question.
-- NO FORBIDDEN PHRASES ("In today's digital age", etc).
-- Use H2, H3.
-- Add Comparison Table.
-- Add Sources <ul>.
+I. STRUCTURE & VOICE RULES (mandatory):
+H1 = headline exactly as provided.
+Intro: begin with a short, verifiable human hook.
+Use journalistic, conversational English — not academic tone.
+Paragraphs: 2–4 sentences maximum.
+Sentence length distribution: ~40% short (6–12 words), ~45% medium (13–22 words), ~15% long (23–35 words).
+Include exactly one first-person editorial sentence from the writer.
+Include one rhetorical question in the article.
+Avoid AI-template phrasing: forbid "In today's digital age", "The world of AI is ever-evolving", "This matters because", "In conclusion".
 
-Output JSON ONLY: {{"draftTitle":"...","draftContent":"<html>...</html>","sources":[...],"notes":"..."}}
+II. EDITORIAL PRINCIPLES:
+So What? — after each major fact/claim, add a one-sentence human explanation.
+Depth over breadth.
+Dual verification for load-bearing claims.
+Quotes — include at least one direct quote from a named expert.
+
+III. CITATION & SOURCING RULES:
+Inline citation format EXACTLY: (Source: ShortTitle — YYYY-MM-DD — URL).
+At the end include a "Sources" <ul>.
+
+IV. SECTION-SPECIFIC FOCUS:
+Ensure the article addresses at least TWO focus points.
+
+V. HUMANIZATION:
+Insert at least two small humanizing details (anecdote, personal observation).
+Vary sentence rhythm.
+
+VI. FORMATTING & SEO:
+Use H2 and H3 subheadings.
+Add one small comparison table (text-only) and 3 bullet "Why it matters" bullets near the top.
+
+Output JSON ONLY:
+{{"draftTitle":"...","draftContent":"<html>...full HTML article...</html>","sources":[ {{ "title":"", "url":"", "date":"", "type":"", "credibility":"" }}, ... ],"notes":"List any remaining issues or empty string"}}
 """
 
 PROMPT_C_TEMPLATE = """
-C:Strategic Editor & SEO. Input: {json_input}. Knowledge Graph: {knowledge_graph}.
-TASKS:
-1. Add 3 "Key takeaways".
-2. Create Image Prompt (Abstract, Tech, No Humans).
-3. Internal Links (3-5).
-4. SEO (Meta Title/Desc, Tags, Schema).
-5. Adsense Check.
+C:You are Strategic Editor & SEO consultant for 'AI News Hub'.
+Input Draft JSON: {json_input}
+Knowledge Graph: {knowledge_graph}
 
-Output JSON ONLY: {{"finalTitle":"...","finalContent":"...","imageGenPrompt":"...","seo":{{...}},"tags":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}}}}
+Produce a final publishing package with the following exact tasks.
+
+ARTICLE-LEVEL POLISH:
+Improve clarity, tighten prose, and ensure "human first" voice remains.
+Add 2–4 textual rich elements: a short comparison table, 3 bullets "Key takeaways", and 1 highlighted blockquote.
+Extract one conceptual icon (1–2 English words).
+Create author byline and short author bio.
+
+**IMAGE PROMPT GENERATION (MANDATORY):**
+Create a specific English prompt for an AI image generator to create a header image for this article.
+RULES:
+1. Abstract, futuristic, technological style (3D render, isometric, or digital art).
+2. NO HUMANS, NO FACES, NO ANIMALS, NO TEXT.
+3. Focus on concepts: data streams, neural nodes, silicon chips, glowing networks, abstract robotics.
+4. Field name in JSON: "imageGenPrompt".
+
+NETWORK-LEVEL OPTIMIZATION:
+Analyze knowledge_graph array and select 3–5 best internal articles to link.
+Propose 2 future article titles.
+
+SEO & PUBLISHING PACKAGE:
+Provide metaTitle (50–60 chars) and metaDescription (150–160 chars).
+Provide 5–7 tags.
+Generate Article schema JSON-LD.
+Provide FAQ schema (3 Q&A).
+
+ADSENSE READINESS:
+Run Adsense readiness evaluation and return adsenseReadinessScore from 0–100.
+
+OUTPUT JSON ONLY:
+{{"finalTitle":"...","finalContent":"<html>...final polished HTML...</html>","excerpt":"...","imageGenPrompt":"...","seo": {{ "metaTitle":"...","metaDescription":"...","imageAltText":"..." }},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[ "<a href='...'>...</a>", ... ],"schemaMarkup":"{{...JSON-LD...}}","adsenseReadinessScore":{{ "score":0-100, "breakdown": {{...}}, "notes":"..." }},"sources":[ ... ],"authorBio":{{ "name":"...", "bio":"...", "profileUrl":"..." }}}}
 """
 
 PROMPT_D_TEMPLATE = """
-D:Humanization & Audit. Input: {json_input}.
-CHECKS:
-- Verify Numeric Claims & Quotes.
-- Ensure Human Style (1st person, rhetorical Q).
-- Remove Forbidden Phrases.
-- Rewrite AI-sounding sentences.
-- Check YMYL.
+PROMPT D — Humanization & Final Audit
+Input: {json_input}
 
-Output JSON ONLY: {{"finalTitle":"...","finalContent":"...","imageGenPrompt":"...","seo":{{...}},"tags":[...],"auditMetadata":{{...}},"humanEditorConfirmation":{{...}}}}
+MANDATORY CHECKS:
+STEP 2 — MANDATORY CHECK A: Sources & Fact Claims (Numeric, Load-bearing, Quotes, Citations).
+STEP 3 — MANDATORY CHECK B: Human Style (First-person sentence, Rhetorical question, Forbidden phrases, Sentence length, AI-pattern sniff).
+STEP 4 — MANDATORY CHECK C: E-E-A-T & YMYL (Author bio, YMYL disclaimer, AI-detection threshold).
+STEP 6 — Safety, Legal & Final Editorial Confirmation.
+
+Output JSON ONLY:
+{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"...","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}},"edits":[...],"auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},"humanEditorConfirmation": {{...}},"requiresAction": false, "requiredActions":[...],"notes":"..."}}
 """
 
 PROMPT_E_TEMPLATE = """
-E:Publisher. Final Sanity Check.
+E: ROLE PROMPT — "The Publisher"
 Input: {json_input}
-Output JSON ONLY: {{"finalTitle":"...","finalContent":"...","imageGenPrompt":"...","seo":{{...}},"tags":[...],"auditMetadata":{{...}}}}
+
+Your single mission: take the provided draft/final article and transform it into a publication-quality piece.
+1. INPUTS: Read finalContent, sources.
+2. SOURCE & FACT VERIFICATION: Final check.
+3. HUMANIZATION & STYLE: Enforce first-person sentence, rhetorical question, remove forbidden phrases.
+4. SEO & PUBLISHING PACKAGE: Validate meta tags, schema, internal links.
+5. FINAL OUTPUT: Return single JSON ONLY.
+
+{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio": {{...}},"edits":[...],"auditMetadata": {{...}},"requiredActions":[...]}}
 """
 
 # ==============================================================================
-# 2. KEY MANAGER (ROTATION LOGIC)
+# 2. KEY MANAGER (ROTATION LOGIC - 6 KEYS)
 # ==============================================================================
 
 class KeyManager:
     def __init__(self):
         self.keys = []
-        # Load keys 1 through 4
-        for i in range(1, 5):
+        # Load keys 1 through 6
+        for i in range(1, 7):
             k = os.getenv(f'GEMINI_API_KEY_{i}')
             if k: self.keys.append(k)
         
@@ -139,7 +203,8 @@ def get_blogger_token():
         r = requests.post('https://oauth2.googleapis.com/token', data=payload)
         r.raise_for_status()
         return r.json().get('access_token')
-    except:
+    except Exception as e:
+        print(f"❌ Blogger Auth Error: {e}")
         return None
 
 def publish_post(title, content, labels):
@@ -151,8 +216,14 @@ def publish_post(title, content, labels):
     data = {"title": title, "content": content, "labels": labels}
     try:
         r = requests.post(url, headers=headers, json=data)
-        return r.status_code == 200
-    except:
+        if r.status_code == 200:
+            print(f"✅ Published: {title}")
+            return True
+        else:
+            print(f"❌ Publish Error: {r.text}")
+            return False
+    except Exception as e:
+        print(f"❌ Connection Error: {e}")
         return False
 
 def clean_json(text):
@@ -165,16 +236,30 @@ def clean_json(text):
 
 def generate_and_upload_image(prompt_text):
     key = os.getenv('IMGBB_API_KEY')
-    if not key: return None
+    if not key: 
+        print("⚠️ No IMGBB_API_KEY found.")
+        return None
+    
     print(f"   🎨 Generating Image...")
     try:
-        safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, --no people, text")
-        url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,999)}"
-        img_data = requests.get(url, timeout=30).content
+        # Pollinations Generation (Free)
+        safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, high quality, --no people, humans, animals, faces, text")
+        url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux"
         
-        res = requests.post("https://api.imgbb.com/1/upload", data={"key":key}, files={"image":img_data})
+        img_response = requests.get(url, timeout=30)
+        if img_response.status_code != 200: return None
+        
+        # ImgBB Upload (Free Direct Link)
+        print("   ☁️ Uploading to ImgBB...")
+        res = requests.post(
+            "https://api.imgbb.com/1/upload", 
+            data={"key":key, "expiration":0}, 
+            files={"image":img_response.content}
+        )
         if res.status_code == 200:
-            return res.json()['data']['url']
+            direct_link = res.json()['data']['url']
+            print(f"   ✅ Image Ready: {direct_link}")
+            return direct_link
     except Exception as e:
         print(f"   ⚠️ Image failed: {e}")
     return None
@@ -301,15 +386,19 @@ def run_pipeline(category, config, mode="trending"):
         title = final.get('finalTitle', f"{category} Article")
         content = final.get('finalContent', '')
         
-        # Image
-        img_prompt = final.get('imageGenPrompt', f"Abstract {category}")
+        # Image Generation & Insertion
+        img_prompt = final.get('imageGenPrompt', f"Abstract {category} technology")
         img_url = generate_and_upload_image(img_prompt)
+        
         if img_url:
-            content = f'<div class="separator" style="clear: both; text-align: center;"><a href="{img_url}"><img src="{img_url}" alt="{title}" /></a></div><br />' + content
+            alt_text = final.get('seo', {}).get('imageAltText', title)
+            # Blogger-friendly image HTML
+            img_html = f'<div class="separator" style="clear: both; text-align: center;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{alt_text}" data-original-width="1280" data-original-height="720" /></a></div><br />'
+            content = img_html + content
 
         # Metadata Footer
         if 'auditMetadata' in final:
-            content += f"<hr><small><i>Audit: AI Prob {final['auditMetadata'].get('aiProbability')}%</i></small>"
+            content += f"<hr><small><i>Audit Stats: AI Prob {final['auditMetadata'].get('aiProbability')}%</i></small>"
 
         labels = [category, "AI News" if mode == "trending" else "Guide"]
         
