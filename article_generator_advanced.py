@@ -7,7 +7,7 @@ from google import genai
 from google.genai import types
 
 # ==============================================================================
-# 1. FULL PROMPTS DEFINITIONS
+# 1. FULL PROMPTS DEFINITIONS (EXACTLY AS PROVIDED - NO CHANGES)
 # ==============================================================================
 
 PROMPT_A_TEMPLATE = """
@@ -222,14 +222,16 @@ def clean_json_response(text):
     return text
 
 def generate_step(client, model, prompt_text, step_name):
-    """Executes a single step of the chain with robust retry logic matching old system style"""
+    """
+    Executes a step with HIGH SAFETY MARGINS for Free Tier (Limit: 5 RPM).
+    """
     print(f"   👉 Executing {step_name}...")
     
-    max_retries = 3
+    max_retries = 6 
     
     for i in range(max_retries):
         try:
-            # Using the new SDK syntax but with the OLD MODEL name
+            # Using the new SDK syntax
             response = client.models.generate_content(
                 model=model,
                 contents=prompt_text,
@@ -242,14 +244,16 @@ def generate_step(client, model, prompt_text, step_name):
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "503" in error_str:
-                wait_time = 70 if i == 0 else 120 # Matches your old system's 70s/120s logic
-                print(f"      ⏳ Server Busy/Quota (Attempt {i+1}/{max_retries}). Waiting {wait_time}s...")
+                # Progressive backoff: 60s, 90s, 120s, 180s, 240s, 300s
+                # Even longer waits to ensure the bucket refills
+                wait_time = 60 + (i * 45) 
+                print(f"      ⏳ Rate Limit Hit (429). Cooling down for {wait_time}s (Attempt {i+1}/{max_retries})...")
                 time.sleep(wait_time)
             else:
                 print(f"      ❌ Unexpected Error in {step_name}: {e}")
-                time.sleep(10)
+                time.sleep(20)
                 
-    print(f"      ❌ Failed {step_name} after {max_retries} retries.")
+    print(f"      ❌ Failed {step_name} after {max_retries} retries. Moving to next.")
     return None
 
 def load_knowledge_graph():
@@ -272,7 +276,7 @@ def update_knowledge_graph(slug, title, section):
         print(f"⚠️ Failed to update knowledge graph: {e}")
 
 # ==============================================================================
-# 3. MAIN PIPELINE LOGIC
+# 3. MAIN PIPELINE LOGIC (SLOW & STEADY MODE)
 # ==============================================================================
 
 def run_trending_pipeline(client, model, category, config):
@@ -288,26 +292,32 @@ def run_trending_pipeline(client, model, category, config):
     )
     json_a = generate_step(client, model, prompt_a, "Step A (Research)")
     if not json_a: return
-    time.sleep(5) 
+    
+    # CRITICAL: Wait 40s to keep under 5 RPM limit
+    print("      ☕ Safety Pause (40s) to preserve Free Tier quota...")
+    time.sleep(40) 
 
     # --- Step B: Draft ---
     prompt_b = PROMPT_B_TEMPLATE.format(json_input=json_a)
     json_b = generate_step(client, model, prompt_b, "Step B (Drafting)")
     if not json_b: return
-    time.sleep(5)
+    print("      ☕ Safety Pause (40s)...")
+    time.sleep(40)
 
     # --- Step C: SEO & Strategy ---
     kg = load_knowledge_graph()
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b, knowledge_graph=kg)
     json_c = generate_step(client, model, prompt_c, "Step C (SEO)")
     if not json_c: return
-    time.sleep(5)
+    print("      ☕ Safety Pause (40s)...")
+    time.sleep(40)
 
     # --- Step D: Audit ---
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json_c)
     json_d = generate_step(client, model, prompt_d, "Step D (Audit)")
     if not json_d: return
-    time.sleep(5)
+    print("      ☕ Safety Pause (40s)...")
+    time.sleep(40)
 
     # --- Step E: Publisher ---
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
@@ -354,7 +364,6 @@ def main():
     with open('config_advanced.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     
-    # Using the model exactly as defined in the config
     model = config['settings'].get('model_name', 'models/gemini-2.5-flash')
 
     for category in config['categories']:
@@ -362,15 +371,15 @@ def main():
         
         # 1. Trending Article
         run_trending_pipeline(client, model, category, config)
-        print("💤 Cooling down (60s)...")
-        time.sleep(60) # Increased cool down to match old system safety margins
+        print("💤 Cooling down (120s) to fully reset Free Tier limits...")
+        time.sleep(120) 
         
         # 2. Evergreen Article
         evergreen_prompt = config['categories'][category].get('evergreen_prompt')
         if evergreen_prompt:
             run_evergreen_pipeline(client, model, category, evergreen_prompt)
-            print("💤 Cooling down (60s)...")
-            time.sleep(60)
+            print("💤 Cooling down (120s) before next category...")
+            time.sleep(120)
 
 if __name__ == "__main__":
     main()
