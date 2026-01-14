@@ -7,7 +7,7 @@ from google import genai
 from google.genai import types
 
 # ==============================================================================
-# 1. FULL PROMPTS DEFINITIONS (EXACTLY AS PROVIDED)
+# 1. FULL PROMPTS DEFINITIONS
 # ==============================================================================
 
 PROMPT_A_TEMPLATE = """
@@ -214,7 +214,6 @@ def publish_post(title, content, labels):
         return False
 
 def clean_json_response(text):
-    """Robust JSON extractor from AI response"""
     text = text.strip()
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
     if match: return match.group(1)
@@ -223,19 +222,34 @@ def clean_json_response(text):
     return text
 
 def generate_step(client, model, prompt_text, step_name):
-    """Executes a single step of the chain with retries"""
+    """Executes a single step of the chain with robust retry logic matching old system style"""
     print(f"   👉 Executing {step_name}...")
-    for i in range(3):
+    
+    max_retries = 3
+    
+    for i in range(max_retries):
         try:
+            # Using the new SDK syntax but with the OLD MODEL name
             response = client.models.generate_content(
                 model=model,
                 contents=prompt_text,
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
-            return clean_json_response(response.text)
+            
+            if response and response.text:
+                return clean_json_response(response.text)
+            
         except Exception as e:
-            print(f"      ⚠️ Retry {i+1} for {step_name}: {e}")
-            time.sleep(10 * (i+1))
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "503" in error_str:
+                wait_time = 70 if i == 0 else 120 # Matches your old system's 70s/120s logic
+                print(f"      ⏳ Server Busy/Quota (Attempt {i+1}/{max_retries}). Waiting {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                print(f"      ❌ Unexpected Error in {step_name}: {e}")
+                time.sleep(10)
+                
+    print(f"      ❌ Failed {step_name} after {max_retries} retries.")
     return None
 
 def load_knowledge_graph():
@@ -246,7 +260,6 @@ def load_knowledge_graph():
         return "[]"
 
 def update_knowledge_graph(slug, title, section):
-    """Append new article to local knowledge graph for future linking"""
     try:
         data = []
         if os.path.exists('knowledge_graph.json'):
@@ -275,22 +288,26 @@ def run_trending_pipeline(client, model, category, config):
     )
     json_a = generate_step(client, model, prompt_a, "Step A (Research)")
     if not json_a: return
+    time.sleep(5) 
 
     # --- Step B: Draft ---
     prompt_b = PROMPT_B_TEMPLATE.format(json_input=json_a)
     json_b = generate_step(client, model, prompt_b, "Step B (Drafting)")
     if not json_b: return
+    time.sleep(5)
 
     # --- Step C: SEO & Strategy ---
     kg = load_knowledge_graph()
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b, knowledge_graph=kg)
     json_c = generate_step(client, model, prompt_c, "Step C (SEO)")
     if not json_c: return
+    time.sleep(5)
 
     # --- Step D: Audit ---
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json_c)
     json_d = generate_step(client, model, prompt_d, "Step D (Audit)")
     if not json_d: return
+    time.sleep(5)
 
     # --- Step E: Publisher ---
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
@@ -303,13 +320,11 @@ def run_trending_pipeline(client, model, category, config):
         title = final_data.get('finalTitle', f"New in {category}")
         content = final_data.get('finalContent', '')
         
-        # Add metadata footer to content (optional, for debugging transparency)
         if 'auditMetadata' in final_data:
             audit = final_data['auditMetadata']
             content += f"<hr><small><i>Audit Stats: AI Prob {audit.get('aiProbability')}%, Passes {audit.get('numberOfHumanizationPasses')}</i></small>"
 
         if publish_post(title, content, [category, "Trending", "AI News"]):
-            # Generate a pseudo-slug for KG
             slug = title.lower().replace(' ', '-').replace(':', '')[:50]
             update_knowledge_graph(slug, title, category)
             
@@ -319,7 +334,6 @@ def run_trending_pipeline(client, model, category, config):
 def run_evergreen_pipeline(client, model, category, prompt_text):
     print(f"   🌲 Generating Evergreen Article for {category}...")
     try:
-        # We wrap the user's prompt to ensure JSON output for safety
         wrapper = f"{prompt_text}\n\nOutput JSON ONLY: {{'title': '...', 'content': '<html>...</html>'}}"
         json_res = generate_step(client, model, wrapper, "Evergreen Generation")
         if json_res:
@@ -340,17 +354,18 @@ def main():
     with open('config_advanced.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     
-    model = config['settings'].get('model_name', 'gemini-2.0-flash-exp')
+    # Using the model exactly as defined in the config
+    model = config['settings'].get('model_name', 'models/gemini-2.5-flash')
 
     for category in config['categories']:
         print(f"\n🚀 PROCESSING CATEGORY: {category}")
         
-        # 1. Trending Article (The Full 5-Step Chain)
+        # 1. Trending Article
         run_trending_pipeline(client, model, category, config)
         print("💤 Cooling down (60s)...")
-        time.sleep(60)
+        time.sleep(60) # Increased cool down to match old system safety margins
         
-        # 2. Evergreen Article (Direct Generation)
+        # 2. Evergreen Article
         evergreen_prompt = config['categories'][category].get('evergreen_prompt')
         if evergreen_prompt:
             run_evergreen_pipeline(client, model, category, evergreen_prompt)
