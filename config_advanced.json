@@ -37,6 +37,6 @@
     "date_range_query": "last 60 days",
     "model_name": "gemini-1.5-flash",
     "publish_time": "09:00 UTC",
-    "adsense_optimization": True
+    "adsense_optimization": true
   }
 }
