@@ -3,12 +3,14 @@ import json
 import time
 import requests
 import re
+import base64
 from google import genai
 from google.genai import types
 
 # ==============================================================================
-# 1. FULL PROMPTS DEFINITIONS (EXACTLY AS PROVIDED - NO CHANGES)
+# 1. FULL PROMPTS DEFINITIONS
 # ==============================================================================
+# (نفس البرومبتات تماماً - لم تتغير)
 
 PROMPT_A_TEMPLATE = """
 A:You are an investigative tech reporter specialized in {section}. Search the modern index (Google Search, Google Scholar, arXiv, official blogs, SEC/10-Q when financial figures are used) for one specific, high-impact case, study, deployment, or company announcement that occurred within {date_range} (for example "last 60 days").
@@ -222,38 +224,27 @@ def clean_json_response(text):
     return text
 
 def generate_step(client, model, prompt_text, step_name):
-    """
-    Executes a step with HIGH SAFETY MARGINS for Free Tier (Limit: 5 RPM).
-    """
     print(f"   👉 Executing {step_name}...")
-    
     max_retries = 6 
-    
     for i in range(max_retries):
         try:
-            # Using the new SDK syntax
             response = client.models.generate_content(
                 model=model,
                 contents=prompt_text,
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
-            
             if response and response.text:
                 return clean_json_response(response.text)
-            
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "503" in error_str:
-                # Progressive backoff: 60s, 90s, 120s, 180s, 240s, 300s
-                # Even longer waits to ensure the bucket refills
                 wait_time = 60 + (i * 45) 
-                print(f"      ⏳ Rate Limit Hit (429). Cooling down for {wait_time}s (Attempt {i+1}/{max_retries})...")
+                print(f"      ⏳ Rate Limit Hit. Cooling down for {wait_time}s (Attempt {i+1}/{max_retries})...")
                 time.sleep(wait_time)
             else:
                 print(f"      ❌ Unexpected Error in {step_name}: {e}")
                 time.sleep(20)
-                
-    print(f"      ❌ Failed {step_name} after {max_retries} retries. Moving to next.")
+    print(f"      ❌ Failed {step_name} after {max_retries} retries.")
     return None
 
 def load_knowledge_graph():
@@ -276,7 +267,74 @@ def update_knowledge_graph(slug, title, section):
         print(f"⚠️ Failed to update knowledge graph: {e}")
 
 # ==============================================================================
-# 3. MAIN PIPELINE LOGIC (SLOW & STEADY MODE)
+# 3. IMAGE GENERATION & UPLOAD (UPDATED FOR ImgBB)
+# ==============================================================================
+
+def generate_and_upload_image(client, topic):
+    """
+    1. Generates Image (Gemini)
+    2. Uploads to ImgBB (Permanent URL)
+    3. Returns HTML string with Direct URL
+    """
+    imgbb_key = os.getenv('IMGBB_API_KEY')
+    if not imgbb_key:
+        print("⚠️ ImgBB Key not found. Skipping image.")
+        return ""
+
+    print(f"   🎨 Generating Image for: {topic}...")
+    
+    image_prompt = (
+        f"A futuristic, high-tech, abstract illustration representing '{topic}'. "
+        "Style: 3D isometric render, glowing data streams, silicon chips, server racks, "
+        "blue and purple neon lighting, clean minimalist geometry. "
+        "Cyberpunk aesthetic but very clean. "
+        "CRITICAL RULES: NO humans, NO faces, NO people, NO animals, NO biological forms, NO text. "
+        "Focus purely on technology, hardware, and abstract data visualization. "
+        "High resolution, 8k, photorealistic textures."
+    )
+
+    try:
+        # 1. Generate Image using Gemini
+        response = client.models.generate_images(
+            model='imagen-3.0-generate-001',
+            prompt=image_prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="16:9",
+                safety_filter_level="block_medium_and_above"
+            )
+        )
+        
+        if response.generated_images:
+            image_bytes = response.generated_images[0].image.image_bytes
+            b64_string = base64.b64encode(image_bytes).decode('utf-8')
+            
+            # 2. Upload to ImgBB
+            print("      ☁️ Uploading to ImgBB...")
+            url = "https://api.imgbb.com/1/upload"
+            payload = {
+                "key": imgbb_key,
+                "image": b64_string,
+                "name": topic.replace(" ", "_")[:20]
+            }
+            res = requests.post(url, data=payload)
+            if res.status_code == 200:
+                img_url = res.json()['data']['url']
+                print(f"      ✅ Uploaded: {img_url}")
+                
+                # 3. Return Clean HTML
+                return f'<div class="separator" style="clear: both; text-align: center;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" data-original-height="720" data-original-width="1280" src="{img_url}" alt="{topic} AI Illustration" /></a></div><br />'
+            else:
+                print(f"      ❌ ImgBB Upload Failed: {res.text}")
+                
+    except Exception as e:
+        print(f"      ⚠️ Image Generation/Upload Failed: {e}")
+        return ""
+    
+    return ""
+
+# ==============================================================================
+# 4. MAIN PIPELINE LOGIC
 # ==============================================================================
 
 def run_trending_pipeline(client, model, category, config):
@@ -285,16 +343,10 @@ def run_trending_pipeline(client, model, category, config):
     section_focus = cat_config.get('trending_focus', '')
 
     # --- Step A: Research ---
-    prompt_a = PROMPT_A_TEMPLATE.format(
-        section=category,
-        date_range=date_range,
-        section_focus=section_focus
-    )
+    prompt_a = PROMPT_A_TEMPLATE.format(section=category, date_range=date_range, section_focus=section_focus)
     json_a = generate_step(client, model, prompt_a, "Step A (Research)")
     if not json_a: return
-    
-    # CRITICAL: Wait 40s to keep under 5 RPM limit
-    print("      ☕ Safety Pause (40s) to preserve Free Tier quota...")
+    print("      ☕ Safety Pause (40s)...")
     time.sleep(40) 
 
     # --- Step B: Draft ---
@@ -324,12 +376,17 @@ def run_trending_pipeline(client, model, category, config):
     json_e = generate_step(client, model, prompt_e, "Step E (Final Polish)")
     if not json_e: return
 
-    # --- Publish ---
     try:
         final_data = json.loads(json_e)
         title = final_data.get('finalTitle', f"New in {category}")
         content = final_data.get('finalContent', '')
         
+        # === IMAGE GENERATION (ImgBB) ===
+        img_html = generate_and_upload_image(client, title)
+        if img_html:
+            content = img_html + content
+        
+        # Add metadata footer
         if 'auditMetadata' in final_data:
             audit = final_data['auditMetadata']
             content += f"<hr><small><i>Audit Stats: AI Prob {audit.get('aiProbability')}%, Passes {audit.get('numberOfHumanizationPasses')}</i></small>"
@@ -348,8 +405,16 @@ def run_evergreen_pipeline(client, model, category, prompt_text):
         json_res = generate_step(client, model, wrapper, "Evergreen Generation")
         if json_res:
             data = json.loads(json_res)
-            publish_post(data['title'], data['content'], [category, "Guide", "Evergreen"])
-            update_knowledge_graph("guide-" + category.lower().replace(' ', '-'), data['title'], category)
+            title = data['title']
+            content = data['content']
+            
+            # === IMAGE GENERATION (ImgBB) ===
+            img_html = generate_and_upload_image(client, f"{category} Guide Technology")
+            if img_html:
+                content = img_html + content
+            
+            publish_post(title, content, [category, "Guide", "Evergreen"])
+            update_knowledge_graph("guide-" + category.lower().replace(' ', '-'), title, category)
     except Exception as e:
         print(f"❌ Evergreen failed: {e}")
 
