@@ -1,49 +1,16 @@
 import os
-import json
-import time
-import google.generativeai as genai
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
 
-def main():
-    # 1. الإعدادات
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-    BLOGGER_CREDENTIALS = os.getenv('BLOGGER_CREDENTIALS')
-    BLOGGER_BLOG_ID = os.getenv('BLOGGER_BLOG_ID')
+# ضع بياناتك هنا مؤقتاً
+client_id = "ضع_هنا_الـ_client_id"
+client_secret = "ضع_هنا_الـ_client_secret"
 
-    # 2. إعداد Gemini
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash') # تم تصحيح اسم النموذج
-
-    # 3. إعداد Blogger
-    info = json.loads(BLOGGER_CREDENTIALS)
-    creds = Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/blogger'])
-    service = build('blogger', 'v3', credentials=creds)
-
-    # 4. تحميل ملف الإعدادات
-    with open('config_advanced.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
-
-    # 5. دورة النشر
-    for category in config['categories']:
-        print(f"Generating for {category}...")
-        prompt = config['categories'][category]['evergreen_prompt'] + "\nOutput in HTML format with a <h1> title."
-        
-        try:
-            response = model.generate_content(prompt)
-            content = response.text
-            
-            body = {
-                'title': f"Latest updates in {category}",
-                'content': content,
-                'labels': [category]
-            }
-            
-            service.posts().insert(blogId=BLOGGER_BLOG_ID, body=body).execute()
-            print(f"✅ Success!")
-            time.sleep(10)
-        except Exception as e:
-            print(f"❌ Error: {e}")
-
-if __name__ == "__main__":
-    main()
+flow = InstalledAppFlow.from_client_config(
+    {"installed": {"client_id": client_id, "client_secret": client_secret, 
+                   "auth_uri": "https://accounts.google.com/o/oauth2/auth", 
+                   "token_uri": "https://oauth2.googleapis.com/token"}},
+    scopes=['https://www.googleapis.com/auth/blogger']
+)
+flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
+auth_url, _ = flow.authorization_url(prompt='consent')
+print(f"انسخ هذا الرابط وافتحه في المتصفح ووافق على الصلاحيات: \n\n{auth_url}\n")
