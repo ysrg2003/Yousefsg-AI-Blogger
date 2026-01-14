@@ -22,49 +22,65 @@ def publish_post(title, content, labels):
     data = {"title": title, "content": content, "labels": labels}
     r = requests.post(url, headers=headers, json=data)
     if r.status_code == 200:
-        print(f"✅ Success: {title}")
+        print(f"✅ تم النشر في بلوجر بنجاح")
     else:
-        print(f"❌ Blogger Error: {r.text}")
-
-def generate_article(client, category, prompt):
-    # استخدام اسم النموذج المباشر (الأكثر استقراراً في v1)
-    model_name = 'gemini-1.5-flash' 
-    
-    try:
-        print(f"🔄 Generating for {category} using {model_name}...")
-        response = client.models.generate_content(
-            model=model_name,
-            contents=f"Write a 1000-word blog post about {category} in HTML format. Topic: {prompt}"
-        )
-        if response and response.text:
-            return response.text
-        return None
-    except Exception as e:
-        print(f"⚠️ Gemini Error: {str(e)}")
-        return None
+        print(f"❌ خطأ في بلوجر: {r.text}")
 
 def main():
     api_key = os.getenv('GEMINI_API_KEY')
     client = genai.Client(api_key=api_key)
     
+    # 🔍 الخطوة الأهم: اكتشاف النماذج المتاحة في حسابك حالياً
+    print("🔍 جاري البحث عن النماذج المتاحة في حسابك...")
+    model_to_use = None
+    try:
+        available_models = [m.name for m in client.models.list() if 'generateContent' in m.supported_methods]
+        print(f"📋 النماذج التي تدعم الكتابة في حسابك: {available_models}")
+        
+        # ترتيب الأولويات: نبحث عن Flash أولاً لأنه الأسرع والأرخص
+        for m in available_models:
+            if 'flash' in m.lower():
+                model_to_use = m
+                break
+        
+        # إذا لم نجد Flash، نأخذ أول نموذج متاح
+        if not model_to_use and available_models:
+            model_to_use = available_models[0]
+            
+    except Exception as e:
+        print(f"⚠️ فشل استخراج قائمة النماذج: {e}")
+        model_to_use = 'gemini-1.5-flash' # محاولة أخيرة بالاسم التقليدي
+
+    if not model_to_use:
+        print("❌ لم يتم العثور على أي نموذج متاح للكتابة!")
+        return
+
+    print(f"🎯 النموذج المختار للعمل: {model_to_use}")
+
     with open('config_advanced.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
 
-    # معالجة أول 3 أقسام فقط في كل مرة لتجنب الحظر (Quota Management)
-    categories = list(config['categories'].items())[:4] 
+    # معالجة أول 3 أقسام فقط لضمان النجاح
+    categories = list(config['categories'].items())[:3]
 
     for category, details in categories:
-        print(f"\n--- Starting: {category} ---")
-        
-        article_content = generate_article(client, category, details['evergreen_prompt'])
-        
-        if article_content:
-            publish_post(f"Guide to {category}", article_content, [category])
-            print("💤 Waiting 60 seconds (Anti-Ban delay)...")
-            time.sleep(60) # انتظار طويل لضمان عدم تجاوز الـ Quota
-        else:
-            print("⏳ Rate limit hit or error. Waiting 2 minutes...")
-            time.sleep(120) # إذا فشل، انتظر دقيقتين كاملتين
+        print(f"\n🚀 جاري توليد محتوى لـ: {category}")
+        try:
+            response = client.models.generate_content(
+                model=model_to_use,
+                contents=f"Write a comprehensive professional blog post about {category} in HTML format. Detailed content is required."
+            )
+            
+            if response and response.text:
+                publish_post(f"The Future of {category}", response.text, [category])
+                print("💤 انتظار 40 ثانية لتجنب ضغط الـ API...")
+                time.sleep(40)
+            else:
+                print(f"⚠️ النموذج استجاب ولكن بدون نص لـ {category}")
+                
+        except Exception as e:
+            print(f"❌ فشل التوليد لـ {category}: {e}")
+            time.sleep(30) # انتظار قبل المحاولة التالية
 
 if __name__ == "__main__":
     main()
