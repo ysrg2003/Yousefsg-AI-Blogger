@@ -4,14 +4,22 @@ import time
 import requests
 import re
 import random
+import sys
+import datetime
 from google import genai
 from google.genai import types
 
 # ==============================================================================
-# 1. PROMPTS DEFINITIONS (UPDATED FOR DUPLICATION & IMAGES)
+# 0. LOGGING HELPER (FIXES GITHUB ACTIONS STUCK LOGS)
+# ==============================================================================
+def log(msg):
+    """Prints message immediately to console, bypassing buffer."""
+    print(msg, flush=True)
+
+# ==============================================================================
+# 1. PROMPTS DEFINITIONS
 # ==============================================================================
 
-# --- TRENDING RESEARCH (NEWS) ---
 PROMPT_A_TRENDING = """
 A:You are an investigative tech reporter specialized in {section}. Search the modern index for one specific, high-impact case within {date_range}.
 
@@ -28,7 +36,6 @@ MANDATORY SOURCE & VERIFICATION RULES:
 {{"headline": "...", "sources": [{{"title":"...", "url":"...", "date":"...", "type":"...", "why":"...", "credibility":"..."}}], "riskNote":"..."}}
 """
 
-# --- EVERGREEN RESEARCH (CONCEPTS) ---
 PROMPT_A_EVERGREEN = """
 A:You are an expert technical educator specialized in {section}. Outline a comprehensive "Ultimate Guide".
 
@@ -45,7 +52,6 @@ MANDATORY SOURCE & VERIFICATION RULES:
 {{"headline": "...", "sources": [{{"title":"...", "url":"...", "date":"...", "type":"...", "why":"...", "credibility":"..."}}], "riskNote":"..."}}
 """
 
-# --- COMMON STEPS ---
 PROMPT_B_TEMPLATE = """
 B:Editor-in-Chief. Input: JSON from Prompt A. Write a polished HTML article (1500–2000 words).
 INPUT: {json_input}
@@ -70,10 +76,10 @@ C:Strategic Editor & SEO. Input: {json_input}.
 Knowledge Graph (Existing Articles): {knowledge_graph}
 
 TASKS:
-1. **Smart Internal Linking:** Scan the draft for concepts that match titles/slugs in the Knowledge Graph. Create 3-5 *contextual* links (e.g., "For more on [Concept], see our [Article Title]"). Do NOT just list links at the bottom; weave them into the text logically.
+1. **Smart Internal Linking:** Scan the draft for concepts that match titles/slugs in the Knowledge Graph. Create 3-5 *contextual* links.
 2. **Image Strategy:**
-   - `imageGenPrompt`: Describe a visual specific to the headline (e.g., "A robot hand holding a microchip" NOT just "Technology").
-   - `imageOverlayText`: A very short, punchy text (2-4 words max) to be written ON the image (e.g., "AI vs Human", "New GPT-5").
+   - `imageGenPrompt`: Describe a visual specific to the headline (e.g., "A robot hand holding a microchip").
+   - `imageOverlayText`: A very short, punchy text (2-4 words max) to be written ON the image (e.g., "AI vs Human").
 3. SEO: Meta Title/Desc, Tags, Schema.
 4. Adsense Check.
 
@@ -112,7 +118,7 @@ class KeyManager:
             k = os.getenv('GEMINI_API_KEY')
             if k: self.keys.append(k)
         self.current_index = 0
-        print(f"🔑 Loaded {len(self.keys)} API Keys.")
+        log(f"🔑 Loaded {len(self.keys)} API Keys.")
 
     def get_current_key(self):
         if not self.keys: return None
@@ -121,10 +127,10 @@ class KeyManager:
     def switch_key(self):
         if self.current_index < len(self.keys) - 1:
             self.current_index += 1
-            print(f"🔄 Switching to API Key #{self.current_index + 1}...")
+            log(f"🔄 Switching to API Key #{self.current_index + 1}...")
             return True
         else:
-            print("❌ All API Keys exhausted for today!")
+            log("❌ All API Keys exhausted for today!")
             return False
 
 key_manager = KeyManager()
@@ -144,7 +150,9 @@ def get_blogger_token():
         r = requests.post('https://oauth2.googleapis.com/token', data=payload)
         r.raise_for_status()
         return r.json().get('access_token')
-    except: return None
+    except Exception as e:
+        log(f"❌ Blogger Auth Error: {e}")
+        return None
 
 def publish_post(title, content, labels):
     token = get_blogger_token()
@@ -155,8 +163,14 @@ def publish_post(title, content, labels):
     data = {"title": title, "content": content, "labels": labels}
     try:
         r = requests.post(url, headers=headers, json=data)
-        return r.status_code == 200
-    except: return False
+        if r.status_code == 200:
+            return True
+        else:
+            log(f"❌ Publish Error: {r.text}")
+            return False
+    except Exception as e:
+        log(f"❌ Connection Error: {e}")
+        return False
 
 def clean_json(text):
     text = text.strip()
@@ -168,66 +182,128 @@ def clean_json(text):
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
-    if not key: return None
-    print(f"   🎨 Generating Image: '{prompt_text}' with text '{overlay_text}'...")
-    try:
-        # 1. Prepare Pollinations URL with Text Overlay
-        safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, high quality, --no people, humans, animals, faces")
-        
-        # Add text parameter if provided
-        text_param = ""
-        if overlay_text:
-            safe_text = requests.utils.quote(overlay_text)
-            text_param = f"&text={safe_text}&font=roboto&fontsize=50"
+    if not key: 
+        log("⚠️ No IMGBB_API_KEY found.")
+        return None
+    
+    log(f"   🎨 Generating Image: '{prompt_text}'...")
+    
+    # Retry logic for images (3 attempts)
+    for attempt in range(3):
+        try:
+            # 1. Pollinations
+            safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, high quality, --no people, humans, animals, faces")
+            text_param = ""
+            if overlay_text:
+                safe_text = requests.utils.quote(overlay_text)
+                text_param = f"&text={safe_text}&font=roboto&fontsize=50"
 
-        url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux{text_param}"
-        
-        # 2. Download
-        img_response = requests.get(url, timeout=30)
-        if img_response.status_code != 200: return None
-        
-        # 3. Upload to ImgBB
-        print("   ☁️ Uploading to ImgBB...")
-        res = requests.post(
-            "https://api.imgbb.com/1/upload", 
-            data={"key":key, "expiration":0}, 
-            files={"image":img_response.content}
-        )
-        if res.status_code == 200:
-            direct_link = res.json()['data']['url']
-            print(f"   ✅ Image Ready: {direct_link}")
-            return direct_link
-    except Exception as e:
-        print(f"   ⚠️ Image failed: {e}")
+            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux{text_param}"
+            
+            img_response = requests.get(url, timeout=45) # Increased timeout
+            if img_response.status_code != 200:
+                log(f"      ⚠️ Pollinations Error (Attempt {attempt+1}): {img_response.status_code}")
+                time.sleep(5)
+                continue
+            
+            # 2. ImgBB
+            log("   ☁️ Uploading to ImgBB...")
+            res = requests.post(
+                "https://api.imgbb.com/1/upload", 
+                data={"key":key, "expiration":0}, 
+                files={"image":img_response.content},
+                timeout=45
+            )
+            
+            if res.status_code == 200:
+                direct_link = res.json()['data']['url']
+                log(f"   ✅ Image Ready: {direct_link}")
+                return direct_link
+            else:
+                log(f"      ⚠️ ImgBB Error (Attempt {attempt+1}): {res.text}")
+                
+        except Exception as e:
+            log(f"      ⚠️ Image Exception (Attempt {attempt+1}): {e}")
+            time.sleep(5)
+            
+    log("❌ Failed to generate/upload image after 3 attempts.")
     return None
 
 def load_kg():
     try:
-        with open('knowledge_graph.json', 'r') as f: return json.load(f)
+        with open('knowledge_graph.json', 'r', encoding='utf-8') as f: return json.load(f)
     except: return []
 
-def get_recent_titles_string():
+def get_recent_titles_string(limit=50):
     kg = load_kg()
-    # Get last 50 titles
-    titles = [item['title'] for item in kg[-50:]] if kg else []
+    titles = [item['title'] for item in kg[-limit:]] if kg else []
     return ", ".join(titles)
+
+def get_relevant_kg_for_linking(current_category, limit=60):
+    full_kg = load_kg()
+    if not full_kg: return "[]"
+    relevant = [item for item in full_kg if item.get('section') == current_category]
+    guides = [item for item in full_kg if "Guide" in item.get('title', '') and item.get('section') != current_category]
+    combined = relevant + guides[:10]
+    if len(combined) > limit: combined = combined[-limit:]
+    return json.dumps(combined)
 
 def update_kg(slug, title, section):
     try:
         data = load_kg()
-        # Check if exists
         for item in data:
-            if item['slug'] == slug: return
+            if item.get('slug') == slug: return
         data.append({"slug": slug, "title": title, "section": section})
-        with open('knowledge_graph.json', 'w') as f: json.dump(data, f, indent=2)
+        with open('knowledge_graph.json', 'w', encoding='utf-8') as f: 
+            json.dump(data, f, indent=2)
     except: pass
+
+def perform_maintenance_cleanup():
+    """Archives old articles by year to prevent file bloat."""
+    try:
+        kg_path = 'knowledge_graph.json'
+        archive_dir = 'archive'
+        
+        if not os.path.exists(kg_path): return
+        with open(kg_path, 'r', encoding='utf-8') as f: data = json.load(f)
+            
+        if len(data) < 800: return
+
+        log("   🧹 Performing Database Maintenance...")
+        guides = [item for item in data if "Guide" in item.get('title', '')]
+        others = [item for item in data if item not in guides]
+        
+        keep_count = 400
+        if len(others) <= keep_count: return
+
+        kept_others = others[-keep_count:] 
+        to_archive = others[:-keep_count]
+        
+        new_main_data = guides + kept_others
+        with open(kg_path, 'w', encoding='utf-8') as f: json.dump(new_main_data, f, indent=2)
+            
+        if not os.path.exists(archive_dir): os.makedirs(archive_dir)
+        
+        current_year = datetime.datetime.now().year
+        archive_path = os.path.join(archive_dir, f'history_{current_year}.json')
+        
+        archive_data = []
+        if os.path.exists(archive_path):
+            with open(archive_path, 'r', encoding='utf-8') as f: archive_data = json.load(f)
+        
+        archive_data.extend(to_archive)
+        with open(archive_path, 'w', encoding='utf-8') as f: json.dump(archive_data, f, indent=2)
+            
+        log(f"   ✅ Archived {len(to_archive)} articles.")
+    except Exception as e:
+        log(f"   ⚠️ Maintenance Warning: {e}")
 
 # ==============================================================================
 # 4. CORE GENERATION LOGIC
 # ==============================================================================
 
 def generate_step(model_name, prompt, step_name):
-    print(f"   👉 Executing {step_name}...")
+    log(f"   👉 Executing {step_name}...")
     while True:
         current_key = key_manager.get_current_key()
         if not current_key: return None
@@ -242,16 +318,16 @@ def generate_step(model_name, prompt, step_name):
         except Exception as e:
             error_msg = str(e)
             if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-                print(f"      ⚠️ Quota hit on Key #{key_manager.current_index + 1}.")
+                log(f"      ⚠️ Quota hit on Key #{key_manager.current_index + 1}.")
                 if key_manager.switch_key():
-                    print("      🔄 Retrying with new key...")
+                    log("      🔄 Retrying with new key...")
                     continue
                 else: return None
             elif "503" in error_msg:
                 time.sleep(30)
                 continue
             else:
-                print(f"      ❌ Error: {e}")
+                log(f"      ❌ Error: {e}")
                 return None
 
 # ==============================================================================
@@ -262,12 +338,11 @@ def run_pipeline(category, config, mode="trending"):
     model = config['settings'].get('model_name', 'models/gemini-2.5-flash')
     cat_config = config['categories'][category]
     
-    print(f"\n🚀 STARTING {mode.upper()} CHAIN FOR: {category}")
+    log(f"\n🚀 STARTING {mode.upper()} CHAIN FOR: {category}")
 
-    # Get recent titles to prevent duplication
-    recent_titles = get_recent_titles_string()
+    recent_titles = get_recent_titles_string(limit=40)
 
-    # --- STEP A: RESEARCH ---
+    # --- STEP A ---
     if mode == "trending":
         prompt_a = PROMPT_A_TRENDING.format(
             section=category,
@@ -286,26 +361,26 @@ def run_pipeline(category, config, mode="trending"):
     if not json_a: return
     time.sleep(10)
 
-    # --- STEP B: DRAFT ---
+    # --- STEP B ---
     prompt_b = PROMPT_B_TEMPLATE.format(json_input=json_a)
     json_b = generate_step(model, prompt_b, "Step B (Drafting)")
     if not json_b: return
     time.sleep(10)
 
-    # --- STEP C: SEO & IMAGES ---
-    kg_str = json.dumps(load_kg()) # Pass full KG for linking
-    prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b, knowledge_graph=kg_str)
+    # --- STEP C ---
+    relevant_kg_str = get_relevant_kg_for_linking(category, limit=50)
+    prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b, knowledge_graph=relevant_kg_str)
     json_c = generate_step(model, prompt_c, "Step C (SEO & Images)")
     if not json_c: return
     time.sleep(10)
 
-    # --- STEP D: AUDIT ---
+    # --- STEP D ---
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json_c)
     json_d = generate_step(model, prompt_d, "Step D (Audit)")
     if not json_d: return
     time.sleep(10)
 
-    # --- STEP E: PUBLISH ---
+    # --- STEP E ---
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
     json_e = generate_step(model, prompt_e, "Step E (Final)")
     if not json_e: return
@@ -316,9 +391,9 @@ def run_pipeline(category, config, mode="trending"):
         title = final.get('finalTitle', f"{category} Article")
         content = final.get('finalContent', '')
         
-        # Image Generation with Overlay
+        # Image Generation
         img_prompt = final.get('imageGenPrompt', f"Abstract {category} technology")
-        overlay_text = final.get('imageOverlayText', title[:20]) # Fallback to title start if missing
+        overlay_text = final.get('imageOverlayText', title[:20])
         
         img_url = generate_and_upload_image(img_prompt, overlay_text)
         
@@ -326,6 +401,8 @@ def run_pipeline(category, config, mode="trending"):
             alt_text = final.get('seo', {}).get('imageAltText', title)
             img_html = f'<div class="separator" style="clear: both; text-align: center;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{alt_text}" data-original-width="1280" data-original-height="720" /></a></div><br />'
             content = img_html + content
+        else:
+            log("⚠️ Warning: Article published without image due to generation failure.")
 
         if 'auditMetadata' in final:
             content += f"<hr><small><i>Audit Stats: AI Prob {final['auditMetadata'].get('aiProbability')}%</i></small>"
@@ -333,12 +410,12 @@ def run_pipeline(category, config, mode="trending"):
         labels = [category, "AI News" if mode == "trending" else "Guide"]
         
         if publish_post(title, content, labels):
-            print(f"✅ PUBLISHED: {title}")
+            log(f"✅ PUBLISHED: {title}")
             slug = title.lower().replace(' ', '-').replace(':', '')[:50]
             update_kg(slug, title, category)
             
     except Exception as e:
-        print(f"❌ Final processing failed: {e}")
+        log(f"❌ Final processing failed: {e}")
 
 # ==============================================================================
 # 6. MAIN
@@ -350,12 +427,15 @@ def main():
 
     for category in config['categories']:
         run_pipeline(category, config, mode="trending")
-        print("💤 Cooling down (30s)...")
+        log("💤 Cooling down (30s)...")
         time.sleep(30)
         
         run_pipeline(category, config, mode="evergreen")
-        print("💤 Cooling down (30s)...")
+        log("💤 Cooling down (30s)...")
         time.sleep(30)
+    
+    # Maintenance at the end
+    perform_maintenance_cleanup()
 
 if __name__ == "__main__":
     main()
