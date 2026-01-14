@@ -3,191 +3,132 @@ import json
 import time
 import requests
 import re
-import base64
 import random
 from google import genai
 from google.genai import types
 
 # ==============================================================================
-# 1. FULL PROMPTS DEFINITIONS
+# 1. PROMPTS DEFINITIONS
 # ==============================================================================
 
-PROMPT_A_TEMPLATE = """
-A:You are an investigative tech reporter specialized in {section}. Search the modern index (Google Search, Google Scholar, arXiv, official blogs, SEC/10-Q when financial figures are used) for one specific, high-impact case, study, deployment, or company announcement that occurred within {date_range} (for example "last 60 days").
+# --- TRENDING RESEARCH (NEWS) ---
+PROMPT_A_TRENDING = """
+A:You are an investigative tech reporter specialized in {section}. Search the modern index (Google Search, Google Scholar, arXiv, official blogs) for one specific, high-impact case, study, or announcement from {date_range}.
 
-SECTION FOCUS (choose the relevant focus for {section}; these must guide your search terms):
-{section_focus}
+SECTION FOCUS: {section_focus}
 
-MANDATORY SOURCE & VERIFICATION RULES (follow EXACTLY):
-
-Return exactly one headline (plain English, single line) — a journalist-style headline that connects technical advance to human/commercial impact.
-
-Provide 2–3 primary sources that verify the story. At least:
-One PRIMARY TECH SOURCE: (peer-reviewed DOI or arXiv paper with version/date OR official GitHub repo with commit/PR date OR official company technical blog post).
-One SECONDARY CORROBORATING SOURCE: (reputable news outlet, conference proceeding, or company press release).
-
-For each source, include:
-title, exact URL, publication date (YYYY-MM-DD), type (paper/blog/repo/press/SEC), and a one-line note: "why it verifies".
-
-For any numeric claim you will later assert (e.g., "88% of queries"), ensure the source actually contains that number. If the source gives a figure differently, report the exact figure and location of the figure in the source (e.g., "see Figure 2, page 6" or "arXiv v2, paragraph 3").
-
-If the story touches YMYL topics (health/finance/legal), include an immediate risk note listing which regulations may apply (e.g., HIPAA, FDA, CE, GDPR, SEC) and what kind of verification is required.
-
-Check basic credibility signals for each source and report them: (a) publisher credibility (Nature/IEEE/ACM/official corp blog), (b) if arXiv — indicate whether paper has code/benchmarks, (c) if GitHub — include last commit date and license, (d) if press release — confirm corporate domain and date/time.
-
-Output JSON only, EXACTLY in this format:
-{{"headline": "One-line headline","sources": [{{"title":"Exact source title","url":"https://...","date":"YYYY-MM-DD","type":"paper|arXiv|repo|blog|press|SEC","why":"One-line why this verifies (include exact page/figure if relevant)","credibility":"short note: Nature/IEEE/company blog/press/etc","notes":"any caveats about the source"}}],"riskNote":"If YMYL risk exists list regulators and verification steps; otherwise empty string"}}
+MANDATORY SOURCE & VERIFICATION RULES:
+1. Return exactly one headline (journalist-style).
+2. Provide 2–3 primary sources (Tech Source + Corroborating Source).
+3. For numeric claims, cite exact figures.
+4. Output JSON ONLY:
+{{"headline": "...", "sources": [{{"title":"...", "url":"...", "date":"...", "type":"...", "why":"...", "credibility":"..."}}], "riskNote":"..."}}
 """
 
+# --- EVERGREEN RESEARCH (CONCEPTS) ---
+PROMPT_A_EVERGREEN = """
+A:You are an expert technical educator specialized in {section}. Your task is to outline a comprehensive "Ultimate Guide" or "Deep Dive" into a core concept of {section}.
+Instead of recent news, search for and cite: Foundational papers, Standard definitions, Official Documentation, and Key Textbooks.
+
+TOPIC PROMPT: {evergreen_prompt}
+
+MANDATORY SOURCE & VERIFICATION RULES:
+1. Return a headline like "The Ultimate Guide to [Topic]" or "Understanding [Concept]: A Deep Dive".
+2. Provide 2–3 authoritative sources (Seminal Papers, Documentation, University Lectures).
+3. Output JSON ONLY (Same format as news to maintain pipeline compatibility):
+{{"headline": "...", "sources": [{{"title":"...", "url":"...", "date":"YYYY-MM-DD (or N/A)", "type":"documentation|paper|book", "why":"Foundational reference", "credibility":"High"}}], "riskNote":"..."}}
+"""
+
+# --- COMMON STEPS (B, C, D, E) ---
 PROMPT_B_TEMPLATE = """
-B:You are Editor-in-Chief of 'AI News Hub'. Input: the JSON output from Prompt A (headline + sources). Write a polished HTML article (1500–2000 words) using the provided headline and sources. Follow these rules exactly.
+B:You are Editor-in-Chief. Input: JSON from Prompt A. Write a polished HTML article (1500–2000 words).
+INPUT: {json_input}
 
-INPUT DATA FROM PROMPT A:
-{json_input}
+RULES:
+- H1 = headline.
+- Intro: Human hook.
+- Tone: Journalistic/Educational.
+- 40% short, 45% medium, 15% long sentences.
+- 1 First-person sentence.
+- 1 Rhetorical question.
+- NO FORBIDDEN PHRASES ("In today's digital age", etc).
+- Use H2, H3.
+- Add Comparison Table.
+- Add Sources <ul>.
 
-I. STRUCTURE & VOICE RULES (mandatory):
-H1 = headline exactly as provided (unless you correct minor grammar, then keep original in an attribute).
-Intro (do NOT start with "Imagine" or "In today’s world"): begin with a short, verifiable human hook:
-If you have a named, sourced quote from the sources, start with it (quote + attribution).
-If no named source quote exists, start with a clearly labeled "illustrative composite" sentence (e.g., "Illustrative composite: a researcher at a mid-size lab described…").
-Use journalistic, conversational English — not academic tone:
-Paragraphs: 2–4 sentences maximum.
-Sentence length distribution: ~40% short (6–12 words), ~45% medium (13–22 words), ~15% long (23–35 words). Do not use sentences >35 words.
-Use contractions where natural (e.g., "it's", "they're") to sound human.
-Include exactly one first-person editorial sentence from the writer (e.g., "In my experience covering X, I've seen...") — keep it 1 sentence only.
-Include one rhetorical question in the article (short).
-Avoid AI-template phrasing: forbid the following exact phrases (do not use them anywhere):
-"In today's digital age"
-"The world of AI is ever-evolving"
-"This matters because" — instead use 1–2 human sentences that explain significance.
-"In conclusion" (use a forward-looking takeaway instead).
-Tone: authoritative but approachable. Use occasional colloquial connectors (e.g., "That said," "Crucially,") — sparingly.
-
-II. EDITORIAL PRINCIPLES (applied inline):
-So What? — after each major fact/claim, add a one-sentence human explanation of its impact (no template phrase).
-Depth over breadth — choose 4–5 major points from the sources and analyze them deeply (quantitative where possible).
-Dual verification — any load-bearing claim (numbers, performance, market sizes, legal claims) must be inline-cited to at least two independent sources. If only one exists, explicitly call it out as "single-source claim" and flag for follow-up.
-Quotes — include at least one direct quote from a named expert present in the sources (copy verbatim and cite). If none exist, include a verified public statement (press release, blog) as a quote. Do not invent quotes.
-
-III. CITATION & SOURCING RULES:
-Inline citation format EXACTLY: (Source: ShortTitle — YYYY-MM-DD — URL) e.g., (Source: CoTracker3 arXiv — 2024-10-15 — https://arxiv.org/...)
-At the end include a "Sources" <ul> listing full source entries (title + URL + date + short credibility note).
-If you paraphrase any statistic, include the exact location in the source (e.g., "see Table 2, p.6").
-For market/financial numbers, prefer SEC filings, company reports, or named market research with publisher and year.
-
-IV. SECTION-SPECIFIC FOCUS (must be explicit in article):
-Use the section focus from the input — ensure the article addresses at least TWO focus points (state them explicitly in the text as subheadings).
-
-V. HUMANIZATION / ANTI-AI-PATTERNS:
-Insert at least two small humanizing details: (a) One short anecdote/example, (b) One sentence of personal observation.
-Vary sentence rhythm: include one parenthetical aside, and one comma-spliced sentence (once).
-Insert one small, deliberate stylistic imperfection (e.g., an interjection "Look," or "Here’s the rub:").
-
-VI. FORMATTING & SEO:
-Use H2 and H3 subheadings.
-Add one small comparison table (text-only) and 3 bullet "Why it matters" bullets near the top.
-Add schema-ready attributes.
-Word count: 1500–2000 words.
-
-Output JSON ONLY, EXACTLY in this shape:
-{{"draftTitle":"...","draftContent":"<html>...full HTML article...</html>","sources":[ {{ "title":"", "url":"", "date":"", "type":"", "credibility":"" }}, ... ],"notes":"List any remaining issues or empty string"}}
+Output JSON ONLY: {{"draftTitle":"...","draftContent":"<html>...</html>","sources":[...],"notes":"..."}}
 """
 
 PROMPT_C_TEMPLATE = """
-C:You are Strategic Editor & SEO consultant for 'AI News Hub'.
-Input Draft JSON: {json_input}
-Knowledge Graph: {knowledge_graph}
+C:Strategic Editor & SEO. Input: {json_input}. Knowledge Graph: {knowledge_graph}.
+TASKS:
+1. Add 3 "Key takeaways".
+2. Create Image Prompt (Abstract, Tech, No Humans).
+3. Internal Links (3-5).
+4. SEO (Meta Title/Desc, Tags, Schema).
+5. Adsense Check.
 
-Produce a final publishing package with the following exact tasks.
-
-ARTICLE-LEVEL POLISH:
-Improve clarity, tighten prose, and ensure "human first" voice remains. Do NOT convert to academic tone.
-Add 2–4 textual rich elements: a short comparison table (if none present, create one), 3 bullets "Key takeaways", and 1 highlighted blockquote.
-Extract one conceptual icon (1–2 English words).
-Create author byline and short author bio (40–60 words). Use placeholder if unknown.
-
-**IMAGE PROMPT GENERATION (MANDATORY):**
-Create a specific English prompt for an AI image generator to create a header image for this article.
-RULES:
-1. Abstract, futuristic, technological style (3D render, isometric, or digital art).
-2. NO HUMANS, NO FACES, NO ANIMALS, NO TEXT.
-3. Focus on concepts: data streams, neural nodes, silicon chips, glowing networks, abstract robotics.
-4. Field name in JSON: "imageGenPrompt".
-
-NETWORK-LEVEL OPTIMIZATION:
-Analyze knowledge_graph array and select 3–5 best internal articles to link. Provide exact HTML anchor tags using slugs from knowledge_graph. For each internal link, include a one-line note: which Section Focus point it fills.
-Propose 2 future article titles to fill content gaps.
-
-SEO & PUBLISHING PACKAGE:
-Provide metaTitle (50–60 chars) and metaDescription (150–160 chars).
-Provide 5–7 tags (exact keywords).
-Generate Article schema JSON-LD.
-Provide FAQ schema (3 Q&A).
-
-ADSENSE READINESS & RISK ASSESSMENT:
-Run Adsense readiness evaluation and return adsenseReadinessScore from 0–100.
-Include breakdown for: Accuracy, E-E-A-T, YMYL risk, Ads placement risk.
-
-OUTPUT:
-Return single JSON ONLY with these fields:
-{{"finalTitle":"...","finalContent":"<html>...final polished HTML with inline links and sources...</html>","excerpt":"...short excerpt...","imageGenPrompt":"...the prompt for image generator...","seo": {{ "metaTitle":"...","metaDescription":"...","imageAltText":"..." }},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[ "<a href='...'>...</a>", ... ],"schemaMarkup":"{{...JSON-LD...}}","adsenseReadinessScore":{{ "score":0-100, "breakdown": {{...}}, "notes":"..." }},"sources":[ ... ],"authorBio":{{ "name":"...", "bio":"...", "profileUrl":"..." }}}}
+Output JSON ONLY: {{"finalTitle":"...","finalContent":"...","imageGenPrompt":"...","seo":{{...}},"tags":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}}}}
 """
 
 PROMPT_D_TEMPLATE = """
-PROMPT D — Humanization & Final Audit (UPDATED — includes mandatory A, B, C checks)
-You are the Humanization & Final Audit specialist for 'AI News Hub'.
-Input: {json_input}
+D:Humanization & Audit. Input: {json_input}.
+CHECKS:
+- Verify Numeric Claims & Quotes.
+- Ensure Human Style (1st person, rhetorical Q).
+- Remove Forbidden Phrases.
+- Rewrite AI-sounding sentences.
+- Check YMYL.
 
-Your job: apply a comprehensive, human-level audit and humanization pass.
-MANDATORY CHECKS:
-
-STEP 2 — MANDATORY CHECK A: Sources & Fact Claims
-A.1 Numeric claim verification: Verify at least one source contains exact number. If not, correct it or hedge it.
-A.2 Load-bearing claim verification: Ensure two independent sources.
-A.3 Quote verification: Verify exact text exists.
-A.4 Inline citation completeness: Mismatch check.
-
-STEP 3 — MANDATORY CHECK B: Human Style
-B.1 First-person writer sentence: Ensure presence of exactly one.
-B.2 Rhetorical question: Ensure presence of one.
-B.3 Forbidden phrases: Remove "In today's digital age", "The world of AI is ever-evolving", "This matters because", "In conclusion".
-B.4 Sentence length distribution: Enforce 40/45/15 split.
-B.6 "AI-pattern sniff" and rewrite: Identify 8 sentences that look AI-generated and rewrite them.
-
-STEP 4 — MANDATORY CHECK C: E-E-A-T & YMYL
-C.1 Author bio verification.
-C.2 YMYL disclaimer: Insert if needed.
-C.4 AI-detection threshold: If > 50, re-run humanization.
-
-STEP 6 — Safety, Legal & Final Editorial Confirmation
-Include "humanEditorConfirmation" object.
-
-Output JSON ONLY:
-{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve this field...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"...","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}},"edits":[ {{"type":"...", "original":"...", "new":"...", "reason":"..."}}...],"auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},"plagiarismFlag": false,"aiDetectionFlag": false,"citationCompleteness": true,"authorBioPresent": true,"humanEditorConfirmation": {{...}},"requiresAction": false, "requiredActions":[...],"notes":"..."}}
+Output JSON ONLY: {{"finalTitle":"...","finalContent":"...","imageGenPrompt":"...","seo":{{...}},"tags":[...],"auditMetadata":{{...}},"humanEditorConfirmation":{{...}}}}
 """
 
 PROMPT_E_TEMPLATE = """
-E: ROLE PROMPT — "The Assessor / Evaluator / Careful Auditor / Error-Corrector / Publisher"
-You are the Publisher.
+E:Publisher. Final Sanity Check.
 Input: {json_input}
-
-Your single mission: take the provided draft/final article and transform it into a publication-quality piece.
-
-STEP-BY-STEP WORKFLOW:
-1. INPUTS: Read finalContent, sources.
-2. SOURCE & FACT VERIFICATION: Final check on numeric claims and quotes.
-3. HUMANIZATION & STYLE: Enforce first-person sentence, rhetorical question, remove forbidden phrases ("In today's digital age", etc).
-4. SEO & PUBLISHING PACKAGE: Validate meta tags, schema, internal links.
-5. FINAL OUTPUT: Return single JSON ONLY.
-
-{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve this field...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio": {{...}},"edits":[...],"auditMetadata": {{...}},"requiredActions":[...]}}
+Output JSON ONLY: {{"finalTitle":"...","finalContent":"...","imageGenPrompt":"...","seo":{{...}},"tags":[...],"auditMetadata":{{...}}}}
 """
 
 # ==============================================================================
-# 2. HELPER FUNCTIONS
+# 2. KEY MANAGER (ROTATION LOGIC)
 # ==============================================================================
 
-def get_access_token():
+class KeyManager:
+    def __init__(self):
+        self.keys = []
+        # Load keys 1 through 4
+        for i in range(1, 5):
+            k = os.getenv(f'GEMINI_API_KEY_{i}')
+            if k: self.keys.append(k)
+        
+        if not self.keys:
+            # Fallback to single key if numbered ones aren't set
+            k = os.getenv('GEMINI_API_KEY')
+            if k: self.keys.append(k)
+            
+        self.current_index = 0
+        print(f"🔑 Loaded {len(self.keys)} API Keys.")
+
+    def get_current_key(self):
+        if not self.keys: return None
+        return self.keys[self.current_index]
+
+    def switch_key(self):
+        if self.current_index < len(self.keys) - 1:
+            self.current_index += 1
+            print(f"🔄 Switching to API Key #{self.current_index + 1}...")
+            return True
+        else:
+            print("❌ All API Keys exhausted for today!")
+            return False
+
+key_manager = KeyManager()
+
+# ==============================================================================
+# 3. HELPER FUNCTIONS
+# ==============================================================================
+
+def get_blogger_token():
     payload = {
         'client_id': os.getenv('BLOGGER_CLIENT_ID'),
         'client_secret': os.getenv('BLOGGER_CLIENT_SECRET'),
@@ -198,32 +139,23 @@ def get_access_token():
         r = requests.post('https://oauth2.googleapis.com/token', data=payload)
         r.raise_for_status()
         return r.json().get('access_token')
-    except Exception as e:
-        print(f"❌ Blogger Auth Error: {e}")
+    except:
         return None
 
 def publish_post(title, content, labels):
-    token = get_access_token()
+    token = get_blogger_token()
     if not token: return False
-    
     blog_id = os.getenv('BLOGGER_BLOG_ID')
     url = f"https://www.googleapis.com/blogger/v3/blogs/{blog_id}/posts"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     data = {"title": title, "content": content, "labels": labels}
-    
     try:
         r = requests.post(url, headers=headers, json=data)
-        if r.status_code == 200:
-            print(f"✅ Published: {title}")
-            return True
-        else:
-            print(f"❌ Publish Error: {r.text}")
-            return False
-    except Exception as e:
-        print(f"❌ Connection Error: {e}")
+        return r.status_code == 200
+    except:
         return False
 
-def clean_json_response(text):
+def clean_json(text):
     text = text.strip()
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
     if match: return match.group(1)
@@ -231,234 +163,183 @@ def clean_json_response(text):
     if match: return match.group(1)
     return text
 
-def generate_step(client, model, prompt_text, step_name):
-    """Executes a single step with AGGRESSIVE retry logic for strict rate limits"""
-    print(f"   👉 Executing {step_name}...")
-    
-    max_retries = 5
-    
-    for i in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model=model,
-                contents=prompt_text,
-                config=types.GenerateContentConfig(response_mime_type="application/json")
-            )
-            
-            if response and response.text:
-                return clean_json_response(response.text)
-            
-        except Exception as e:
-            error_str = str(e)
-            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "503" in error_str:
-                wait_time = 60 + (i * 30)
-                print(f"      ⏳ Quota Hit (Attempt {i+1}/{max_retries}). Waiting {wait_time}s to clear RPM...")
-                time.sleep(wait_time)
-            else:
-                print(f"      ❌ Unexpected Error in {step_name}: {e}")
-                time.sleep(10)
-                
-    print(f"      ❌ Failed {step_name} after {max_retries} retries.")
+def generate_and_upload_image(prompt_text):
+    key = os.getenv('IMGBB_API_KEY')
+    if not key: return None
+    print(f"   🎨 Generating Image...")
+    try:
+        safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, --no people, text")
+        url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,999)}"
+        img_data = requests.get(url, timeout=30).content
+        
+        res = requests.post("https://api.imgbb.com/1/upload", data={"key":key}, files={"image":img_data})
+        if res.status_code == 200:
+            return res.json()['data']['url']
+    except Exception as e:
+        print(f"   ⚠️ Image failed: {e}")
     return None
 
-def load_knowledge_graph():
+def load_kg():
     try:
-        with open('knowledge_graph.json', 'r') as f:
-            return f.read()
-    except:
-        return "[]"
+        with open('knowledge_graph.json', 'r') as f: return f.read()
+    except: return "[]"
 
-def update_knowledge_graph(slug, title, section):
+def update_kg(slug, title, section):
     try:
         data = []
         if os.path.exists('knowledge_graph.json'):
-            with open('knowledge_graph.json', 'r') as f:
-                data = json.load(f)
+            with open('knowledge_graph.json', 'r') as f: data = json.load(f)
         data.append({"slug": slug, "title": title, "section": section})
-        with open('knowledge_graph.json', 'w') as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        print(f"⚠️ Failed to update knowledge graph: {e}")
+        with open('knowledge_graph.json', 'w') as f: json.dump(data, f, indent=2)
+    except: pass
 
 # ==============================================================================
-# 3. IMAGE GENERATION & HOSTING (NEW)
+# 4. CORE GENERATION LOGIC (WITH KEY ROTATION)
 # ==============================================================================
 
-def generate_and_upload_image(prompt_text):
+def generate_step(model_name, prompt, step_name):
     """
-    1. Generates image via Pollinations.ai (Free, No API Key).
-    2. Uploads to ImgBB (Free, Direct Link).
+    Executes a step. If 429/Quota error occurs, switches key and retries.
     """
-    imgbb_key = os.getenv('IMGBB_API_KEY')
-    if not imgbb_key:
-        print("⚠️ IMGBB_API_KEY not found. Skipping image generation.")
-        return None
-
-    print(f"   🎨 Generating Image for: {prompt_text[:50]}...")
+    print(f"   👉 Executing {step_name}...")
     
-    # 1. Construct Pollinations URL
-    # Enforce constraints: No humans, abstract, tech style
-    safe_prompt = f"{prompt_text}, abstract, futuristic, 3d render, high quality, 8k, technological, --no people, humans, animals, faces, text, words"
-    encoded_prompt = requests.utils.quote(safe_prompt)
-    seed = random.randint(1, 99999)
-    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&nologo=true&seed={seed}&model=flux"
-
-    try:
-        # 2. Download Image
-        img_response = requests.get(image_url, timeout=30)
-        if img_response.status_code != 200:
-            print(f"❌ Pollinations Error: {img_response.status_code}")
-            return None
+    while True: # Loop to handle key switching
+        current_key = key_manager.get_current_key()
+        if not current_key: return None
         
-        # 3. Upload to ImgBB
-        print("   ☁️ Uploading to ImgBB...")
-        upload_url = "https://api.imgbb.com/1/upload"
-        payload = {
-            "key": imgbb_key,
-            "expiration": 0 # 0 = Permanent
-        }
-        files = {
-            "image": img_response.content
-        }
+        client = genai.Client(api_key=current_key)
         
-        upload_res = requests.post(upload_url, data=payload, files=files)
-        result = upload_res.json()
-        
-        if result.get("success"):
-            direct_link = result["data"]["url"]
-            print(f"   ✅ Image Ready: {direct_link}")
-            return direct_link
-        else:
-            print(f"❌ ImgBB Error: {result}")
-            return None
-
-    except Exception as e:
-        print(f"❌ Image Gen/Upload Failed: {e}")
-        return None
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json")
+            )
+            return clean_json(response.text)
+            
+        except Exception as e:
+            error_msg = str(e)
+            # Check for Quota/Rate limits
+            if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                print(f"      ⚠️ Quota hit on Key #{key_manager.current_index + 1}.")
+                
+                # Try switching key
+                if key_manager.switch_key():
+                    print("      🔄 Retrying immediately with new key...")
+                    continue # Retry the loop with new key
+                else:
+                    print("      ❌ Fatal: No more keys available.")
+                    return None
+            
+            elif "503" in error_msg:
+                print("      ⏳ Server busy (503). Waiting 30s...")
+                time.sleep(30)
+                continue
+            
+            else:
+                print(f"      ❌ Error: {e}")
+                return None
 
 # ==============================================================================
-# 4. MAIN PIPELINE LOGIC
+# 5. UNIFIED PIPELINE (TRENDING & EVERGREEN)
 # ==============================================================================
 
-def run_trending_pipeline(client, model, category, config):
-    date_range = config['settings'].get('date_range_query', 'last 60 days')
+def run_pipeline(category, config, mode="trending"):
+    """
+    Runs the full 5-step chain for either Trending or Evergreen.
+    mode: 'trending' or 'evergreen'
+    """
+    model = config['settings'].get('model_name', 'models/gemini-2.5-flash')
     cat_config = config['categories'][category]
-    section_focus = cat_config.get('trending_focus', '')
-
-    # --- Step A: Research ---
-    prompt_a = PROMPT_A_TEMPLATE.format(
-        section=category,
-        date_range=date_range,
-        section_focus=section_focus
-    )
-    json_a = generate_step(client, model, prompt_a, "Step A (Research)")
-    if not json_a: return
     
-    print("      ...Pacing: Waiting 20s...")
-    time.sleep(20) 
+    print(f"\n🚀 STARTING {mode.upper()} CHAIN FOR: {category}")
 
-    # --- Step B: Draft ---
+    # --- STEP A: RESEARCH ---
+    if mode == "trending":
+        prompt_a = PROMPT_A_TRENDING.format(
+            section=category,
+            date_range=config['settings'].get('date_range_query', 'last 60 days'),
+            section_focus=cat_config.get('trending_focus', '')
+        )
+    else: # evergreen
+        prompt_a = PROMPT_A_EVERGREEN.format(
+            section=category,
+            evergreen_prompt=cat_config.get('evergreen_prompt', '')
+        )
+
+    json_a = generate_step(model, prompt_a, "Step A (Research)")
+    if not json_a: return
+    time.sleep(10) # Short pacing
+
+    # --- STEP B: DRAFT ---
     prompt_b = PROMPT_B_TEMPLATE.format(json_input=json_a)
-    json_b = generate_step(client, model, prompt_b, "Step B (Drafting)")
+    json_b = generate_step(model, prompt_b, "Step B (Drafting)")
     if not json_b: return
-    print("      ...Pacing: Waiting 20s...")
-    time.sleep(20)
+    time.sleep(10)
 
-    # --- Step C: SEO & Strategy (Includes Image Prompt) ---
-    kg = load_knowledge_graph()
+    # --- STEP C: SEO ---
+    kg = load_kg()
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b, knowledge_graph=kg)
-    json_c = generate_step(client, model, prompt_c, "Step C (SEO)")
+    json_c = generate_step(model, prompt_c, "Step C (SEO)")
     if not json_c: return
-    print("      ...Pacing: Waiting 20s...")
-    time.sleep(20)
+    time.sleep(10)
 
-    # --- Step D: Audit ---
+    # --- STEP D: AUDIT ---
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json_c)
-    json_d = generate_step(client, model, prompt_d, "Step D (Audit)")
+    json_d = generate_step(model, prompt_d, "Step D (Audit)")
     if not json_d: return
-    print("      ...Pacing: Waiting 20s...")
-    time.sleep(20)
+    time.sleep(10)
 
-    # --- Step E: Publisher ---
+    # --- STEP E: PUBLISH ---
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
-    json_e = generate_step(client, model, prompt_e, "Step E (Final Polish)")
+    json_e = generate_step(model, prompt_e, "Step E (Final)")
     if not json_e: return
 
-    # --- Publish ---
+    # --- FINAL PUBLISHING ---
     try:
-        final_data = json.loads(json_e)
-        title = final_data.get('finalTitle', f"New in {category}")
-        content = final_data.get('finalContent', '')
+        final = json.loads(json_e)
+        title = final.get('finalTitle', f"{category} Article")
+        content = final.get('finalContent', '')
         
-        # --- IMAGE GENERATION BLOCK ---
-        img_prompt = final_data.get('imageGenPrompt', f"Abstract technology background for {category}")
-        image_url = generate_and_upload_image(img_prompt)
+        # Image
+        img_prompt = final.get('imageGenPrompt', f"Abstract {category}")
+        img_url = generate_and_upload_image(img_prompt)
+        if img_url:
+            content = f'<div class="separator" style="clear: both; text-align: center;"><a href="{img_url}"><img src="{img_url}" alt="{title}" /></a></div><br />' + content
+
+        # Metadata Footer
+        if 'auditMetadata' in final:
+            content += f"<hr><small><i>Audit: AI Prob {final['auditMetadata'].get('aiProbability')}%</i></small>"
+
+        labels = [category, "AI News" if mode == "trending" else "Guide"]
         
-        if image_url:
-            alt_text = final_data.get('seo', {}).get('imageAltText', title)
-            img_html = f'<div class="separator" style="clear: both; text-align: center;"><a href="{image_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{image_url}" alt="{alt_text}" data-original-width="1280" data-original-height="720" /></a></div><br />'
-            content = img_html + content
-        # ------------------------------
-
-        if 'auditMetadata' in final_data:
-            audit = final_data['auditMetadata']
-            content += f"<hr><small><i>Audit Stats: AI Prob {audit.get('aiProbability')}%, Passes {audit.get('numberOfHumanizationPasses')}</i></small>"
-
-        if publish_post(title, content, [category, "Trending", "AI News"]):
+        if publish_post(title, content, labels):
+            print(f"✅ PUBLISHED: {title}")
             slug = title.lower().replace(' ', '-').replace(':', '')[:50]
-            update_knowledge_graph(slug, title, category)
+            update_kg(slug, title, category)
             
     except Exception as e:
-        print(f"❌ Failed to parse/publish final JSON: {e}")
+        print(f"❌ Final processing failed: {e}")
 
-def run_evergreen_pipeline(client, model, category, prompt_text):
-    print(f"   🌲 Generating Evergreen Article for {category}...")
-    try:
-        wrapper = f"{prompt_text}\n\nOutput JSON ONLY: {{'title': '...', 'content': '<html>...</html>'}}"
-        json_res = generate_step(client, model, wrapper, "Evergreen Generation")
-        if json_res:
-            data = json.loads(json_res)
-            content = data['content']
-            title = data['title']
-            
-            # Generate Image for Evergreen too
-            image_url = generate_and_upload_image(f"Abstract illustration of {category} concepts, educational, clean, 3d render")
-            if image_url:
-                img_html = f'<div class="separator" style="clear: both; text-align: center;"><a href="{image_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{image_url}" alt="{title}" data-original-width="1280" data-original-height="720" /></a></div><br />'
-                content = img_html + content
-            
-            publish_post(title, content, [category, "Guide", "Evergreen"])
-            update_knowledge_graph("guide-" + category.lower().replace(' ', '-'), title, category)
-    except Exception as e:
-        print(f"❌ Evergreen failed: {e}")
+# ==============================================================================
+# 6. MAIN
+# ==============================================================================
 
 def main():
-    api_key = os.getenv('GEMINI_API_KEY')
-    if not api_key:
-        print("❌ Missing GEMINI_API_KEY")
-        return
-
-    client = genai.Client(api_key=api_key)
-    
     with open('config_advanced.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
-    
-    model = config['settings'].get('model_name', 'models/gemini-2.5-flash')
 
+    # Process all categories
     for category in config['categories']:
-        print(f"\n🚀 PROCESSING CATEGORY: {category}")
+        # 1. Trending Article (Full Chain)
+        run_pipeline(category, config, mode="trending")
+        print("💤 Cooling down (30s)...")
+        time.sleep(30)
         
-        # 1. Trending Article
-        run_trending_pipeline(client, model, category, config)
-        print("💤 Cooling down (60s)...")
-        time.sleep(60) 
-        
-        # 2. Evergreen Article
-        evergreen_prompt = config['categories'][category].get('evergreen_prompt')
-        if evergreen_prompt:
-            run_evergreen_pipeline(client, model, category, evergreen_prompt)
-            print("💤 Cooling down (60s)...")
-            time.sleep(60)
+        # 2. Evergreen Article (Full Chain NOW)
+        run_pipeline(category, config, mode="evergreen")
+        print("💤 Cooling down (30s)...")
+        time.sleep(30)
 
 if __name__ == "__main__":
     main()
