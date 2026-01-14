@@ -2,9 +2,9 @@ import os
 import json
 import time
 import requests
-from google import genai # المكتبة الجديدة
+from google import genai
 
-# 1. وظيفة الحصول على Access Token
+# 1. وظيفة الحصول على Access Token (كما هي)
 def get_access_token():
     payload = {
         'client_id': os.getenv('BLOGGER_CLIENT_ID'),
@@ -15,7 +15,7 @@ def get_access_token():
     r = requests.post('https://oauth2.googleapis.com/token', data=payload)
     return r.json().get('access_token')
 
-# 2. وظيفة النشر على بلوجر
+# 2. وظيفة النشر على بلوجر (كما هي)
 def publish_post(title, content, labels):
     token = get_access_token()
     blog_id = os.getenv('BLOGGER_BLOG_ID')
@@ -30,42 +30,62 @@ def publish_post(title, content, labels):
     
     r = requests.post(url, headers=headers, json=data)
     if r.status_code == 200:
-        print(f"✅ تم النشر: {title}")
+        print(f"✅ Published successfully: {title}")
     else:
-        print(f"❌ فشل النشر: {r.text}")
+        print(f"❌ Publishing failed: {r.text}")
 
-# 3. وظيفة توليد المقال باستخدام المكتبة الجديدة
+# 3. وظيفة التوليد مع تجربة نماذج مختلفة لتجنب خطأ 404
 def generate_article(client, category, prompt_template):
-    full_prompt = f"{prompt_template}\n\nIMPORTANT: Use HTML tags for formatting (h2, p, ul, li). Write a long, professional article in English."
+    # نحاول استخدام Gemini 2.0 أولاً لأنه الأحدث في 2026، ثم نعود لـ 1.5
+    models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash']
     
-    try:
-        # استخدام الطريقة الجديدة لاستدعاء Gemini
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=full_prompt
-        )
-        return response.text
-    except Exception as e:
-        print(f"❌ خطأ في توليد المحتوى لـ {category}: {e}")
-        return None
+    full_prompt = f"{prompt_template}\n\nIMPORTANT: Use HTML tags (h2, p, ul, li). Write a professional English article."
+    
+    for model_name in models_to_try:
+        try:
+            print(f"🔄 Trying model: {model_name}...")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=full_prompt
+            )
+            return response.text
+        except Exception as e:
+            if "404" in str(e):
+                continue # جرب النموذج التالي
+            else:
+                print(f"❌ Error with {model_name}: {e}")
+                return None
+    return None
 
 def main():
-    # إعداد العميل الجديد
     api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        print("❌ GEMINI_API_KEY is missing!")
+        return
+
+    # إنشاء العميل
     client = genai.Client(api_key=api_key)
     
     # تحميل الإعدادات
-    with open('config_advanced.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
-    
+    try:
+        with open('config_advanced.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        print("❌ config_advanced.json not found!")
+        return
+
     for category, details in config['categories'].items():
-        print(f"🤖 جاري توليد مقال لـ: {category}...")
+        print(f"\n🤖 Processing category: {category}")
         
         article_content = generate_article(client, category, details['evergreen_prompt'])
+        
         if article_content:
-            title = f"Latest Insights: {category} in 2026"
-            publish_post(title, article_content, [category, "AI News Hub"])
-            time.sleep(10) # انتظار لتجنب الحظر
+            title = f"Evolution of {category}: Future Perspectives"
+            publish_post(title, article_content, [category, "AI 2026"])
+            # انتظار 10 ثوانٍ لتجنب تخطي حدود الـ API
+            time.sleep(10)
+        else:
+            print(f"⚠️ Could not generate content for {category}")
 
 if __name__ == "__main__":
     main()
