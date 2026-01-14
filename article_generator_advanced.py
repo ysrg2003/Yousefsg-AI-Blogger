@@ -8,6 +8,53 @@ from google import genai
 from google.genai import types
 
 # ==============================================================================
+# 0. AUTO-DISCOVERY & SETUP (THE FIX)
+# ==============================================================================
+
+def auto_select_model(client):
+    """
+    Queries the API to find the EXACT model name available for this API Key.
+    No more guessing.
+    """
+    print("🔍 Auto-discovering available models from Google API...")
+    try:
+        # List all models available to the user
+        # We use v1beta to ensure we see the latest models
+        models_iterator = client.models.list()
+        
+        available_models = []
+        for m in models_iterator:
+            # Store the full resource name (e.g., "models/gemini-1.5-flash-001")
+            available_models.append(m.name)
+            
+        print(f"   📋 Found {len(available_models)} models available.")
+        
+        # Priority list: We want 1.5 Flash (Stable) > 1.5 Flash (Any) > 2.0 Flash (Exp)
+        for m in available_models:
+            if "gemini-1.5-flash" in m and "exp" not in m and "8b" not in m:
+                print(f"   ✅ Selected Stable Model: {m}")
+                return m
+        
+        for m in available_models:
+            if "gemini-1.5-flash" in m:
+                print(f"   ⚠️ Selected Fallback Flash Model: {m}")
+                return m
+                
+        for m in available_models:
+            if "gemini-2.0-flash" in m:
+                print(f"   ⚠️ Selected Experimental Model: {m}")
+                return m
+
+        # Ultimate fallback
+        print("   ❌ No Flash model found. Using default 'gemini-1.5-flash'.")
+        return "gemini-1.5-flash"
+
+    except Exception as e:
+        print(f"   ❌ Auto-discovery failed: {e}")
+        print("   ⚠️ Fallback to hardcoded 'gemini-1.5-flash'")
+        return "gemini-1.5-flash"
+
+# ==============================================================================
 # 1. FULL PROMPTS DEFINITIONS
 # ==============================================================================
 
@@ -154,8 +201,7 @@ def generate_step(client, model, prompt_text, step_name):
                 print(f"      ⏳ Quota Hit (429). Waiting {wait_time}s (Attempt {i+1}/{max_retries})...")
                 time.sleep(wait_time)
             elif "404" in error_str:
-                print(f"      ❌ Model Not Found: {model}. Check config name.")
-                # If 404, waiting won't help usually, but we retry just in case of glitch
+                print(f"      ❌ Model Not Found: {model}. This shouldn't happen with auto-discovery.")
                 time.sleep(10)
             else:
                 print(f"      ❌ Error in {step_name}: {e}")
@@ -179,7 +225,7 @@ def update_knowledge_graph(slug, title, section):
     except: pass
 
 # ==============================================================================
-# 4. IMAGE GENERATION (DIRECT REST API)
+# 3. IMAGE GENERATION (DIRECT REST API)
 # ==============================================================================
 
 def generate_and_upload_image(topic):
@@ -237,7 +283,7 @@ def generate_and_upload_image(topic):
     return ""
 
 # ==============================================================================
-# 5. PIPELINES
+# 4. PIPELINES
 # ==============================================================================
 
 def run_trending_pipeline(client, model, category, config):
@@ -323,19 +369,16 @@ def main():
         print("❌ Missing GEMINI_API_KEY")
         return
 
-    # Initialize Modern Client with v1beta to avoid 404s
+    # Initialize Modern Client with v1beta to ensure list_models works
     client = genai.Client(api_key=api_key, http_options={'api_version': 'v1beta'})
     
     with open('config_advanced.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     
-    # Ensure model name is clean (no 'models/' prefix)
-    model_name = config['settings'].get('model_name', 'gemini-1.5-flash')
-    if model_name.startswith('models/'):
-        model_name = model_name.replace('models/', '')
-        
-    print(f"ℹ️ Using Model: {model_name}")
-
+    # --- AUTO DISCOVERY: The Fix ---
+    # Instead of trusting config, we ask the API what works.
+    model_name = auto_select_model(client)
+    
     for category in config['categories']:
         print(f"\n🚀 PROCESSING CATEGORY: {category}")
         
