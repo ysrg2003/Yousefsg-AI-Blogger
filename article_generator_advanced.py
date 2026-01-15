@@ -483,7 +483,8 @@ def run_pipeline(category, config, mode="trending"):
         if 'auditMetadata' in final:
             content += f"<hr style='margin-top:50px; border:0; border-top:1px solid #eee;'><small style='color:#999;'><i>Audit Stats: AI Prob {final['auditMetadata'].get('aiProbability')}%</i></small>"
 
-        labels = [category, "AI News" if mode == "trending" else "Guide"]
+        # --- FIX: ONLY USE THE CATEGORY NAME AS LABEL ---
+        labels = [category]
         
         # Publish and Get Real URL
         real_url = publish_post(title, content, labels)
