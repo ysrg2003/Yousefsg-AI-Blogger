@@ -10,10 +10,9 @@ from google import genai
 from google.genai import types
 
 # ==============================================================================
-# 0. LOGGING HELPER (FIXES GITHUB ACTIONS STUCK LOGS)
+# 0. LOGGING HELPER
 # ==============================================================================
 def log(msg):
-    """Prints message immediately to console, bypassing buffer."""
     print(msg, flush=True)
 
 # ==============================================================================
@@ -26,7 +25,7 @@ A:You are an investigative tech reporter specialized in {section}. Search the mo
 SECTION FOCUS: {section_focus}
 
 **CRITICAL ANTI-DUPLICATION RULE:**
-The following topics have already been covered recently. DO NOT write about them again. Find a DIFFERENT story:
+The following topics have already been covered. DO NOT write about them again:
 {recent_titles}
 
 MANDATORY SOURCE & VERIFICATION RULES:
@@ -42,7 +41,7 @@ A:You are an expert technical educator specialized in {section}. Outline a compr
 TOPIC PROMPT: {evergreen_prompt}
 
 **CRITICAL ANTI-DUPLICATION RULE:**
-Check the following list of existing guides. Ensure your angle or specific topic is DISTINCT or an UPDATE:
+Check existing guides. Ensure your angle is DISTINCT:
 {recent_titles}
 
 MANDATORY SOURCE & VERIFICATION RULES:
@@ -73,13 +72,20 @@ Output JSON ONLY: {{"draftTitle":"...","draftContent":"<html>...</html>","source
 
 PROMPT_C_TEMPLATE = """
 C:Strategic Editor & SEO. Input: {json_input}.
-Knowledge Graph (Existing Articles): {knowledge_graph}
+**AVAILABLE INTERNAL LINKS (Database):** 
+{knowledge_graph}
 
 TASKS:
-1. **Smart Internal Linking:** Scan the draft for concepts that match titles/slugs in the Knowledge Graph. Create 3-5 *contextual* links.
+1. **Strict Internal Linking:** 
+   - Scan the draft for concepts matching the "title" in the provided database.
+   - IF and ONLY IF a match is found, insert a link using the EXACT "url" provided in the database.
+   - Format: `<a href="EXACT_URL_FROM_DB">Keyword</a>`.
+   - **CRITICAL:** DO NOT invent links. DO NOT link to 404 pages. If no relevant article exists in the database, DO NOT add any internal links.
+   
 2. **Image Strategy:**
-   - `imageGenPrompt`: Describe a visual specific to the headline (e.g., "A robot hand holding a microchip").
-   - `imageOverlayText`: A very short, punchy text (2-4 words max) to be written ON the image (e.g., "AI vs Human").
+   - `imageGenPrompt`: Describe a visual specific to the headline.
+   - `imageOverlayText`: A very short, punchy text (2-4 words max).
+
 3. SEO: Meta Title/Desc, Tags, Schema.
 4. Adsense Check.
 
@@ -105,7 +111,7 @@ Output JSON ONLY: {{"finalTitle":"...","finalContent":"...","imageGenPrompt":"..
 """
 
 # ==============================================================================
-# 2. KEY MANAGER (6 KEYS)
+# 2. KEY MANAGER
 # ==============================================================================
 
 class KeyManager:
@@ -155,22 +161,31 @@ def get_blogger_token():
         return None
 
 def publish_post(title, content, labels):
+    """
+    Publishes to Blogger and returns the ACTUAL URL.
+    """
     token = get_blogger_token()
-    if not token: return False
+    if not token: return None
+    
     blog_id = os.getenv('BLOGGER_BLOG_ID')
     url = f"https://www.googleapis.com/blogger/v3/blogs/{blog_id}/posts"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     data = {"title": title, "content": content, "labels": labels}
+    
     try:
         r = requests.post(url, headers=headers, json=data)
         if r.status_code == 200:
-            return True
+            post_data = r.json()
+            # Extract the real URL from Blogger API response
+            real_url = post_data.get('url')
+            log(f"✅ Published: {title} -> {real_url}")
+            return real_url
         else:
             log(f"❌ Publish Error: {r.text}")
-            return False
+            return None
     except Exception as e:
         log(f"❌ Connection Error: {e}")
-        return False
+        return None
 
 def clean_json(text):
     text = text.strip()
@@ -188,10 +203,8 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
     
     log(f"   🎨 Generating Image: '{prompt_text}'...")
     
-    # Retry logic for images (3 attempts)
     for attempt in range(3):
         try:
-            # 1. Pollinations
             safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, high quality, --no people, humans, animals, faces")
             text_param = ""
             if overlay_text:
@@ -200,13 +213,11 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
 
             url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux{text_param}"
             
-            img_response = requests.get(url, timeout=45) # Increased timeout
+            img_response = requests.get(url, timeout=45)
             if img_response.status_code != 200:
-                log(f"      ⚠️ Pollinations Error (Attempt {attempt+1}): {img_response.status_code}")
                 time.sleep(5)
                 continue
             
-            # 2. ImgBB
             log("   ☁️ Uploading to ImgBB...")
             res = requests.post(
                 "https://api.imgbb.com/1/upload", 
@@ -219,11 +230,8 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
                 direct_link = res.json()['data']['url']
                 log(f"   ✅ Image Ready: {direct_link}")
                 return direct_link
-            else:
-                log(f"      ⚠️ ImgBB Error (Attempt {attempt+1}): {res.text}")
                 
         except Exception as e:
-            log(f"      ⚠️ Image Exception (Attempt {attempt+1}): {e}")
             time.sleep(5)
             
     log("❌ Failed to generate/upload image after 3 attempts.")
@@ -240,26 +248,44 @@ def get_recent_titles_string(limit=50):
     return ", ".join(titles)
 
 def get_relevant_kg_for_linking(current_category, limit=60):
+    """
+    Returns JSON string of relevant articles with REAL URLs.
+    """
     full_kg = load_kg()
     if not full_kg: return "[]"
+    
+    # Filter by category + Guides
     relevant = [item for item in full_kg if item.get('section') == current_category]
     guides = [item for item in full_kg if "Guide" in item.get('title', '') and item.get('section') != current_category]
+    
     combined = relevant + guides[:10]
     if len(combined) > limit: combined = combined[-limit:]
-    return json.dumps(combined)
+    
+    # We send Title and URL only to save tokens
+    simplified = [{"title": item['title'], "url": item['url']} for item in combined if 'url' in item]
+    
+    return json.dumps(simplified)
 
-def update_kg(slug, title, section):
+def update_kg(title, url, section):
+    """
+    Updates the KG with the REAL URL returned by Blogger.
+    """
     try:
         data = load_kg()
+        # Check for duplicates by URL
         for item in data:
-            if item.get('slug') == slug: return
-        data.append({"slug": slug, "title": title, "section": section})
+            if item.get('url') == url: return
+        
+        # Add new entry with REAL URL
+        data.append({"title": title, "url": url, "section": section, "date": str(datetime.date.today())})
+        
         with open('knowledge_graph.json', 'w', encoding='utf-8') as f: 
             json.dump(data, f, indent=2)
-    except: pass
+        log(f"   💾 Saved to Knowledge Graph: {title}")
+    except Exception as e:
+        log(f"   ⚠️ KG Update Error: {e}")
 
 def perform_maintenance_cleanup():
-    """Archives old articles by year to prevent file bloat."""
     try:
         kg_path = 'knowledge_graph.json'
         archive_dir = 'archive'
@@ -409,10 +435,12 @@ def run_pipeline(category, config, mode="trending"):
 
         labels = [category, "AI News" if mode == "trending" else "Guide"]
         
-        if publish_post(title, content, labels):
-            log(f"✅ PUBLISHED: {title}")
-            slug = title.lower().replace(' ', '-').replace(':', '')[:50]
-            update_kg(slug, title, category)
+        # Publish and Get Real URL
+        real_url = publish_post(title, content, labels)
+        
+        if real_url:
+            # Save the REAL URL to the database
+            update_kg(title, real_url, category)
             
     except Exception as e:
         log(f"❌ Final processing failed: {e}")
@@ -434,7 +462,6 @@ def main():
         log("💤 Cooling down (30s)...")
         time.sleep(30)
     
-    # Maintenance at the end
     perform_maintenance_cleanup()
 
 if __name__ == "__main__":
