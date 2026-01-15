@@ -25,6 +25,7 @@ jobs:
           pip install -r requirements_1.txt
       
       - name: Run article generator
+        id: generator  # قمنا بتسمية هذه الخطوة لنتمكن من الإشارة إليها
         env:
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
@@ -40,19 +41,19 @@ jobs:
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
         run: python -u article_generator_advanced.py
 
-      # --- الخطوة المصححة بالكامل ---
+      # --- التعديل هنا ---
       - name: Commit and Push Knowledge Graph & Archive
+        if: always()  # <--- هذا السطر يجبر الخطوة على العمل حتى لو فشل السكريبت أعلاه
         run: |
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'actions@github.com'
           
-          # إضافة ملف قاعدة البيانات (موجود دائماً)
+          # إضافة الملفات
           git add knowledge_graph.json
           
-          # إضافة مجلد الأرشيف فقط إذا كان موجوداً (لتجنب خطأ 128)
           if [ -d "archive" ]; then
             git add archive/
           fi
           
-          # الحفظ والرفع فقط إذا كان هناك تغييرات
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update Knowledge Graph & Archive" && git push)
+          # الحفظ والرفع
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update Knowledge Graph [Safety Save]" && git push)
