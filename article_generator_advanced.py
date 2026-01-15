@@ -16,7 +16,62 @@ def log(msg):
     print(msg, flush=True)
 
 # ==============================================================================
-# 1. PROMPTS DEFINITIONS
+# 1. CSS STYLING (MODERN TECH LOOK)
+# ==============================================================================
+ARTICLE_STYLE = """
+<style>
+    /* General Typography */
+    .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.8; color: #2c3e50; font-size: 18px; }
+    h2 { color: #1a252f; font-weight: 700; margin-top: 40px; margin-bottom: 20px; border-bottom: 2px solid #3498db; padding-bottom: 10px; display: inline-block; }
+    h3 { color: #2980b9; font-weight: 600; margin-top: 30px; }
+    
+    /* Key Takeaways Box */
+    .takeaways-box {
+        background: #f0f8ff;
+        border-left: 5px solid #3498db;
+        padding: 20px;
+        margin: 30px 0;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .takeaways-box h3 { margin-top: 0; color: #2c3e50; }
+    .takeaways-box ul { margin-bottom: 0; padding-left: 20px; }
+    .takeaways-box li { margin-bottom: 10px; }
+
+    /* Tables */
+    .table-wrapper { overflow-x: auto; margin: 30px 0; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th { background: #34495e; color: #fff; padding: 15px; text-align: left; }
+    td { padding: 12px 15px; border-bottom: 1px solid #eee; }
+    tr:nth-child(even) { background-color: #f9f9f9; }
+    tr:hover { background-color: #f1f1f1; }
+
+    /* Blockquotes */
+    blockquote {
+        background: #fff;
+        border-left: 5px solid #e74c3c;
+        margin: 30px 0;
+        padding: 20px 30px;
+        font-style: italic;
+        color: #555;
+        font-size: 1.1em;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+
+    /* Links */
+    a { color: #3498db; text-decoration: none; font-weight: 500; transition: color 0.3s; }
+    a:hover { color: #2980b9; text-decoration: underline; }
+    
+    /* Images */
+    .separator img { border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.15); max-width: 100%; height: auto; }
+    
+    /* Sources Section */
+    .sources-section { background: #f9f9f9; padding: 20px; border-radius: 8px; font-size: 0.9em; color: #666; margin-top: 50px; }
+</style>
+"""
+
+# ==============================================================================
+# 2. PROMPTS DEFINITIONS
 # ==============================================================================
 
 PROMPT_A_TRENDING = """
@@ -81,13 +136,18 @@ TASKS:
    - IF and ONLY IF a match is found, insert a link using the EXACT "url" provided in the database.
    - Format: `<a href="EXACT_URL_FROM_DB">Keyword</a>`.
    - **CRITICAL:** DO NOT invent links. DO NOT link to 404 pages. If no relevant article exists in the database, DO NOT add any internal links.
+
+2. **Formatting & Design Structure (CRITICAL):**
+   - **Key Takeaways:** MUST be wrapped in a div: `<div class="takeaways-box"><h3>🚀 Key Takeaways</h3><ul>...bullets...</ul></div>`.
+   - **Tables:** MUST be wrapped in a div: `<div class="table-wrapper"><table>...</table></div>`.
+   - **Quotes:** Ensure quotes are in `<blockquote>...</blockquote>`.
    
-2. **Image Strategy:**
+3. **Image Strategy:**
    - `imageGenPrompt`: Describe a visual specific to the headline.
    - `imageOverlayText`: A very short, punchy text (2-4 words max).
 
-3. SEO: Meta Title/Desc, Tags, Schema.
-4. Adsense Check.
+4. SEO: Meta Title/Desc, Tags, Schema.
+5. Adsense Check.
 
 Output JSON ONLY: {{"finalTitle":"...","finalContent":"...","imageGenPrompt":"...","imageOverlayText":"...","seo":{{...}},"tags":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}}}}
 """
@@ -111,7 +171,7 @@ Output JSON ONLY: {{"finalTitle":"...","finalContent":"...","imageGenPrompt":"..
 """
 
 # ==============================================================================
-# 2. KEY MANAGER
+# 3. KEY MANAGER
 # ==============================================================================
 
 class KeyManager:
@@ -142,7 +202,7 @@ class KeyManager:
 key_manager = KeyManager()
 
 # ==============================================================================
-# 3. HELPER FUNCTIONS
+# 4. HELPER FUNCTIONS
 # ==============================================================================
 
 def get_blogger_token():
@@ -161,9 +221,7 @@ def get_blogger_token():
         return None
 
 def publish_post(title, content, labels):
-    """
-    Publishes to Blogger and returns the ACTUAL URL.
-    """
+    """Publishes to Blogger and returns the ACTUAL URL."""
     token = get_blogger_token()
     if not token: return None
     
@@ -176,7 +234,6 @@ def publish_post(title, content, labels):
         r = requests.post(url, headers=headers, json=data)
         if r.status_code == 200:
             post_data = r.json()
-            # Extract the real URL from Blogger API response
             real_url = post_data.get('url')
             log(f"✅ Published: {title} -> {real_url}")
             return real_url
@@ -248,35 +305,26 @@ def get_recent_titles_string(limit=50):
     return ", ".join(titles)
 
 def get_relevant_kg_for_linking(current_category, limit=60):
-    """
-    Returns JSON string of relevant articles with REAL URLs.
-    """
+    """Returns JSON string of relevant articles with REAL URLs."""
     full_kg = load_kg()
     if not full_kg: return "[]"
     
-    # Filter by category + Guides
     relevant = [item for item in full_kg if item.get('section') == current_category]
     guides = [item for item in full_kg if "Guide" in item.get('title', '') and item.get('section') != current_category]
     
     combined = relevant + guides[:10]
     if len(combined) > limit: combined = combined[-limit:]
     
-    # We send Title and URL only to save tokens
     simplified = [{"title": item['title'], "url": item['url']} for item in combined if 'url' in item]
-    
     return json.dumps(simplified)
 
 def update_kg(title, url, section):
-    """
-    Updates the KG with the REAL URL returned by Blogger.
-    """
+    """Updates the KG with the REAL URL returned by Blogger."""
     try:
         data = load_kg()
-        # Check for duplicates by URL
         for item in data:
             if item.get('url') == url: return
         
-        # Add new entry with REAL URL
         data.append({"title": title, "url": url, "section": section, "date": str(datetime.date.today())})
         
         with open('knowledge_graph.json', 'w', encoding='utf-8') as f: 
@@ -325,7 +373,7 @@ def perform_maintenance_cleanup():
         log(f"   ⚠️ Maintenance Warning: {e}")
 
 # ==============================================================================
-# 4. CORE GENERATION LOGIC
+# 5. CORE GENERATION LOGIC
 # ==============================================================================
 
 def generate_step(model_name, prompt, step_name):
@@ -357,7 +405,7 @@ def generate_step(model_name, prompt, step_name):
                 return None
 
 # ==============================================================================
-# 5. UNIFIED PIPELINE
+# 6. UNIFIED PIPELINE
 # ==============================================================================
 
 def run_pipeline(category, config, mode="trending"):
@@ -415,23 +463,25 @@ def run_pipeline(category, config, mode="trending"):
     try:
         final = json.loads(json_e)
         title = final.get('finalTitle', f"{category} Article")
-        content = final.get('finalContent', '')
         
-        # Image Generation
+        # 1. Inject CSS Style
+        content = ARTICLE_STYLE 
+        
+        # 2. Image Generation
         img_prompt = final.get('imageGenPrompt', f"Abstract {category} technology")
         overlay_text = final.get('imageOverlayText', title[:20])
-        
         img_url = generate_and_upload_image(img_prompt, overlay_text)
         
         if img_url:
             alt_text = final.get('seo', {}).get('imageAltText', title)
-            img_html = f'<div class="separator" style="clear: both; text-align: center;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{alt_text}" data-original-width="1280" data-original-height="720" /></a></div><br />'
-            content = img_html + content
-        else:
-            log("⚠️ Warning: Article published without image due to generation failure.")
+            img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}"><img border="0" src="{img_url}" alt="{alt_text}" /></a></div>'
+            content += img_html
+        
+        # 3. Add Content
+        content += final.get('finalContent', '')
 
         if 'auditMetadata' in final:
-            content += f"<hr><small><i>Audit Stats: AI Prob {final['auditMetadata'].get('aiProbability')}%</i></small>"
+            content += f"<hr style='margin-top:50px; border:0; border-top:1px solid #eee;'><small style='color:#999;'><i>Audit Stats: AI Prob {final['auditMetadata'].get('aiProbability')}%</i></small>"
 
         labels = [category, "AI News" if mode == "trending" else "Guide"]
         
@@ -439,14 +489,13 @@ def run_pipeline(category, config, mode="trending"):
         real_url = publish_post(title, content, labels)
         
         if real_url:
-            # Save the REAL URL to the database
             update_kg(title, real_url, category)
             
     except Exception as e:
         log(f"❌ Final processing failed: {e}")
 
 # ==============================================================================
-# 6. MAIN
+# 7. MAIN
 # ==============================================================================
 
 def main():
