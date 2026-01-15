@@ -40,17 +40,19 @@ jobs:
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
         run: python -u article_generator_advanced.py
 
-      # خطوة الحفظ والأرشفة
+      # --- الخطوة المصححة بالكامل ---
       - name: Commit and Push Knowledge Graph & Archive
         run: |
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'actions@github.com'
           
-          # إضافة قاعدة البيانات الرئيسية
+          # إضافة ملف قاعدة البيانات (موجود دائماً)
           git add knowledge_graph.json
           
-          # إضافة مجلد الأرشيف بالكامل (يضمن حفظ الملفات السنوية)
-          git add archive/
+          # إضافة مجلد الأرشيف فقط إذا كان موجوداً (لتجنب خطأ 128)
+          if [ -d "archive" ]; then
+            git add archive/
+          fi
           
           # الحفظ والرفع فقط إذا كان هناك تغييرات
           git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update Knowledge Graph & Archive" && git push)
