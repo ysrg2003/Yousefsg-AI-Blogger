@@ -118,5 +118,95 @@
     "url": "https://www.latestai.me/2026/01/the-ultimate-guide-to-ai-ethics-from.html",
     "section": "AI Ethics",
     "date": "2026-01-16"
+  },
+  {
+    "title": "ML Engineering Deep Dive: Scalability, Reproducibility, MLOps",
+    "url": "https://www.latestai.me/2026/01/ml-engineering-deep-dive-scalability.html",
+    "section": "Machine Learning",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "Anthropic's Claude 3.5 Sonnet: Bolstering Enterprise Trust with Verified AI Safety",
+    "url": "https://www.latestai.me/2026/01/anthropics-claude-35-sonnet-bolstering.html",
+    "section": "Natural Language Processing",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "Engineering NLP Systems: Architecture, Ethics, and the Road Ahead",
+    "url": "https://www.latestai.me/2026/01/engineering-nlp-systems-architecture.html",
+    "section": "Natural Language Processing",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "Google AI's AutoFormer Unleashes Open-Vocabulary Vision Transformers for Flexible, Data-Efficient Object Classification",
+    "url": "https://www.latestai.me/2026/01/google-ais-autoformer-unleashes-open.html",
+    "section": "Computer Vision",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "The Ultimate Guide to Computer Vision: From Pixels to Practical AI Deployment",
+    "url": "https://www.latestai.me/2026/01/the-ultimate-guide-to-computer-vision_0414759774.html",
+    "section": "Computer Vision",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "Humanoid Robots Step into Commercial Logistics: Agility's Digit Begins First Deployments at GXO",
+    "url": "https://www.latestai.me/2026/01/humanoid-robots-step-into-commercial.html",
+    "section": "Robotics",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "Robotics Fundamentals: Architectures, Safety, and Real-World Impact",
+    "url": "https://www.latestai.me/2026/01/robotics-fundamentals-architectures.html",
+    "section": "Robotics",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "Meta Rolls Out AI-Generated Content Labels Across Its Billions of Users, Boosting Transparency and Combating Misinformation",
+    "url": "https://www.latestai.me/2026/01/meta-rolls-out-ai-generated-content.html",
+    "section": "Generative AI",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "The Ultimate Guide to Trustworthy Generative AI: Architectures, Provenance, and Responsible Deployment",
+    "url": "https://www.latestai.me/2026/01/the-ultimate-guide-to-trustworthy.html",
+    "section": "Generative AI",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "PwC & AWS Unlock 20% Productivity Gains in Financial Services with Amazon Q and Generative AI",
+    "url": "https://www.latestai.me/2026/01/pwc-aws-unlock-20-productivity-gains-in.html",
+    "section": "AI Applications",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "Scaling AI Applications: From Pilot to Enterprise-Wide Value Across Industries",
+    "url": "https://www.latestai.me/2026/01/scaling-ai-applications-from-pilot-to.html",
+    "section": "AI Applications",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "DeepMind's RT-2 Multi-Robot AI: Unified Control Across Diverse Bots, Accelerating Learning",
+    "url": "https://www.latestai.me/2026/01/deepminds-rt-2-multi-robot-ai-unified.html",
+    "section": "AI Research",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "The AI Research Frontier: Scaling Laws & Reproducibility Challenges",
+    "url": "https://www.latestai.me/2026/01/the-ai-research-frontier-scaling-laws.html",
+    "section": "AI Research",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "FTC Intensifies Biometric Data Protection with New AI Ethics Enforcement Policy",
+    "url": "https://www.latestai.me/2026/01/ftc-intensifies-biometric-data.html",
+    "section": "AI Ethics",
+    "date": "2026-01-17"
+  },
+  {
+    "title": "The Ultimate Guide to Operationalizing AI Ethics: From Principles to Practice and Regulatory Compliance",
+    "url": "https://www.latestai.me/2026/01/the-ultimate-guide-to-operationalizing.html",
+    "section": "AI Ethics",
+    "date": "2026-01-17"
   }
 ]
