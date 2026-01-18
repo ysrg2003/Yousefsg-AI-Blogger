@@ -1,30 +1,30 @@
 import os
 import requests
 import json
-import tweepy
 from google import genai
 from google.genai import types
 
 # ==============================================================================
-# 1. AI CONTENT GENERATOR
+# 1. AI CONTENT GENERATOR (Facebook Only)
 # ==============================================================================
 def generate_social_hooks(client, model_name, title, category, url):
     """
-    Generates posts for Facebook and Twitter.
+    Generates a post specifically for Facebook.
     """
     prompt = f"""
-    You are a Social Media Manager. Create 2 distinct posts for this article:
+    You are a Social Media Manager. Create an engaging Facebook post for this article:
     Title: "{title}"
     Category: "{category}"
     Link: "{url}"
 
-    1. **Facebook:** Engaging, uses emojis, asks a question. (Max 60 words).
-    2. **X (Twitter):** Short, punchy, uses hashtags. (Max 200 chars).
+    **Facebook Rules:**
+    - Engaging, uses emojis, asks a question.
+    - Length: Max 60 words.
+    - Tone: Professional yet exciting.
 
     Output JSON ONLY:
     {{
-      "facebook": "...",
-      "twitter": "..."
+      "facebook": "..."
     }}
     """
     try:
@@ -39,7 +39,7 @@ def generate_social_hooks(client, model_name, title, category, url):
         return None
 
 # ==============================================================================
-# 2. FACEBOOK MANAGER (Image + Text + Link)
+# 2. FACEBOOK MANAGER
 # ==============================================================================
 def post_to_facebook(content, image_url, link):
     page_id = os.getenv('FB_PAGE_ID')
@@ -66,45 +66,13 @@ def post_to_facebook(content, image_url, link):
         print(f"   ❌ Facebook Error: {e}")
 
 # ==============================================================================
-# 3. X (TWITTER) MANAGER (Text + Link Only - Free Tier Safe)
-# ==============================================================================
-def post_to_twitter(content, link):
-    consumer_key = os.getenv('TWITTER_CONSUMER_KEY')
-    consumer_secret = os.getenv('TWITTER_CONSUMER_SECRET')
-    access_token = os.getenv('TWITTER_ACCESS_TOKEN')
-    access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
-
-    if not consumer_key: 
-        print("⚠️ Twitter credentials missing.")
-        return
-
-    try:
-        # Authenticate v2 Client
-        client = tweepy.Client(
-            consumer_key=consumer_key, consumer_secret=consumer_secret,
-            access_token=access_token, access_token_secret=access_token_secret
-        )
-
-        # Create Tweet (Twitter auto-generates card from link)
-        text = f"{content}\n\n{link}"
-        
-        response = client.create_tweet(text=text)
-        print(f"   ✅ Posted to X (Twitter). ID: {response.data['id']}")
-
-    except Exception as e:
-        print(f"   ❌ Twitter Error: {e}")
-
-# ==============================================================================
 # MAIN ORCHESTRATOR
 # ==============================================================================
 def distribute_content(client, model_name, title, category, article_url, image_url):
-    print(f"\n📢 Distributing to Social Media...")
+    print(f"\n📢 Distributing to Social Media (Facebook)...")
     
     hooks = generate_social_hooks(client, model_name, title, category, article_url)
     if not hooks: return
 
-    # 1. Facebook
+    # Post to Facebook
     post_to_facebook(hooks['facebook'], image_url, article_url)
-
-    # 2. Twitter
-    post_to_twitter(hooks['twitter'], article_url)
