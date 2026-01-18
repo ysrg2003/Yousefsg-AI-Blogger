@@ -1,3 +1,4 @@
+
 import os
 import json
 import time
@@ -8,6 +9,9 @@ import sys
 import datetime
 from google import genai
 from google.genai import types
+
+# IMPORT SOCIAL MANAGER
+import social_manager
 
 # ==============================================================================
 # 0. LOGGING HELPER
@@ -20,52 +24,21 @@ def log(msg):
 # ==============================================================================
 ARTICLE_STYLE = """
 <style>
-    /* General Typography */
     .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.8; color: #2c3e50; font-size: 18px; }
     h2 { color: #1a252f; font-weight: 700; margin-top: 40px; margin-bottom: 20px; border-bottom: 2px solid #3498db; padding-bottom: 10px; display: inline-block; }
     h3 { color: #2980b9; font-weight: 600; margin-top: 30px; }
-    
-    /* Key Takeaways Box */
-    .takeaways-box {
-        background: #f0f8ff;
-        border-left: 5px solid #3498db;
-        padding: 20px;
-        margin: 30px 0;
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
+    .takeaways-box { background: #f0f8ff; border-left: 5px solid #3498db; padding: 20px; margin: 30px 0; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     .takeaways-box h3 { margin-top: 0; color: #2c3e50; }
     .takeaways-box ul { margin-bottom: 0; padding-left: 20px; }
-    .takeaways-box li { margin-bottom: 10px; }
-
-    /* Tables */
     .table-wrapper { overflow-x: auto; margin: 30px 0; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
     table { width: 100%; border-collapse: collapse; background: #fff; }
     th { background: #34495e; color: #fff; padding: 15px; text-align: left; }
     td { padding: 12px 15px; border-bottom: 1px solid #eee; }
     tr:nth-child(even) { background-color: #f9f9f9; }
-    tr:hover { background-color: #f1f1f1; }
-
-    /* Blockquotes */
-    blockquote {
-        background: #fff;
-        border-left: 5px solid #e74c3c;
-        margin: 30px 0;
-        padding: 20px 30px;
-        font-style: italic;
-        color: #555;
-        font-size: 1.1em;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
-
-    /* Links */
+    blockquote { background: #fff; border-left: 5px solid #e74c3c; margin: 30px 0; padding: 20px 30px; font-style: italic; color: #555; font-size: 1.1em; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     a { color: #3498db; text-decoration: none; font-weight: 500; transition: color 0.3s; }
     a:hover { color: #2980b9; text-decoration: underline; }
-    
-    /* Images */
     .separator img { border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.15); max-width: 100%; height: auto; }
-    
-    /* Sources Section */
     .sources-section { background: #f9f9f9; padding: 20px; border-radius: 8px; font-size: 0.9em; color: #666; margin-top: 50px; }
 </style>
 """
@@ -210,7 +183,7 @@ Generate Article schema JSON-LD (fully populated with placeholders for image URL
 Provide FAQ schema (3 Q&A) optimized for featured snippets (each answer ≤ 40 words).
 
 ADSENSE READINESS & RISK ASSESSMENT:
-Run Adsense readiness evaluation and return adsenseReadinessScore from 0–100. Include precise numeric breakdown.
+Run Adsense readiness evaluation and return adsenseReadinessScore from 0–100. Include precise numeric breakdown for: Accuracy, E-E-A-T, YMYL risk, Ads placement risk.
 
 OUTPUT:
 Return single JSON ONLY with these fields:
@@ -583,6 +556,11 @@ def run_pipeline(category, config, mode="trending"):
         
         if real_url:
             update_kg(title, real_url, category)
+            
+            # --- SOCIAL MEDIA DISTRIBUTION ---
+            if img_url:
+                current_client = genai.Client(api_key=key_manager.get_current_key())
+                social_manager.distribute_content(current_client, model, title, category, real_url, img_url)
             
     except Exception as e:
         log(f"❌ Final processing failed: {e}")
