@@ -467,12 +467,10 @@ def clean_json(text):
         if match: 
             text = match.group(1)
     
-    # Fix invalid escape sequences (e.g., \ in paths or math)
     try:
         json.loads(text)
         return text
     except:
-        # Escape backslashes that aren't part of valid escapes
         text = text.replace('\\', '\\\\') 
         text = text.replace('\\\\"', '\\"').replace('\\\\n', '\\n').replace('\\\\t', '\\t')
         return text
