@@ -1,4 +1,3 @@
-   
 import os
 import json
 import time
@@ -9,6 +8,8 @@ import sys
 import datetime
 from google import genai
 from google.genai import types
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
 
 # IMPORT SOCIAL MANAGER
 import social_manager
@@ -17,6 +18,7 @@ import social_manager
 # 0. LOGGING HELPER
 # ==============================================================================
 def log(msg):
+    """Prints message immediately to console, bypassing buffer."""
     print(msg, flush=True)
 
 # ==============================================================================
@@ -24,21 +26,52 @@ def log(msg):
 # ==============================================================================
 ARTICLE_STYLE = """
 <style>
+    /* General Typography */
     .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.8; color: #2c3e50; font-size: 18px; }
     h2 { color: #1a252f; font-weight: 700; margin-top: 40px; margin-bottom: 20px; border-bottom: 2px solid #3498db; padding-bottom: 10px; display: inline-block; }
     h3 { color: #2980b9; font-weight: 600; margin-top: 30px; }
-    .takeaways-box { background: #f0f8ff; border-left: 5px solid #3498db; padding: 20px; margin: 30px 0; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    
+    /* Key Takeaways Box */
+    .takeaways-box {
+        background: #f0f8ff;
+        border-left: 5px solid #3498db;
+        padding: 20px;
+        margin: 30px 0;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
     .takeaways-box h3 { margin-top: 0; color: #2c3e50; }
     .takeaways-box ul { margin-bottom: 0; padding-left: 20px; }
+    .takeaways-box li { margin-bottom: 10px; }
+
+    /* Tables */
     .table-wrapper { overflow-x: auto; margin: 30px 0; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
     table { width: 100%; border-collapse: collapse; background: #fff; }
     th { background: #34495e; color: #fff; padding: 15px; text-align: left; }
     td { padding: 12px 15px; border-bottom: 1px solid #eee; }
     tr:nth-child(even) { background-color: #f9f9f9; }
-    blockquote { background: #fff; border-left: 5px solid #e74c3c; margin: 30px 0; padding: 20px 30px; font-style: italic; color: #555; font-size: 1.1em; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    tr:hover { background-color: #f1f1f1; }
+
+    /* Blockquotes */
+    blockquote {
+        background: #fff;
+        border-left: 5px solid #e74c3c;
+        margin: 30px 0;
+        padding: 20px 30px;
+        font-style: italic;
+        color: #555;
+        font-size: 1.1em;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+
+    /* Links */
     a { color: #3498db; text-decoration: none; font-weight: 500; transition: color 0.3s; }
     a:hover { color: #2980b9; text-decoration: underline; }
+    
+    /* Images */
     .separator img { border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.15); max-width: 100%; height: auto; }
+    
+    /* Sources Section */
     .sources-section { background: #f9f9f9; padding: 20px; border-radius: 8px; font-size: 0.9em; color: #666; margin-top: 50px; }
 </style>
 """
@@ -170,7 +203,7 @@ Create author byline and short author bio (40–60 words). Use placeholder if un
 
 **IMAGE STRATEGY:**
 1. `imageGenPrompt`: Create a specific English prompt for an AI image generator. Rules: Abstract, futuristic, technological style (3D render). NO HUMANS, NO FACES, NO ANIMALS, NO TEXT. Focus on concepts.
-2. `imageOverlayText`: A very short, punchy text (2-4 words max) to be written ON the image (e.g., "AI vs Human", "New GPT-5").
+2. `imageOverlayText`: A very short, punchy title (MAX 3-5 WORDS). Example: "AI Energy Crisis", "Future of Robotics".
 
 NETWORK-LEVEL OPTIMIZATION:
 Analyze knowledge_graph array and select 3–5 best internal articles to link.
@@ -348,23 +381,95 @@ def clean_json(text):
         text = text.replace('\\\\"', '\\"').replace('\\\\n', '\\n').replace('\\\\t', '\\t')
         return text
 
+# --- NEW IMAGE PROCESSING LOGIC (PILLOW) ---
+def download_font():
+    """Downloads a modern font (Roboto-Bold) to ensure text looks good."""
+    font_url = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
+    try:
+        r = requests.get(font_url)
+        return BytesIO(r.content)
+    except:
+        return None
+
+def add_text_overlay(image_data, text):
+    """
+    Draws a semi-transparent overlay with text on the image using Python.
+    """
+    try:
+        # 1. Open Image
+        img = Image.open(BytesIO(image_data))
+        width, height = img.size
+        draw = ImageDraw.Draw(img)
+
+        # 2. Load Font
+        font_file = download_font()
+        fontsize = int(width * 0.05) # Font size is 5% of image width
+        try:
+            font = ImageFont.truetype(font_file, fontsize)
+        except:
+            font = ImageFont.load_default()
+
+        # 3. Prepare Text (Wrap text if too long)
+        words = text.split()
+        lines = []
+        current_line = []
+        for word in words:
+            current_line.append(word)
+            w = draw.textlength(" ".join(current_line), font=font)
+            if w > width * 0.8: # Keep 10% padding on sides
+                current_line.pop()
+                lines.append(" ".join(current_line))
+                current_line = [word]
+        lines.append(" ".join(current_line))
+        
+        # 4. Calculate Overlay Box Size
+        text_height = len(lines) * (fontsize * 1.2)
+        box_height = text_height + 60
+        box_y = height - box_height - 50 # Position at bottom with padding
+        
+        # 5. Draw Semi-Transparent Box (Black with 60% opacity)
+        overlay = Image.new('RGBA', img.size, (0,0,0,0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        overlay_draw.rectangle(
+            [(0, box_y), (width, box_y + box_height)],
+            fill=(0, 0, 0, 160)
+        )
+        
+        img = img.convert("RGBA")
+        img = Image.alpha_composite(img, overlay)
+        img = img.convert("RGB")
+        draw = ImageDraw.Draw(img)
+
+        # 6. Draw Text (White)
+        text_y = box_y + 30
+        for line in lines:
+            w = draw.textlength(line, font=font)
+            x = (width - w) / 2
+            draw.text((x, text_y), line, font=font, fill=(255, 255, 255))
+            text_y += fontsize * 1.2
+
+        # 7. Save to Buffer
+        output = BytesIO()
+        img.save(output, format='JPEG', quality=95)
+        return output.getvalue()
+
+    except Exception as e:
+        log(f"⚠️ Text Overlay Failed: {e}")
+        return image_data
+
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
     if not key: 
         log("⚠️ No IMGBB_API_KEY found.")
         return None
     
-    log(f"   🎨 Generating Image: '{prompt_text}' with text '{overlay_text}'...")
+    log(f"   🎨 Generating Image: '{prompt_text}'...")
     
     for attempt in range(3):
         try:
-            # INJECT TEXT INTO PROMPT FOR FLUX
-            final_prompt = prompt_text
-            if overlay_text:
-                clean_text = re.sub(r'[^\w\s]', '', overlay_text)
-                final_prompt = f"{prompt_text}, masterpiece, high quality. In the center, write the text '{clean_text}' in big, glowing, futuristic 3D typography. The text must be legible and clear."
-
-            safe_prompt = requests.utils.quote(final_prompt)
+            # 1. Generate CLEAN Image (No Text in Prompt)
+            clean_prompt = f"{prompt_text}, masterpiece, high quality, cinematic lighting, 8k, --no text, words, typography, watermarks"
+            safe_prompt = requests.utils.quote(clean_prompt)
             seed = random.randint(1, 99999)
             
             url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={seed}&model=flux"
@@ -374,11 +479,19 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
                 time.sleep(5)
                 continue
             
+            image_data = img_response.content
+
+            # 2. Apply Python Text Overlay (If text exists)
+            if overlay_text:
+                log(f"   🖌️ Drawing text overlay: '{overlay_text}'")
+                image_data = add_text_overlay(image_data, overlay_text)
+            
+            # 3. Upload to ImgBB
             log("   ☁️ Uploading to ImgBB...")
             res = requests.post(
                 "https://api.imgbb.com/1/upload", 
                 data={"key":key, "expiration":0}, 
-                files={"image":img_response.content},
+                files={"image":image_data},
                 timeout=45
             )
             
@@ -567,7 +680,7 @@ def run_pipeline(category, config, mode="trending"):
         # 1. Inject CSS Style
         content = ARTICLE_STYLE 
         
-        # 2. Image Generation
+        # 2. Image Generation (Hybrid: AI + Pillow)
         img_prompt = final.get('imageGenPrompt', f"Abstract {category} technology")
         overlay_text = final.get('imageOverlayText', title[:20])
         img_url = generate_and_upload_image(img_prompt, overlay_text)
