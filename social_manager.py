@@ -5,10 +5,10 @@ import tweepy
 from google import genai
 from google.genai import types
 
+# ==============================================================================
+# 1. AI CONTENT GENERATOR
+# ==============================================================================
 def generate_social_hooks(client, model_name, title, category, url):
-    """
-    يولد 3 منشورات مختلفة بطلب واحد فقط لتوفير الرصيد.
-    """
     prompt = f"""
     You are a Social Media Manager. Create 3 distinct posts for this article:
     Title: "{title}"
@@ -38,6 +38,9 @@ def generate_social_hooks(client, model_name, title, category, url):
         print(f"⚠️ Social Hook Generation Failed: {e}")
         return None
 
+# ==============================================================================
+# 2. FACEBOOK MANAGER (Working Perfect ✅)
+# ==============================================================================
 def post_to_facebook(content, image_url, link):
     page_id = os.getenv('FB_PAGE_ID')
     access_token = os.getenv('FB_PAGE_ACCESS_TOKEN')
@@ -62,6 +65,9 @@ def post_to_facebook(content, image_url, link):
     except Exception as e:
         print(f"   ❌ Facebook Error: {e}")
 
+# ==============================================================================
+# 3. X (TWITTER) MANAGER (Fixed for Free Tier 🛠️)
+# ==============================================================================
 def post_to_twitter(content, image_url, link):
     consumer_key = os.getenv('TWITTER_CONSUMER_KEY')
     consumer_secret = os.getenv('TWITTER_CONSUMER_SECRET')
@@ -73,28 +79,24 @@ def post_to_twitter(content, image_url, link):
         return
 
     try:
-        auth = tweepy.OAuth1UserHandler(consumer_key, consumer_secret, access_token, access_token_secret)
-        api = tweepy.API(auth)
-
-        img_data = requests.get(image_url).content
-        with open("temp_tweet_img.jpg", "wb") as f:
-            f.write(img_data)
-
-        media = api.media_upload("temp_tweet_img.jpg")
-        
+        # Authenticate v2 (Client) - This is allowed on Free Tier for text/links
         client = tweepy.Client(
             consumer_key=consumer_key, consumer_secret=consumer_secret,
             access_token=access_token, access_token_secret=access_token_secret
         )
 
-        text = f"{content}\n{link}"
-        client.create_tweet(text=text, media_ids=[media.media_id])
-        print("   ✅ Posted to X (Twitter).")
-        os.remove("temp_tweet_img.jpg")
+        # Create Tweet with Link (Twitter will auto-generate the image card)
+        text = f"{content}\n\n{link}"
+        
+        response = client.create_tweet(text=text)
+        print(f"   ✅ Posted to X (Twitter). ID: {response.data['id']}")
 
     except Exception as e:
         print(f"   ❌ Twitter Error: {e}")
 
+# ==============================================================================
+# 4. PINTEREST MANAGER
+# ==============================================================================
 def post_to_pinterest(title, desc, image_url, link):
     access_token = os.getenv('PINTEREST_ACCESS_TOKEN')
     board_id = os.getenv('PINTEREST_BOARD_ID') 
@@ -104,6 +106,7 @@ def post_to_pinterest(title, desc, image_url, link):
         return
 
     try:
+        # Auto-fetch board if missing
         if not board_id:
             boards_req = requests.get("https://api.pinterest.com/v5/boards", headers={"Authorization": f"Bearer {access_token}"})
             if boards_req.status_code == 200:
@@ -113,15 +116,24 @@ def post_to_pinterest(title, desc, image_url, link):
                 else:
                     print("   ⚠️ No Pinterest Boards found.")
                     return
+            else:
+                print(f"   ❌ Pinterest Auth Failed (Check Token): {boards_req.text}")
+                return
         
         url = "https://api.pinterest.com/v5/pins"
-        headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
         payload = {
             "board_id": board_id,
             "title": title[:100],
             "description": desc[:500],
             "link": link,
-            "media": {"source_type": "image_url", "url": image_url}
+            "media": {
+                "source_type": "image_url",
+                "url": image_url
+            }
         }
         
         r = requests.post(url, headers=headers, json=payload)
@@ -133,8 +145,12 @@ def post_to_pinterest(title, desc, image_url, link):
     except Exception as e:
         print(f"   ❌ Pinterest Error: {e}")
 
+# ==============================================================================
+# MAIN ORCHESTRATOR
+# ==============================================================================
 def distribute_content(client, model_name, title, category, article_url, image_url):
     print(f"\n📢 Distributing to Social Media...")
+    
     hooks = generate_social_hooks(client, model_name, title, category, article_url)
     if not hooks: return
 
