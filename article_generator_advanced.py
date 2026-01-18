@@ -18,6 +18,7 @@ import social_manager
 # 0. LOGGING HELPER
 # ==============================================================================
 def log(msg):
+    """Prints message immediately to console, bypassing buffer."""
     print(msg, flush=True)
 
 # ==============================================================================
@@ -76,7 +77,7 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL ORIGINAL TEXT)
+# 2. PROMPTS DEFINITIONS (FULL ORIGINAL TEXT + ESCAPED BRACES)
 # ==============================================================================
 
 PROMPT_A_TRENDING = """
@@ -107,7 +108,21 @@ If the story touches YMYL topics (health/finance/legal), include an immediate ri
 Check basic credibility signals for each source and report them: (a) publisher credibility (Nature/IEEE/ACM/official corp blog), (b) if arXiv — indicate whether paper has code/benchmarks, (c) if GitHub — include last commit date and license, (d) if press release — confirm corporate domain and date/time.
 
 Output JSON only, EXACTLY in this format:
-{{"headline": "One-line headline","sources": [{{"title":"Exact source title","url":"https://...","date":"YYYY-MM-DD","type":"paper|arXiv|repo|blog|press|SEC","why":"One-line why this verifies (include exact page/figure if relevant)","credibility":"short note: Nature/IEEE/company blog/press/etc","notes":"any caveats about the source"}}],"riskNote":"If YMYL risk exists list regulators and verification steps; otherwise empty string"}}
+{{
+ "headline": "One-line headline",
+ "sources": [
+   {{
+     "title":"Exact source title",
+     "url":"https://...",
+     "date":"YYYY-MM-DD",
+     "type":"paper|arXiv|repo|blog|press|SEC",
+     "why":"One-line why this verifies (include exact page/figure if relevant)",
+     "credibility":"short note: Nature/IEEE/company blog/press/etc",
+     "notes":"any caveats about the source"
+   }}
+ ],
+ "riskNote":"If YMYL risk exists list regulators and verification steps; otherwise empty string"
+}}
 """
 
 PROMPT_A_EVERGREEN = """
@@ -124,7 +139,20 @@ MANDATORY SOURCE & VERIFICATION RULES:
 1. Return a headline like "The Ultimate Guide to [Topic]" or "Understanding [Concept]: A Deep Dive".
 2. Provide 2–3 authoritative sources (Seminal Papers, Documentation, University Lectures).
 3. Output JSON ONLY (Same format as news to maintain pipeline compatibility):
-{{"headline": "...", "sources": [{{"title":"...", "url":"...", "date":"YYYY-MM-DD (or N/A)", "type":"documentation|paper|book", "why":"Foundational reference", "credibility":"High"}}], "riskNote":"..."}}
+{{
+ "headline": "...",
+ "sources": [
+   {{
+     "title":"...",
+     "url":"...",
+     "date":"YYYY-MM-DD (or N/A)",
+     "type":"documentation|paper|book",
+     "why":"Foundational reference",
+     "credibility":"High"
+   }}
+ ],
+ "riskNote":"..."
+}}
 """
 
 PROMPT_B_TEMPLATE = """
@@ -191,7 +219,12 @@ VII. SELF-CORRECTION LOOP (MANDATORY before output):
 - Run an internal "AI-pattern sniff": identify 3 sentences that look most AI-generated and rewrite them in a more personal style.
 
 Output JSON ONLY, EXACTLY in this shape:
-{{"draftTitle":"...","draftContent":"<html>...full HTML article...</html>","sources":[ {{ "title":"", "url":"", "date":"", "type":"", "credibility":"" }}, ... ],"notes":"List any remaining issues or empty string"}}
+{{
+ "draftTitle":"...",
+ "draftContent":"<html>...full HTML article...</html>",
+ "sources":[ {{ "title":"", "url":"", "date":"", "type":"", "credibility":"" }}, ... ],
+ "notes":"List any remaining issues or empty string"
+}}
 """
 
 PROMPT_C_TEMPLATE = """
@@ -240,7 +273,22 @@ Run a final "citation completeness" check: every inline citation present in cont
 
 OUTPUT:
 Return single JSON ONLY with these fields:
-{{"finalTitle":"...","finalContent":"<html>...final polished HTML with inline links and sources...</html>","excerpt":"...short excerpt...","imageGenPrompt":"...","imageOverlayText":"...","seo": {{ "metaTitle":"...","metaDescription":"...","imageAltText":"..." }},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[ "...","..." ],"internalLinks":[ "<a href='...'>...</a>", ... ],"schemaMarkup":"{{...JSON-LD...}}","adsenseReadinessScore":{{ "score":0-100, "breakdown": {{ "accuracy":n, "E-E-A-T":n, "YMYL":n, "adsPlacement":n }}, "notes":"..." }},"sources":[ ... ],"authorBio":{{ "name":"...", "bio":"...", "profileUrl":"..." }}}}
+{{
+ "finalTitle":"...",
+ "finalContent":"<html>...final polished HTML with inline links and sources...</html>",
+ "excerpt":"...short excerpt...",
+ "imageGenPrompt":"...",
+ "imageOverlayText":"...",
+ "seo": {{ "metaTitle":"...","metaDescription":"...","imageAltText":"..." }},
+ "tags":[...],
+ "conceptualIcon":"...",
+ "futureArticleSuggestions":[ "...","..." ],
+ "internalLinks":[ "<a href='...'>...</a>", ... ],
+ "schemaMarkup":"{{...JSON-LD...}}",
+ "adsenseReadinessScore":{{ "score":0-100, "breakdown": {{ "accuracy":n, "E-E-A-T":n, "YMYL":n, "adsPlacement":n }}, "notes":"..." }},
+ "sources":[ ... ],
+ "authorBio":{{ "name":"...", "bio":"...", "profileUrl":"..." }}
+}}
 """
 
 PROMPT_D_TEMPLATE = """
@@ -326,12 +374,37 @@ Record final aiProbability and numberOfPasses in auditMetadata.
 STEP 6 — Safety, Legal & Final Editorial Confirmation (MANDATORY G additions)
 6.1 Defamation check: If article alleges wrongdoing by named entities/individuals, ensure TWO independent sources confirm. If not, soften language and annotate.
 6.2 Final human editor confirmation (MANDATORY):
-At the end of the output JSON include the following field exactly:"humanEditorConfirmation": {{"editorName": "Yousef Sameer","editorRole": "Human Editor, AI News Hub","confirmationLine": "I have reviewed this article and verified the sources, quotes and numeric claims to the best of my ability.","dateReviewed": "YYYY-MM-DD"}}
+At the end of the output JSON include the following field exactly:"humanEditorConfirmation": {{ "editorName": "Yousef Sameer", "editorRole": "Human Editor, AI News Hub", "confirmationLine": "I have reviewed this article and verified the sources, quotes and numeric claims to the best of my ability.", "dateReviewed": "YYYY-MM-DD" }}
 If the actual human editor is someone else, replace name accordingly. If no human has actually reviewed, set "humanEditorConfirmation.reviewStatus": "pending" and add requiredAction "human-editor-review".
 This confirmation line must appear in the article HTML as a short line below the author bio (when reviewStatus = "confirmed") or a "Pending editorial review" note if pending.
 
 Output JSON ONLY:
-{{"finalTitle":"...","finalContent":"<html>...final polished HTML...</html>","excerpt":"...","imageGenPrompt":"...preserve...","imageOverlayText":"...preserve...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"...","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}},"edits":[ {{"type":"...", "original":"...", "new":"...", "reason":"..."}}...],"auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},"plagiarismFlag": false,"aiDetectionFlag": false,"citationCompleteness": true,"authorBioPresent": true,"humanEditorConfirmation": {{...}},"requiresAction": false, "requiredActions":[...],"notes":"..."}}
+{{
+ "finalTitle":"...",
+ "finalContent":"<html>...</html>",
+ "excerpt":"...",
+ "imageGenPrompt":"...preserve...",
+ "imageOverlayText":"...preserve...",
+ "seo": {{...}},
+ "tags":[...],
+ "conceptualIcon":"...",
+ "futureArticleSuggestions":[...],
+ "internalLinks":[...],
+ "schemaMarkup":"...",
+ "adsenseReadinessScore":{{...}},
+ "sources":[...],
+ "authorBio":{{...}},
+ "edits":[ {{ "type":"...", "original":"...", "new":"...", "reason":"..." }}, ... ],
+ "auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},
+ "plagiarismFlag": false,
+ "aiDetectionFlag": false,
+ "citationCompleteness": true,
+ "authorBioPresent": true,
+ "humanEditorConfirmation": {{...}},
+ "requiresAction": false,
+ "requiredActions":[...],
+ "notes":"..."
+}}
 """
 
 PROMPT_E_TEMPLATE = """
@@ -359,7 +432,43 @@ STEP-BY-STEP WORKFLOW (run in order):
 4. SEO & PUBLISHING PACKAGE: Validate metaTitle, metaDescription, imageAltText, tags, JSON-LD Article schema.
 5. FINAL OUTPUT: Return single JSON ONLY.
 
-{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve...","imageOverlayText":"...preserve...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio": {{...}},"edits":[...],"auditMetadata": {{...}},"requiredActions":[...]}}
+{{
+ "finalTitle":"...",
+ "finalContent":"<html>...</html>",
+ "excerpt":"...",
+ "imageGenPrompt":"...preserve...",
+ "imageOverlayText":"...preserve...",
+ "seo": {{...}},
+ "tags":[...],
+ "conceptualIcon":"...",
+ "futureArticleSuggestions":[...],
+ "internalLinks":[...],
+ "schemaMarkup":"{{...}}",
+ "adsenseReadinessScore":{{...}},
+ "sources":[...],
+ "authorBio": {{...}},
+ "edits":[...],
+ "auditMetadata": {{...}},
+ "requiredActions":[...]
+}}
+"""
+
+# --- NEW PROMPT FOR FACEBOOK ---
+PROMPT_FACEBOOK_HOOK = """
+You are a Social Media Manager. Create an engaging Facebook post for this article:
+Title: "{title}"
+Category: "{category}"
+Link: "{url}"
+
+**Facebook Rules:**
+- Engaging, uses emojis, asks a question.
+- Length: Max 60 words.
+- Tone: Professional yet exciting.
+
+Output JSON ONLY:
+{{
+  "facebook": "..."
+}}
 """
 
 # ==============================================================================
@@ -540,7 +649,8 @@ def generate_image_huggingface(prompt_text):
         return None
     
     # Using SDXL Base 1.0 (Free & Stable)
-    API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+    # UPDATED URL to router.huggingface.co as per error log
+    API_URL = "https://router.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
     headers = {"Authorization": f"Bearer {hf_token}"}
     
     clean_prompt = f"{prompt_text}, cinematic lighting, 8k, photorealistic, masterpiece, sharp focus, --no text"
