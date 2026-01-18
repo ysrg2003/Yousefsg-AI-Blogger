@@ -6,9 +6,12 @@ from google import genai
 from google.genai import types
 
 # ==============================================================================
-# 1. AI CONTENT GENERATOR (Facebook & Twitter Only)
+# 1. AI CONTENT GENERATOR
 # ==============================================================================
 def generate_social_hooks(client, model_name, title, category, url):
+    """
+    Generates posts for Facebook and Twitter.
+    """
     prompt = f"""
     You are a Social Media Manager. Create 2 distinct posts for this article:
     Title: "{title}"
@@ -36,7 +39,7 @@ def generate_social_hooks(client, model_name, title, category, url):
         return None
 
 # ==============================================================================
-# 2. FACEBOOK MANAGER
+# 2. FACEBOOK MANAGER (Image + Text + Link)
 # ==============================================================================
 def post_to_facebook(content, image_url, link):
     page_id = os.getenv('FB_PAGE_ID')
@@ -63,7 +66,7 @@ def post_to_facebook(content, image_url, link):
         print(f"   ❌ Facebook Error: {e}")
 
 # ==============================================================================
-# 3. X (TWITTER) MANAGER (TEXT ONLY - FREE TIER SAFE)
+# 3. X (TWITTER) MANAGER (Text + Link Only - Free Tier Safe)
 # ==============================================================================
 def post_to_twitter(content, link):
     consumer_key = os.getenv('TWITTER_CONSUMER_KEY')
@@ -76,13 +79,13 @@ def post_to_twitter(content, link):
         return
 
     try:
-        # Authenticate v2 Client (Required for Free Tier Posting)
+        # Authenticate v2 Client
         client = tweepy.Client(
             consumer_key=consumer_key, consumer_secret=consumer_secret,
             access_token=access_token, access_token_secret=access_token_secret
         )
 
-        # Post Text Only (Twitter will generate the card from the link automatically)
+        # Create Tweet (Twitter auto-generates card from link)
         text = f"{content}\n\n{link}"
         
         response = client.create_tweet(text=text)
@@ -100,10 +103,8 @@ def distribute_content(client, model_name, title, category, article_url, image_u
     hooks = generate_social_hooks(client, model_name, title, category, article_url)
     if not hooks: return
 
-    # 1. Facebook (Image + Text)
+    # 1. Facebook
     post_to_facebook(hooks['facebook'], image_url, article_url)
 
-    # 2. Twitter (Text + Link Only - to avoid 402 Payment Error)
+    # 2. Twitter
     post_to_twitter(hooks['twitter'], article_url)
-    
-    # 3. Pinterest is handled via RSS Auto-Publishing (No code needed)
