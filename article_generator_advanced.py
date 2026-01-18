@@ -258,7 +258,7 @@ If claim is "load-bearing" (major conclusion, market size, adoption %, where rem
 If the exact number does not appear in any provided source:
 Attempt automatic correction: replace the number with the exact figure from the best source and add parenthetical "(corrected per SourceShortTitle — YYYY-MM-DD)" with inline citation.
 If no source provides any supporting number, REMOVE the numeric claim or convert to hedged phrasing (e.g., "a majority" or "many studies") and annotate in notes: "numeric-claim-removed-or-hedged" with reason & suggested follow-up.
-Record each check result in edits array with fields: { type: "numericCheck", original: "...", actionTaken: "...", sourceUsed: "..." }
+Record each check result in edits array with fields: {{ "type": "numericCheck", "original": "...", "actionTaken": "...", "sourceUsed": "..." }}
 
 A.2 Load-bearing claim verification:
 For each load-bearing claim, ensure two independent credible sources. If only one exists:
@@ -270,7 +270,7 @@ For every direct quote:
 Verify exact text exists in one of the sources (match exact phrase or provide a linkable match).
 If the quote is not verifiable:
 Remove the quote and replace with a paraphrase + citation OR mark the paragraph as "illustrative composite: paraphrase of sources" with inline note.
-For each quote fixed, add an edits entry: { type:"quoteCheck", originalQuote:"...", actionTaken:"replaced/paraphrased/verified", verificationSource:"..." }
+For each quote fixed, add an edits entry: {{ "type":"quoteCheck", "originalQuote":"...", "actionTaken":"replaced/paraphrased/verified", "verificationSource":"..." }}
 
 A.4 Inline citation completeness:
 Every inline citation present in finalContent must appear in final sources[] and vice versa. If mismatch, add the missing source entry (with type and credibility) or remove the stray inline citation.
@@ -326,12 +326,12 @@ Record final aiProbability and numberOfPasses in auditMetadata.
 STEP 6 — Safety, Legal & Final Editorial Confirmation (MANDATORY G additions)
 6.1 Defamation check: If article alleges wrongdoing by named entities/individuals, ensure TWO independent sources confirm. If not, soften language and annotate.
 6.2 Final human editor confirmation (MANDATORY):
-At the end of the output JSON include the following field exactly:"humanEditorConfirmation": {"editorName": "Yousef Sameer","editorRole": "Human Editor, AI News Hub","confirmationLine": "I have reviewed this article and verified the sources, quotes and numeric claims to the best of my ability.","dateReviewed": "YYYY-MM-DD"}
+At the end of the output JSON include the following field exactly:"humanEditorConfirmation": {{"editorName": "Yousef Sameer","editorRole": "Human Editor, AI News Hub","confirmationLine": "I have reviewed this article and verified the sources, quotes and numeric claims to the best of my ability.","dateReviewed": "YYYY-MM-DD"}}
 If the actual human editor is someone else, replace name accordingly. If no human has actually reviewed, set "humanEditorConfirmation.reviewStatus": "pending" and add requiredAction "human-editor-review".
 This confirmation line must appear in the article HTML as a short line below the author bio (when reviewStatus = "confirmed") or a "Pending editorial review" note if pending.
 
 Output JSON ONLY:
-{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve...","imageOverlayText":"...preserve...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"...","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}},"edits":[ {{"type":"...", "original":"...", "new":"...", "reason":"..."}}...],"auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},"plagiarismFlag": false,"aiDetectionFlag": false,"citationCompleteness": true,"authorBioPresent": true,"humanEditorConfirmation": {{...}},"requiresAction": false, "requiredActions":[...],"notes":"..."}}
+{{"finalTitle":"...","finalContent":"<html>...final polished HTML...</html>","excerpt":"...","imageGenPrompt":"...preserve...","imageOverlayText":"...preserve...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"...","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}},"edits":[ {{"type":"...", "original":"...", "new":"...", "reason":"..."}}...],"auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},"plagiarismFlag": false,"aiDetectionFlag": false,"citationCompleteness": true,"authorBioPresent": true,"humanEditorConfirmation": {{...}},"requiresAction": false, "requiredActions":[...],"notes":"..."}}
 """
 
 PROMPT_E_TEMPLATE = """
