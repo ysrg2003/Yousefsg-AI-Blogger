@@ -1,3 +1,4 @@
+   
 import os
 import json
 import time
@@ -234,6 +235,24 @@ STEP-BY-STEP WORKFLOW:
 {{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve...","imageOverlayText":"...preserve...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio": {{...}},"edits":[...],"auditMetadata": {{...}},"requiredActions":[...]}}
 """
 
+# --- NEW PROMPT FOR FACEBOOK ---
+PROMPT_FACEBOOK_HOOK = """
+You are a Social Media Manager. Create an engaging Facebook post for this article:
+Title: "{title}"
+Category: "{category}"
+Link: "{url}"
+
+**Facebook Rules:**
+- Engaging, uses emojis, asks a question.
+- Length: Max 60 words.
+- Tone: Professional yet exciting.
+
+Output JSON ONLY:
+{{
+  "facebook": "..."
+}}
+"""
+
 # ==============================================================================
 # 3. KEY MANAGER
 # ==============================================================================
@@ -321,12 +340,10 @@ def clean_json(text):
         if match: 
             text = match.group(1)
     
-    # Fix invalid escape sequences (e.g., \ in paths or math)
     try:
         json.loads(text)
         return text
     except:
-        # Escape backslashes that aren't part of valid escapes
         text = text.replace('\\', '\\\\') 
         text = text.replace('\\\\"', '\\"').replace('\\\\n', '\\n').replace('\\\\t', '\\t')
         return text
@@ -337,17 +354,20 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
         log("⚠️ No IMGBB_API_KEY found.")
         return None
     
-    log(f"   🎨 Generating Image: '{prompt_text}'...")
+    log(f"   🎨 Generating Image: '{prompt_text}' with text '{overlay_text}'...")
     
     for attempt in range(3):
         try:
-            safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, high quality, --no people, humans, animals, faces")
-            text_param = ""
+            # INJECT TEXT INTO PROMPT FOR FLUX
+            final_prompt = prompt_text
             if overlay_text:
-                safe_text = requests.utils.quote(overlay_text)
-                text_param = f"&text={safe_text}&font=roboto&fontsize=50"
+                clean_text = re.sub(r'[^\w\s]', '', overlay_text)
+                final_prompt = f"{prompt_text}, masterpiece, high quality. In the center, write the text '{clean_text}' in big, glowing, futuristic 3D typography. The text must be legible and clear."
 
-            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux{text_param}"
+            safe_prompt = requests.utils.quote(final_prompt)
+            seed = random.randint(1, 99999)
+            
+            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={seed}&model=flux"
             
             img_response = requests.get(url, timeout=45)
             if img_response.status_code != 200:
@@ -368,6 +388,7 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
                 return direct_link
                 
         except Exception as e:
+            log(f"      ⚠️ Image Error (Attempt {attempt+1}): {e}")
             time.sleep(5)
             
     log("❌ Failed to generate/upload image after 3 attempts.")
@@ -571,11 +592,20 @@ def run_pipeline(category, config, mode="trending"):
         if real_url:
             update_kg(title, real_url, category)
             
-            # --- SOCIAL MEDIA DISTRIBUTION ---
+            # --- SOCIAL MEDIA DISTRIBUTION (FIXED) ---
             if img_url:
-                current_client = genai.Client(api_key=key_manager.get_current_key())
-                social_manager.distribute_content(current_client, model, title, category, real_url, img_url)
-            
+                # Generate Facebook Hook using the ROBUST generate_step (handles 429)
+                fb_prompt = PROMPT_FACEBOOK_HOOK.format(title=title, category=category, url=real_url)
+                fb_json = generate_step(model, fb_prompt, "Generating Facebook Hook")
+                
+                if fb_json:
+                    try:
+                        fb_data = json.loads(fb_json)
+                        # Pass text to social manager to publish
+                        social_manager.distribute_content(fb_data.get('facebook', ''), real_url, img_url)
+                    except:
+                        log("⚠️ Failed to parse Facebook hook JSON.")
+
     except Exception as e:
         log(f"❌ Final processing failed: {e}")
 
