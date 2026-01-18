@@ -208,5 +208,35 @@
     "url": "https://www.latestai.me/2026/01/the-ultimate-guide-to-operationalizing.html",
     "section": "AI Ethics",
     "date": "2026-01-17"
+  },
+  {
+    "title": "The Ultimate Guide to Machine Learning Systems: A Full Lifecycle Approach to Robust and Sustainable AI",
+    "url": "https://www.latestai.me/2026/01/the-ultimate-guide-to-machine-learning_01382767444.html",
+    "section": "Machine Learning",
+    "date": "2026-01-18"
+  },
+  {
+    "title": "New Framework Unveils Hidden Demographic Biases in LLMs, Paving Way for More Equitable AI",
+    "url": "https://www.latestai.me/2026/01/new-framework-unveils-hidden.html",
+    "section": "Natural Language Processing",
+    "date": "2026-01-18"
+  },
+  {
+    "title": "LVT-Seg Dataset: Revolutionizing Autonomous Vehicle Perception with LiDAR-Visual Tracking",
+    "url": "https://www.latestai.me/2026/01/lvt-seg-dataset-revolutionizing.html",
+    "section": "Computer Vision",
+    "date": "2026-01-18"
+  },
+  {
+    "title": "Understanding Computer Vision Fundamentals: From Pixels to Transformers and Deployment Strategies",
+    "url": "https://www.latestai.me/2026/01/understanding-computer-vision.html",
+    "section": "Computer Vision",
+    "date": "2026-01-18"
+  },
+  {
+    "title": "FANUC CRX Collaborative Robots Achieve ISO 10218-1:2023 Safety Certification",
+    "url": "https://www.latestai.me/2026/01/fanuc-crx-collaborative-robots-achieve.html",
+    "section": "Robotics",
+    "date": "2026-01-18"
   }
 ]
