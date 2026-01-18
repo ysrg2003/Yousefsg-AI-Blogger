@@ -76,7 +76,7 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL ORIGINAL TEXT + TECH INJECTIONS)
+# 2. PROMPTS DEFINITIONS (FULL ORIGINAL TEXT)
 # ==============================================================================
 
 PROMPT_A_TRENDING = """
@@ -362,24 +362,6 @@ STEP-BY-STEP WORKFLOW (run in order):
 {{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve...","imageOverlayText":"...preserve...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio": {{...}},"edits":[...],"auditMetadata": {{...}},"requiredActions":[...]}}
 """
 
-# --- NEW PROMPT FOR FACEBOOK ---
-PROMPT_FACEBOOK_HOOK = """
-You are a Social Media Manager. Create an engaging Facebook post for this article:
-Title: "{title}"
-Category: "{category}"
-Link: "{url}"
-
-**Facebook Rules:**
-- Engaging, uses emojis, asks a question.
-- Length: Max 60 words.
-- Tone: Professional yet exciting.
-
-Output JSON ONLY:
-{{
-  "facebook": "..."
-}}
-"""
-
 # ==============================================================================
 # 3. KEY MANAGER
 # ==============================================================================
@@ -467,15 +449,17 @@ def clean_json(text):
         if match: 
             text = match.group(1)
     
+    # Fix invalid escape sequences (e.g., \ in paths or math)
     try:
         json.loads(text)
         return text
     except:
+        # Escape backslashes that aren't part of valid escapes
         text = text.replace('\\', '\\\\') 
         text = text.replace('\\\\"', '\\"').replace('\\\\n', '\\n').replace('\\\\t', '\\t')
         return text
 
-# --- ADVANCED IMAGE PROCESSING (PILLOW) ---
+# --- ADVANCED IMAGE PROCESSING (DUAL ENGINE + PILLOW) ---
 def download_font():
     """Downloads a modern font (Anton) to ensure text looks good."""
     font_url = "https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf"
@@ -546,65 +530,98 @@ def add_text_overlay(image_data, text):
         log(f"⚠️ Text Overlay Failed: {e}")
         return image_data
 
+def generate_image_huggingface(prompt_text):
+    """
+    Primary Generator using Hugging Face (SDXL - Highly Reliable & Free).
+    """
+    hf_token = os.getenv('HF_TOKEN')
+    if not hf_token:
+        log("⚠️ No HF_TOKEN found. Skipping HF generation.")
+        return None
+    
+    # Using SDXL Base 1.0 (Free & Stable)
+    API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+    headers = {"Authorization": f"Bearer {hf_token}"}
+    
+    clean_prompt = f"{prompt_text}, cinematic lighting, 8k, photorealistic, masterpiece, sharp focus, --no text"
+    
+    try:
+        log("   🔄 Generating via Hugging Face (Primary)...")
+        response = requests.post(API_URL, headers=headers, json={"inputs": clean_prompt}, timeout=120)
+        
+        if response.status_code == 200:
+            return response.content
+        elif "loading" in response.text.lower():
+            log("      ⏳ Model is loading... waiting 20s...")
+            time.sleep(20)
+            response = requests.post(API_URL, headers=headers, json={"inputs": clean_prompt}, timeout=120)
+            if response.status_code == 200:
+                return response.content
+        
+        log(f"   ❌ Hugging Face Error: {response.status_code} - {response.text}")
+        return None
+    except Exception as e:
+        log(f"   ❌ Hugging Face Exception: {e}")
+        return None
+
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
     if not key: 
         log("⚠️ No IMGBB_API_KEY found.")
         return None
     
-    log(f"   🎨 Generating Image: '{prompt_text}'...")
+    log(f"   🎨 Starting Image Generation Pipeline...")
     
-    for attempt in range(3):
+    image_data = None
+    
+    # --- STEP 1: TRY HUGGING FACE (PRIMARY - STABLE) ---
+    image_data = generate_image_huggingface(prompt_text)
+
+    # --- STEP 2: TRY POLLINATIONS (BACKUP - IF HF FAILS) ---
+    if not image_data:
+        log("   ⚠️ HF Failed. Switching to Pollinations (Backup)...")
         try:
-            # 1. Generate CLEAN Image (No Text in Prompt)
-            # Added 'User-Agent' to avoid Rate Limits
-            clean_prompt = f"{prompt_text}, masterpiece, high quality, cinematic lighting, 8k, --no text, words, typography, watermarks"
-            safe_prompt = requests.utils.quote(clean_prompt)
+            # User-Agent Spoofing
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+            safe_prompt = requests.utils.quote(f"{prompt_text}, masterpiece, 8k")
             seed = random.randint(1, 99999)
-            
             url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={seed}&model=flux"
             
-            # Spoof User-Agent to bypass simple IP blocks
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-            
             img_response = requests.get(url, headers=headers, timeout=45)
-            if img_response.status_code != 200:
-                time.sleep(5)
-                continue
-            
-            image_data = img_response.content
+            if img_response.status_code == 200:
+                temp_data = img_response.content
+                if len(temp_data) > 40000: # Size check to avoid QR code
+                    image_data = temp_data
+                    log("   ✅ Pollinations generated image successfully.")
+                else:
+                    log("   ❌ Pollinations returned Rate Limit image.")
+        except Exception as e:
+            log(f"   ❌ Pollinations Error: {e}")
 
-            # CHECK FOR RATE LIMIT IMAGE (Pollinations returns a small pixel art image on error)
-            # If image is too small (< 10KB), it's likely an error image
-            if len(image_data) < 10240: 
-                log(f"      ⚠️ Detected Rate Limit Image (Size: {len(image_data)} bytes). Retrying...")
-                time.sleep(10)
-                continue
-
-            # 2. Apply Python Text Overlay
-            if overlay_text:
-                log(f"   🖌️ Drawing text overlay: '{overlay_text}'")
-                image_data = add_text_overlay(image_data, overlay_text)
-            
-            # 3. Upload to ImgBB
+    # --- STEP 3: PROCESS & UPLOAD ---
+    if image_data:
+        # Apply Text Overlay
+        if overlay_text:
+            log(f"   🖌️ Drawing text overlay: '{overlay_text}'")
+            image_data = add_text_overlay(image_data, overlay_text)
+        
+        # Upload to ImgBB
+        try:
             log("   ☁️ Uploading to ImgBB...")
             res = requests.post(
                 "https://api.imgbb.com/1/upload", 
                 data={"key":key, "expiration":0}, 
                 files={"image":image_data},
-                timeout=45
+                timeout=60
             )
-            
             if res.status_code == 200:
                 direct_link = res.json()['data']['url']
                 log(f"   ✅ Image Ready: {direct_link}")
                 return direct_link
-                
         except Exception as e:
-            log(f"      ⚠️ Image Error (Attempt {attempt+1}): {e}")
-            time.sleep(5)
-            
-    log("❌ Failed to generate/upload image after 3 attempts.")
+            log(f"   ❌ Upload Failed: {e}")
+
+    log("❌ FATAL: Failed to generate image from all sources.")
     return None
 
 def load_kg():
