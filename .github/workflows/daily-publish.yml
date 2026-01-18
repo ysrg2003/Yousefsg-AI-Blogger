@@ -40,10 +40,11 @@ jobs:
           BLOGGER_CLIENT_SECRET: ${{ secrets.BLOGGER_CLIENT_SECRET }}
           BLOGGER_REFRESH_TOKEN: ${{ secrets.BLOGGER_REFRESH_TOKEN }}
           
-          # ImgBB
+          # ImgBB & Hugging Face
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
-          # Facebook
+          # Facebook Only
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
 
