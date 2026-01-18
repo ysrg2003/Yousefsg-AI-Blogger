@@ -43,7 +43,7 @@ jobs:
           # ImgBB
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
 
-          # Facebook Only
+          # Facebook
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
 
