@@ -18,11 +18,10 @@ import social_manager
 # 0. LOGGING HELPER
 # ==============================================================================
 def log(msg):
-    """Prints message immediately to console, bypassing buffer."""
     print(msg, flush=True)
 
 # ==============================================================================
-# 1. CSS STYLING (MODERN TECH LOOK)
+# 1. CSS STYLING
 # ==============================================================================
 ARTICLE_STYLE = """
 <style>
@@ -77,7 +76,7 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL ORIGINAL TEXT + ESCAPED BRACES)
+# 2. PROMPTS DEFINITIONS (FULL ORIGINAL VERSIONS + ESCAPING FIXES)
 # ==============================================================================
 
 PROMPT_A_TRENDING = """
