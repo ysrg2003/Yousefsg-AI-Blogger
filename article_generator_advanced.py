@@ -518,17 +518,35 @@ def get_recent_titles_string(limit=50):
     titles = [item['title'] for item in kg[-limit:]] if kg else []
     return ", ".join(titles)
 
-def get_relevant_kg_for_linking(current_category, limit=60):
+# --- OPTIMIZED TOKEN SAVER FUNCTION ---
+def get_relevant_kg_for_linking(current_category, limit=30):
+    """
+    Returns JSON string of relevant articles with REAL URLs.
+    OPTIMIZED: Limits strictly to 30 items to save tokens.
+    """
     full_kg = load_kg()
     if not full_kg: return "[]"
     
+    # Prioritize same category and guides
     relevant = [item for item in full_kg if item.get('section') == current_category]
     guides = [item for item in full_kg if "Guide" in item.get('title', '') and item.get('section') != current_category]
     
-    combined = relevant + guides[:10]
-    if len(combined) > limit: combined = combined[-limit:]
+    # Take latest 15 from category + 10 guides + 5 random/recent
+    combined = relevant[-15:] + guides[:10] + full_kg[-5:]
     
-    simplified = [{"title": item['title'], "url": item['url']} for item in combined if 'url' in item]
+    # Deduplicate based on URL
+    seen_urls = set()
+    unique_list = []
+    for item in combined:
+        if item.get('url') and item['url'] not in seen_urls:
+            seen_urls.add(item['url'])
+            unique_list.append(item)
+            
+    # Strict Limit to prevent token explosion
+    if len(unique_list) > limit: 
+        unique_list = unique_list[:limit]
+    
+    simplified = [{"title": item['title'], "url": item['url']} for item in unique_list]
     return json.dumps(simplified)
 
 def update_kg(title, url, section):
@@ -551,22 +569,31 @@ def perform_maintenance_cleanup():
         archive_dir = 'archive'
         if not os.path.exists(kg_path): return
         with open(kg_path, 'r', encoding='utf-8') as f: data = json.load(f)
+        
+        # SAFETY VALVE: If file gets too big (800+), archive half of it.
         if len(data) < 800: return
         log("   🧹 Performing Database Maintenance...")
+        
         guides = [item for item in data if "Guide" in item.get('title', '')]
         others = [item for item in data if item not in guides]
+        
         keep_count = 400
         if len(others) <= keep_count: return
+        
         kept_others = others[-keep_count:] 
         to_archive = others[:-keep_count]
+        
         new_main_data = guides + kept_others
         with open(kg_path, 'w', encoding='utf-8') as f: json.dump(new_main_data, f, indent=2)
+        
         if not os.path.exists(archive_dir): os.makedirs(archive_dir)
         current_year = datetime.datetime.now().year
         archive_path = os.path.join(archive_dir, f'history_{current_year}.json')
+        
         archive_data = []
         if os.path.exists(archive_path):
             with open(archive_path, 'r', encoding='utf-8') as f: archive_data = json.load(f)
+        
         archive_data.extend(to_archive)
         with open(archive_path, 'w', encoding='utf-8') as f: json.dump(archive_data, f, indent=2)
         log(f"   ✅ Archived {len(to_archive)} articles.")
@@ -634,26 +661,35 @@ def run_pipeline(category, config, mode="trending"):
 
     json_a = generate_step(model, prompt_a, "Step A (Research)")
     if not json_a: return
-    time.sleep(10)
+    
+    # Increased wait time to prevent 429 errors
+    log("   ⏳ Waiting 40s to respect API Rate Limits...")
+    time.sleep(40) 
 
     # --- STEP B ---
     prompt_b = PROMPT_B_TEMPLATE.format(json_input=json_a)
     json_b = generate_step(model, prompt_b, "Step B (Drafting)")
     if not json_b: return
-    time.sleep(10)
+    
+    log("   ⏳ Waiting 40s to respect API Rate Limits...")
+    time.sleep(40)
 
     # --- STEP C ---
-    relevant_kg_str = get_relevant_kg_for_linking(category, limit=50)
+    relevant_kg_str = get_relevant_kg_for_linking(category, limit=30) # Reduced Limit
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b, knowledge_graph=relevant_kg_str)
     json_c = generate_step(model, prompt_c, "Step C (SEO & Images)")
     if not json_c: return
-    time.sleep(10)
+    
+    log("   ⏳ Waiting 40s to respect API Rate Limits...")
+    time.sleep(40)
 
     # --- STEP D ---
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json_c)
     json_d = generate_step(model, prompt_d, "Step D (Audit)")
     if not json_d: return
-    time.sleep(10)
+    
+    log("   ⏳ Waiting 40s to respect API Rate Limits...")
+    time.sleep(40)
 
     # --- STEP E ---
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
@@ -701,6 +737,8 @@ def run_pipeline(category, config, mode="trending"):
             # --- FACEBOOK AUTO-POSTING ---
             if img_url:
                 log("   📢 Preparing Facebook Post...")
+                time.sleep(10)
+                
                 fb_prompt = PROMPT_FACEBOOK_HOOK.format(title=title, category=category, url=real_url)
                 
                 # Generate Hook
