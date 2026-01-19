@@ -18,7 +18,6 @@ import social_manager
 # 0. LOGGING HELPER
 # ==============================================================================
 def log(msg):
-    """Prints message immediately to console, bypassing buffer."""
     print(msg, flush=True)
 
 # ==============================================================================
@@ -77,7 +76,7 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL ORIGINAL VERSIONS)
+# 2. PROMPTS DEFINITIONS (UPDATED FOR MAXIMUM LENGTH)
 # ==============================================================================
 
 PROMPT_A_TRENDING = """
@@ -128,60 +127,42 @@ MANDATORY SOURCE & VERIFICATION RULES:
 {{"headline": "...", "sources": [{{"title":"...", "url":"...", "date":"YYYY-MM-DD (or N/A)", "type":"documentation|paper|book", "why":"Foundational reference", "credibility":"High"}}], "riskNote":"..."}}
 """
 
+# --- UPDATED PROMPT B FOR MAXIMUM LENGTH ---
 PROMPT_B_TEMPLATE = """
-B:You are Editor-in-Chief of 'AI News Hub'. Input: the JSON output from Prompt A (headline + sources). Write a polished HTML article (1500–2000 words) using the provided headline and sources. Follow these rules exactly.
+B:You are Editor-in-Chief of 'AI News Hub'. Input: the JSON output from Prompt A (headline + sources).
 INPUT: {json_input}
 
-I. STRUCTURE & VOICE RULES (mandatory):
+**MISSION: Write a MASSIVE, IN-DEPTH Feature Article (Target: 2000+ Words).**
+Do NOT write a short summary. Do NOT write a blog post. Write a comprehensive, deep-dive report.
 
-H1 = headline exactly as provided (unless you correct minor grammar, then keep original in an attribute).
+I. STRUCTURE & DEPTH RULES (MANDATORY):
+1. **H1 Headline:** Exactly as provided.
+2. **Introduction:** Must be substantial (3-4 paragraphs). Start with a human hook, then explain the context, then the thesis.
+3. **Body Structure:** You MUST use at least **6-8 H2 Subheadings**.
+   - Under EACH H2, write at least **3-4 paragraphs**.
+   - Go deep into technical details, "How it works", "Why it matters", "Historical context", and "Future implications".
+   - **FORBIDDEN:** Do not use bullet points to summarize complex ideas. Explain them in full prose. Use bullet points ONLY for lists of specs or features.
+4. **Content Density:**
+   - Explain technical terms (e.g., if mentioning "Transformers", explain the attention mechanism briefly).
+   - Use analogies to explain complex concepts.
+   - Include a "Pros vs Cons" analysis (textual or table).
+   - Include a "Real-world Applications" section.
 
-Intro (do NOT start with "Imagine" or "In today’s world"): begin with a short, verifiable human hook:
-If you have a named, sourced quote from the sources, start with it (quote + attribution).
-If no named source quote exists, start with a clearly labeled "illustrative composite" sentence (e.g., "Illustrative composite: a researcher at a mid-size lab described…").
+II. VOICE & TONE:
+- Journalistic, authoritative, yet accessible.
+- Use contractions (it's, we're) to sound human.
+- **First-Person POV:** Include exactly one sentence: "In my experience covering [topic], I've seen..."
+- **Rhetorical Question:** Include exactly one.
+- **Forbidden Phrases:** "In today's digital age", "The world of AI is ever-evolving", "This matters because", "In conclusion".
 
-Use journalistic, conversational English — not academic tone:
-Paragraphs: 2–4 sentences maximum.
-Sentence length distribution: ~40% short (6–12 words), ~45% medium (13–22 words), ~15% long (23–35 words). Do not use sentences >35 words.
-Use contractions where natural (e.g., "it's", "they're") to sound human.
-Include exactly one first-person editorial sentence from the writer (e.g., "In my experience covering X, I've seen...") — keep it 1 sentence only.
-Include one rhetorical question in the article (short).
+III. SOURCING:
+- Cite sources inline: (Source: Title — YYYY-MM-DD).
+- Use the provided sources to back up every numeric claim.
 
-Avoid AI-template phrasing: forbid the following exact phrases (do not use them anywhere):
-"In today's digital age"
-"The world of AI is ever-evolving"
-"This matters because" — instead use 1–2 human sentences that explain significance.
-"In conclusion" (use a forward-looking takeaway instead).
-
-Tone: authoritative but approachable. Use occasional colloquial connectors (e.g., "That said," "Crucially,") — sparingly.
-
-II. EDITORIAL PRINCIPLES (applied inline):
-So What? — after each major fact/claim, add a one-sentence human explanation of its impact (no template phrase).
-Depth over breadth — choose 4–5 major points from the sources and analyze them deeply (quantitative where possible).
-Dual verification — any load-bearing claim (numbers, performance, market sizes, legal claims) must be inline-cited to at least two independent sources. If only one exists, explicitly call it out as "single-source claim" and flag for follow-up.
-Quotes — include at least one direct quote from a named expert present in the sources (copy verbatim and cite). If none exist, include a verified public statement (press release, blog) as a quote. Do not invent quotes.
-
-III. CITATION & SOURCING RULES:
-Inline citation format EXACTLY: (Source: ShortTitle — YYYY-MM-DD — URL)e.g., (Source: CoTracker3 arXiv — 2024-10-15 — https://arxiv.org/...)
-At the end include a "Sources" <ul> listing full source entries (title + URL + date + short credibility note).
-If you paraphrase any statistic, include the exact location in the source (e.g., "see Table 2, p.6").
-For market/financial numbers, prefer SEC filings, company reports, or named market research with publisher and year.
-
-IV. SECTION-SPECIFIC FOCUS (must be explicit in article):
-Use the section focus from the input — ensure the article addresses at least TWO focus points (state them explicitly in the text as subheadings).
-
-V. HUMANIZATION / ANTI-AI-PATTERNS (ethical, allowed steps to reduce AI-likeness):
-Insert at least two small humanizing details:
-a) One short anecdote or concrete example (with source or labeled "illustrative composite").
-b) One sentence of personal observation (writer POV), as required in I.3.
-Vary sentence rhythm and punctuation: include one parenthetical aside (short), and one comma-spliced sentence (only once) to mimic human style.
-Insert at least one small, deliberate stylistic imperfection (not grammatical error): e.g., an interjection "Look," or "Here’s the rub:" — used once, intentionally human.
-
-VI. FORMATTING & SEO:
-Use H2 and H3 subheadings for each major point. Keep H2 count between 4–6.
-Add one small comparison table (text-only) and 3 bullet "Why it matters" bullets near the top.
-Add schema-ready attributes: author name placeholder, datePublished placeholder, and an image alt text line.
-Word count: 1500–2000 words. If shorter, flag in 'notes'.
+IV. FORMATTING:
+- Use H2 and H3 tags.
+- Add a comparison table (text-only representation).
+- Add a "Sources" <ul> at the very end.
 
 Output JSON ONLY, EXACTLY in this shape:
 {{"draftTitle":"...","draftContent":"<html>...full HTML article...</html>","sources":[ {{ "title":"", "url":"", "date":"", "type":"", "credibility":"" }}, ... ],"notes":"List any remaining issues or empty string"}}
@@ -208,7 +189,6 @@ Create author byline and short author bio (40–60 words). Use placeholder if un
 NETWORK-LEVEL OPTIMIZATION:
 Analyze knowledge_graph array and select 3–5 best internal articles to link. Provide exact HTML anchor tags using slugs from knowledge_graph. For each internal link, include a one-line note: which Section Focus point it fills (e.g., "fills: dataset comparison, reproducibility").
 **STRICT LINKING RULE:** Scan the draft for concepts matching the "title" in the provided database. IF and ONLY IF a match is found, insert a link using the EXACT "url" provided in the database. Format: `<a href="EXACT_URL_FROM_DB">Keyword</a>`. DO NOT invent links.
-Propose 2 future article titles to fill content gaps (be precise, SEO-friendly).
 
 SEO & PUBLISHING PACKAGE:
 Provide metaTitle (50–60 chars) and metaDescription (150–160 chars).
