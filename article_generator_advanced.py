@@ -8,11 +8,6 @@ import sys
 import datetime
 from google import genai
 from google.genai import types
-from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO
-
-# IMPORT SOCIAL MANAGER
-import social_manager
 
 # ==============================================================================
 # 0. LOGGING HELPER
@@ -76,7 +71,7 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (UPDATED FOR MAXIMUM LENGTH)
+# 2. PROMPTS DEFINITIONS (FULL ORIGINAL VERSIONS)
 # ==============================================================================
 
 PROMPT_A_TRENDING = """
@@ -127,42 +122,60 @@ MANDATORY SOURCE & VERIFICATION RULES:
 {{"headline": "...", "sources": [{{"title":"...", "url":"...", "date":"YYYY-MM-DD (or N/A)", "type":"documentation|paper|book", "why":"Foundational reference", "credibility":"High"}}], "riskNote":"..."}}
 """
 
-# --- UPDATED PROMPT B FOR MAXIMUM LENGTH ---
 PROMPT_B_TEMPLATE = """
-B:You are Editor-in-Chief of 'AI News Hub'. Input: the JSON output from Prompt A (headline + sources).
+B:You are Editor-in-Chief of 'AI News Hub'. Input: the JSON output from Prompt A (headline + sources). Write a polished HTML article (1500–2000 words) using the provided headline and sources. Follow these rules exactly.
 INPUT: {json_input}
 
-**MISSION: Write a MASSIVE, IN-DEPTH Feature Article (Target: 2000+ Words).**
-Do NOT write a short summary. Do NOT write a blog post. Write a comprehensive, deep-dive report.
+I. STRUCTURE & VOICE RULES (mandatory):
 
-I. STRUCTURE & DEPTH RULES (MANDATORY):
-1. **H1 Headline:** Exactly as provided.
-2. **Introduction:** Must be substantial (3-4 paragraphs). Start with a human hook, then explain the context, then the thesis.
-3. **Body Structure:** You MUST use at least **6-8 H2 Subheadings**.
-   - Under EACH H2, write at least **3-4 paragraphs**.
-   - Go deep into technical details, "How it works", "Why it matters", "Historical context", and "Future implications".
-   - **FORBIDDEN:** Do not use bullet points to summarize complex ideas. Explain them in full prose. Use bullet points ONLY for lists of specs or features.
-4. **Content Density:**
-   - Explain technical terms (e.g., if mentioning "Transformers", explain the attention mechanism briefly).
-   - Use analogies to explain complex concepts.
-   - Include a "Pros vs Cons" analysis (textual or table).
-   - Include a "Real-world Applications" section.
+H1 = headline exactly as provided (unless you correct minor grammar, then keep original in an attribute).
 
-II. VOICE & TONE:
-- Journalistic, authoritative, yet accessible.
-- Use contractions (it's, we're) to sound human.
-- **First-Person POV:** Include exactly one sentence: "In my experience covering [topic], I've seen..."
-- **Rhetorical Question:** Include exactly one.
-- **Forbidden Phrases:** "In today's digital age", "The world of AI is ever-evolving", "This matters because", "In conclusion".
+Intro (do NOT start with "Imagine" or "In today’s world"): begin with a short, verifiable human hook:
+If you have a named, sourced quote from the sources, start with it (quote + attribution).
+If no named source quote exists, start with a clearly labeled "illustrative composite" sentence (e.g., "Illustrative composite: a researcher at a mid-size lab described…").
 
-III. SOURCING:
-- Cite sources inline: (Source: Title — YYYY-MM-DD).
-- Use the provided sources to back up every numeric claim.
+Use journalistic, conversational English — not academic tone:
+Paragraphs: 2–4 sentences maximum.
+Sentence length distribution: ~40% short (6–12 words), ~45% medium (13–22 words), ~15% long (23–35 words). Do not use sentences >35 words.
+Use contractions where natural (e.g., "it's", "they're") to sound human.
+Include exactly one first-person editorial sentence from the writer (e.g., "In my experience covering X, I've seen...") — keep it 1 sentence only.
+Include one rhetorical question in the article (short).
 
-IV. FORMATTING:
-- Use H2 and H3 tags.
-- Add a comparison table (text-only representation).
-- Add a "Sources" <ul> at the very end.
+Avoid AI-template phrasing: forbid the following exact phrases (do not use them anywhere):
+"In today's digital age"
+"The world of AI is ever-evolving"
+"This matters because" — instead use 1–2 human sentences that explain significance.
+"In conclusion" (use a forward-looking takeaway instead).
+
+Tone: authoritative but approachable. Use occasional colloquial connectors (e.g., "That said," "Crucially,") — sparingly.
+
+II. EDITORIAL PRINCIPLES (applied inline):
+So What? — after each major fact/claim, add a one-sentence human explanation of its impact (no template phrase).
+Depth over breadth — choose 4–5 major points from the sources and analyze them deeply (quantitative where possible).
+Dual verification — any load-bearing claim (numbers, performance, market sizes, legal claims) must be inline-cited to at least two independent sources. If only one exists, explicitly call it out as "single-source claim" and flag for follow-up.
+Quotes — include at least one direct quote from a named expert present in the sources (copy verbatim and cite). If none exist, include a verified public statement (press release, blog) as a quote. Do not invent quotes.
+
+III. CITATION & SOURCING RULES:
+Inline citation format EXACTLY: (Source: ShortTitle — YYYY-MM-DD — URL)e.g., (Source: CoTracker3 arXiv — 2024-10-15 — https://arxiv.org/...)
+At the end include a "Sources" <ul> listing full source entries (title + URL + date + short credibility note).
+If you paraphrase any statistic, include the exact location in the source (e.g., "see Table 2, p.6").
+For market/financial numbers, prefer SEC filings, company reports, or named market research with publisher and year.
+
+IV. SECTION-SPECIFIC FOCUS (must be explicit in article):
+Use the section focus from the input — ensure the article addresses at least TWO focus points (state them explicitly in the text as subheadings).
+
+V. HUMANIZATION / ANTI-AI-PATTERNS (ethical, allowed steps to reduce AI-likeness):
+Insert at least two small humanizing details:
+a) One short anecdote or concrete example (with source or labeled "illustrative composite").
+b) One sentence of personal observation (writer POV), as required in I.3.
+Vary sentence rhythm and punctuation: include one parenthetical aside (short), and one comma-spliced sentence (only once) to mimic human style.
+Insert at least one small, deliberate stylistic imperfection (not grammatical error): e.g., an interjection "Look," or "Here’s the rub:" — used once, intentionally human.
+
+VI. FORMATTING & SEO:
+Use H2 and H3 subheadings for each major point. Keep H2 count between 4–6.
+Add one small comparison table (text-only) and 3 bullet "Why it matters" bullets near the top.
+Add schema-ready attributes: author name placeholder, datePublished placeholder, and an image alt text line.
+Word count: 1500–2000 words. If shorter, flag in 'notes'.
 
 Output JSON ONLY, EXACTLY in this shape:
 {{"draftTitle":"...","draftContent":"<html>...full HTML article...</html>","sources":[ {{ "title":"", "url":"", "date":"", "type":"", "credibility":"" }}, ... ],"notes":"List any remaining issues or empty string"}}
@@ -184,10 +197,10 @@ Create author byline and short author bio (40–60 words). Use placeholder if un
 
 **IMAGE STRATEGY:**
 1. `imageGenPrompt`: Create a specific English prompt for an AI image generator. Rules: Abstract, futuristic, technological style (3D render). NO HUMANS, NO FACES, NO ANIMALS, NO TEXT. Focus on concepts.
-2. `imageOverlayText`: A very short, punchy title (MAX 3-5 WORDS). Example: "AI Energy Crisis", "Future of Robotics".
+2. `imageOverlayText`: A very short, punchy text (2-4 words max) to be written ON the image (e.g., "AI vs Human", "New GPT-5").
 
 NETWORK-LEVEL OPTIMIZATION:
-Analyze knowledge_graph array and select 3–5 best internal articles to link. Provide exact HTML anchor tags using slugs from knowledge_graph. For each internal link, include a one-line note: which Section Focus point it fills (e.g., "fills: dataset comparison, reproducibility").
+Analyze knowledge_graph array and select 3–5 best internal articles to link.
 **STRICT LINKING RULE:** Scan the draft for concepts matching the "title" in the provided database. IF and ONLY IF a match is found, insert a link using the EXACT "url" provided in the database. Format: `<a href="EXACT_URL_FROM_DB">Keyword</a>`. DO NOT invent links.
 
 SEO & PUBLISHING PACKAGE:
@@ -197,20 +210,7 @@ Generate Article schema JSON-LD (fully populated with placeholders for image URL
 Provide FAQ schema (3 Q&A) optimized for featured snippets (each answer ≤ 40 words).
 
 ADSENSE READINESS & RISK ASSESSMENT:
-Run Adsense readiness evaluation and return adsenseReadinessScore from 0–100. Include precise numeric breakdown for:
-- Accuracy (0–25)
-- E-E-A-T (0–25)
-- YMYL risk (0–25, where 0 = no risk, 25 = high risk)
-- Ads placement risk (0–25)
-Also include short sentences (1 line) explaining each sub-score.
-If score < 85, list exact action items (ordered by priority) to reach >= 90.
-
-FINAL TECHNICAL CHECKS:
-Validate metaTitle length (50–60) and metaDescription length (150–160); if not within ranges, propose corrected strings.
-Ensure schema markup fields are consistent with final content (title, datePublished).
-Ensure at least 3 internal links included.
-Ensure at least one imageAltText present.
-Run a final "citation completeness" check: every inline citation present in content must appear in final sources array.
+Run Adsense readiness evaluation and return adsenseReadinessScore from 0–100. Include precise numeric breakdown.
 
 OUTPUT:
 Return single JSON ONLY with these fields:
@@ -219,133 +219,47 @@ Return single JSON ONLY with these fields:
 
 PROMPT_D_TEMPLATE = """
 PROMPT D — Humanization & Final Audit (UPDATED — includes mandatory A, B, C checks)
-You are the Humanization & Final Audit specialist for 'AI News Hub' (a human editor role simulated by the model). Input: the JSON output from Prompt C. Your job: apply a comprehensive, human-level audit and humanization pass, with explicit mandatory checks. Do not invent facts. If something cannot be verified, mark it clearly.
+You are the Humanization & Final Audit specialist for 'AI News Hub'. Input: {json_input}. Your job: apply a comprehensive, human-level audit and humanization pass, with explicit mandatory checks.
 
-IMPORTANT: This prompt includes a set of MANDATORY CHECKS (A, B, C). For each check you must (1) validate, (2) either fix the issue automatically according to the remediation rules below, or (3) if you cannot fix it, mark it in the "notes" and set "requiresAction": true and list precise "requiredActions". Do not proceed silently if checks fail.
+STEP 2 — MANDATORY CHECK A: Sources & Fact Claims
+A.1 Numeric claim verification: Verify that at least one source in sources[] contains that exact number.
+A.2 Load-bearing claim verification: Ensure two independent credible sources.
+A.3 Quote verification: Verify exact text exists in one of the sources.
+A.4 Inline citation completeness: Every inline citation must appear in final sources[].
 
-STEP 2 — MANDATORY CHECK A: Sources & Fact Claims (strict rules + remediation)
-A.1 Numeric claim verification:
-Find every numeric claim in finalContent (percentages, dataset sizes, market numbers, dates, version numbers).
-For each numeric claim:
-Verify that at least one source in sources[] contains that exact number and that the inline citation references that source.
-If claim is "load-bearing" (major conclusion, market size, adoption %, where removal would change article meaning) verify at least TWO independent sources.
-If the exact number does not appear in any provided source:
-Attempt automatic correction: replace the number with the exact figure from the best source and add parenthetical "(corrected per SourceShortTitle — YYYY-MM-DD)" with inline citation.
-If no source provides any supporting number, REMOVE the numeric claim or convert to hedged phrasing (e.g., "a majority" or "many studies") and annotate in notes: "numeric-claim-removed-or-hedged" with reason & suggested follow-up.
-Record each check result in edits array with fields: {{ "type": "numericCheck", "original": "...", "actionTaken": "...", "sourceUsed": "..." }}
+STEP 3 — MANDATORY CHECK B: Human Style
+B.1 First-person writer sentence: Ensure presence of exactly one first-person editorial sentence.
+B.2 Rhetorical question: Ensure there is one rhetorical question.
+B.3 Forbidden phrases: Check that none of the forbidden exact phrases exist ("In today's digital age", "The world of AI is ever-evolving", "This matters because", "In conclusion").
+B.4 Sentence length distribution: Short ~40%, Medium ~45%, Long ~15%.
+B.6 "AI-pattern sniff" and rewrite: Identify top 8 sentences that most resemble AI-generated prose and rewrite them.
 
-A.2 Load-bearing claim verification:
-For each load-bearing claim, ensure two independent credible sources. If only one exists:
-Flag as "single-source-claim" in notes and requiredActions; do not invent a second source.
-In the article body, add a short inline parenthetical: "(single-source claim — needs further verification)".
+STEP 4 — MANDATORY CHECK C: E-E-A-T & YMYL
+C.1 Author bio verification.
+C.2 YMYL disclaimer: If riskNote exists, ensure explicit disclaimer in bold.
+C.4 AI-detection threshold: If aiProbability > 50, re-run humanization.
 
-A.3 Quote verification:
-For every direct quote:
-Verify exact text exists in one of the sources (match exact phrase or provide a linkable match).
-If the quote is not verifiable:
-Remove the quote and replace with a paraphrase + citation OR mark the paragraph as "illustrative composite: paraphrase of sources" with inline note.
-For each quote fixed, add an edits entry: {{ "type":"quoteCheck", "originalQuote":"...", "actionTaken":"replaced/paraphrased/verified", "verificationSource":"..." }}
-
-A.4 Inline citation completeness:
-Every inline citation present in finalContent must appear in final sources[] and vice versa. If mismatch, add the missing source entry (with type and credibility) or remove the stray inline citation.
-Add "citationCompleteness": true/false in output with list of mismatches if any.
-
-STEP 3 — MANDATORY CHECK B: Human Style (make article human, not AI-like)
-B.1 First-person writer sentence:
-Ensure presence of exactly one first-person editorial sentence (writer POV), e.g., "In my experience covering X, I've seen..." If missing:
-Insert one concise, natural sentence before the first H2: "In my experience covering [topic], I've found..." with no more than 20 words. Add to edits.
-B.2 Rhetorical question:
-Ensure there is one rhetorical question somewhere in the body. If missing, insert a short rhetorical question (<=10 words) in a natural location. Add to edits.
-B.3 Forbidden phrases:
-Check that none of the forbidden exact phrases exist in content:
-"In today's digital age"
-"The world of AI is ever-evolving"
-"This matters because"
-"In conclusion"
-If any forbidden phrase is found: replace with human alternative and record edit. Add to notes which phrases were removed.
-B.4 Sentence length distribution:
-Analyze sentence lengths and compute distribution:
-Short (6–12 words): target ~40%
-Medium (13–22 words): target ~45%
-Long (23–35 words): target ~15%
-If distribution deviates by more than ±10 percentage points in any bucket:
-Implement adjustments by splitting long sentences or combining short sentences, favoring simple journalistic style.
-Record all sentence-splitting/combining operations in edits array with before/after text.
-B.6 "AI-pattern sniff" and rewrite:
-Identify top 8 sentences that most resemble AI-generated prose (e.g., long, highly structured, generic claims). For each:
-Provide two human rewrite options in the output: OptionA (concise journalist) and OptionB (narrative/personal). Replace the article's sentence with OptionA by default and include OptionB in notes.
-Record these 8 replacements in edits array with before/after.
-
-STEP 4 — MANDATORY CHECK C: E-E-A-T & YMYL (strict)
-C.1 Author bio verification:
-Ensure authorBio exists with fields: name, short cred (1 sentence), profileUrl.
-If authorBio missing or incomplete:
-Insert placeholder authorBio with name = "AI News Hub Editorial Staff" and recommended author line: "Human editor: Yousef Sameer" (or actual name if provided). Add to edits and set "authorBioInserted": true.
-C.2 YMYL disclaimer:
-If riskNote from Prompt A or content touches YMYL topics, ensure explicit disclaimer in bold near top:
-Example: "<strong>Disclaimer:</strong> This article is for informational purposes and is not medical/legal/financial advice. ..."
-If missing, insert and record.
-C.4 AI-detection threshold and remediation:
-Run an AI-detection estimate (conceptual): assign an "aiProbability" score 0–100 based on style features (sentence length, repetition, template phrases). If aiProbability > 50:
-Re-run the humanization steps (B.1–B.6) iteratively until aiProbability <= 50 or until 3 passes attempted.
-If after 3 passes aiProbability > 50, set "requiresAction": true with requiredAction "human-editor-rewrite" and include the aiProbability number and edits made.
-Record final aiProbability and numberOfPasses in auditMetadata.
-
-STEP 6 — Safety, Legal & Final Editorial Confirmation (MANDATORY G additions)
-6.1 Defamation check: If article alleges wrongdoing by named entities/individuals, ensure TWO independent sources confirm. If not, soften language and annotate.
-6.2 Final human editor confirmation (MANDATORY):
-At the end of the output JSON include the following field exactly:"humanEditorConfirmation": {{"editorName": "Yousef Sameer","editorRole": "Human Editor, AI News Hub","confirmationLine": "I have reviewed this article and verified the sources, quotes and numeric claims to the best of my ability.","dateReviewed": "YYYY-MM-DD"}}
-If the actual human editor is someone else, replace name accordingly. If no human has actually reviewed, set "humanEditorConfirmation.reviewStatus": "pending" and add requiredAction "human-editor-review".
-This confirmation line must appear in the article HTML as a short line below the author bio (when reviewStatus = "confirmed") or a "Pending editorial review" note if pending.
+STEP 6 — Safety, Legal & Final Editorial Confirmation
+Include "humanEditorConfirmation" object.
 
 Output JSON ONLY:
 {{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve...","imageOverlayText":"...preserve...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"...","adsenseReadinessScore":{{...}},"sources":[...],"authorBio":{{...}},"edits":[ {{"type":"...", "original":"...", "new":"...", "reason":"..."}}...],"auditMetadata": {{ "auditTimestamp":"...", "aiProbability":n, "numberOfHumanizationPasses":n }},"plagiarismFlag": false,"aiDetectionFlag": false,"citationCompleteness": true,"authorBioPresent": true,"humanEditorConfirmation": {{...}},"requiresAction": false, "requiredActions":[...],"notes":"..."}}
 """
 
 PROMPT_E_TEMPLATE = """
-E: ROLE PROMPT — "The Assessor / Evaluator / Careful Auditor / Error-Corrector / Publisher"
-You are now: the Assessor, Evaluator, Careful Auditor, Error-Corrector, and Publisher for an article produced by the prior prompt pipeline (A → B → C). Your single mission: take the provided draft/final article (HTML + sources + metadata) and transform it into a publication-quality piece that maximizes humanization, factual accuracy, and SEO performance — while performing every verification, correction, and packaging step required for safe publishing.
+E: ROLE PROMPT — "The Publisher"
+You are the Publisher. Input: {json_input}.
 
-Execute all steps automatically. Do not ask clarifying questions. Use the inputs as-is: the article HTML (draft), the sources array, and the knowledge_graph array. If you need additional external verification for facts or numbers, fetch up-to-date evidence (web search) and cite it.
+Your single mission: take the provided draft/final article and transform it into a publication-quality piece.
 
-IMPORTANT: Do not invent facts, quotes, or exact numbers. If something cannot be verified, flag it and follow the remediation rules below.
-
-STEP-BY-STEP WORKFLOW (run in order):
-1. INPUTS: Input will contain at least: finalContent (HTML), sources[] (array), knowledge_graph[] (array). Treat the provided finalContent as the canonical draft to inspect and fix.
-2. SOURCE & FACT VERIFICATION (strict):
-   A. Numeric claims: Find every numeric claim. Verify at least one source contains that exact figure. If load-bearing, require two sources. If no source contains the exact number, automatically correct it.
-   B. Load-bearing claims: Any major conclusion must have two independent sources.
-   C. Quotes: Verify every direct quote appears exactly in at least one source.
-   D. Inline citations: Ensure every inline citation used in the HTML matches an entry in sources[].
-3. HUMANIZATION & STYLE (must enforce):
-   B.1 First-person sentence: Ensure exactly ONE first-person editorial sentence exists.
-   B.2 Rhetorical question: Ensure exactly ONE rhetorical question appears naturally.
-   B.3 Forbidden phrases: Remove/replace "In today's digital age", "The world of AI is ever-evolving", "This matters because", "In conclusion".
-   B.4 Sentence-length distribution: Target 40% short, 45% medium, 15% long. Rebalance if needed.
-   B.5 Humanizing elements: Ensure presence of anecdote, writer POV, rhetorical question, parenthetical aside, colloquial connector, and idiomatic phrase.
-   B.6 AI-pattern sniff: Identify 8 sentences that look most AI-generated and rewrite them.
-4. SEO & PUBLISHING PACKAGE: Validate metaTitle, metaDescription, imageAltText, tags, JSON-LD Article schema.
+STEP-BY-STEP WORKFLOW:
+1. INPUTS: Read finalContent, sources.
+2. SOURCE & FACT VERIFICATION: Final check on numeric claims and quotes.
+3. HUMANIZATION & STYLE: Enforce first-person sentence, rhetorical question, remove forbidden phrases ("In today's digital age", etc).
+4. SEO & PUBLISHING PACKAGE: Validate meta tags, schema, internal links.
 5. FINAL OUTPUT: Return single JSON ONLY.
 
-{{"finalTitle":"...","finalContent":"<html>...full HTML article with inline citations and H2/H3 ...</html>","excerpt":"short excerpt (20–35 words)","imageGenPrompt":"...preserve...","imageOverlayText":"...preserve...","seo": {{ "metaTitle":"(50–60 chars)", "metaDescription":"(150–160 chars)", "imageAltText":"..." }},"tags":[ "keyword1","keyword2",... ],"conceptualIcon":"one- or two-word icon","futureArticleSuggestions":[ "...","..." ],"internalLinks":[ "<a href='/slug1'>Title 1</a>", "<a href='/slug2'>Title 2</a>", "<a href='/slug3'>Title 3</a>" ],"schemaMarkup":"{{ ... JSON-LD ... }}","adsenseReadinessScore":{{ "score":0-100, "breakdown": {{ "accuracy":n, "E-E-A-T":n, "YMYL":n, "adsPlacement":n }}, "notes":"one-line summary" }},"sources":[ {{ "title":"", "url":"", "date":"YYYY-MM-DD", "type":"paper|arXiv|repo|blog|press|SEC", "credibility":"" }}, ... ],"authorBio": {{ "name":"...", "bio":"40–60 words", "profileUrl":"..." }},"edits":[ {{ "type":"numericCheck|quoteCheck|styleEdit|citationFix", "original":"...", "actionTaken":"...", "sourceUsed":"..." }}, ... ],"auditMetadata": {{ "auditTimestamp":"UTC ISO", "numberOfPasses":n, "aiProbability":n, "inventionDetected":true|false }},"requiredActions":[ "...", ... ]}}
-"""
-
-# --- NEW PROMPT FOR FACEBOOK ---
-PROMPT_FACEBOOK_HOOK = """
-You are a Social Media Manager. Create an engaging Facebook post for this article:
-Title: "{title}"
-Category: "{category}"
-Link: "{url}"
-
-**Facebook Rules:**
-- Engaging, uses emojis, asks a question.
-- Length: Max 60 words.
-- Tone: Professional yet exciting.
-
-Output JSON ONLY:
-{{
-  "facebook": "..."
-}}
+{{"finalTitle":"...","finalContent":"<html>...</html>","excerpt":"...","imageGenPrompt":"...preserve...","imageOverlayText":"...preserve...","seo": {{...}},"tags":[...],"conceptualIcon":"...","futureArticleSuggestions":[...],"internalLinks":[...],"schemaMarkup":"{{...}}","adsenseReadinessScore":{{...}},"sources":[...],"authorBio": {{...}},"edits":[...],"auditMetadata": {{...}},"requiredActions":[...]}}
 """
 
 # ==============================================================================
@@ -423,101 +337,12 @@ def publish_post(title, content, labels):
         return None
 
 def clean_json(text):
-    """
-    Robust JSON cleaning to handle Markdown and invalid escape sequences.
-    """
     text = text.strip()
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
-    if match: 
-        text = match.group(1)
-    else:
-        match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
-        if match: 
-            text = match.group(1)
-    
-    try:
-        json.loads(text)
-        return text
-    except:
-        text = text.replace('\\', '\\\\') 
-        text = text.replace('\\\\"', '\\"').replace('\\\\n', '\\n').replace('\\\\t', '\\t')
-        return text
-
-# --- ADVANCED IMAGE PROCESSING (PILLOW) ---
-def download_font():
-    """Downloads a modern font (Roboto-Black) to ensure text looks good."""
-    font_url = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Black.ttf"
-    try:
-        r = requests.get(font_url)
-        return BytesIO(r.content)
-    except:
-        return None
-
-def add_text_overlay(image_data, text):
-    """
-    Draws text with a professional drop-shadow/stroke effect (No Box).
-    This makes the text readable on ANY background.
-    """
-    try:
-        img = Image.open(BytesIO(image_data))
-        width, height = img.size
-        draw = ImageDraw.Draw(img)
-
-        font_file = download_font()
-        # Font size: 6% of image width (Big and Bold)
-        fontsize = int(width * 0.06) 
-        try:
-            font = ImageFont.truetype(font_file, fontsize)
-        except:
-            font = ImageFont.load_default()
-
-        # Wrap text
-        words = text.split()
-        lines = []
-        current_line = []
-        for word in words:
-            current_line.append(word)
-            w = draw.textlength(" ".join(current_line), font=font)
-            if w > width * 0.9: # 90% width max
-                current_line.pop()
-                lines.append(" ".join(current_line))
-                current_line = [word]
-        lines.append(" ".join(current_line))
-        
-        # Calculate total text height
-        line_height = fontsize * 1.2
-        total_text_height = len(lines) * line_height
-        
-        # Position: Bottom Center with padding
-        start_y = height - total_text_height - (height * 0.1) 
-
-        # Draw Text with Outline/Shadow for readability
-        outline_range = 3 # Thickness of the black outline
-        
-        for i, line in enumerate(lines):
-            w = draw.textlength(line, font=font)
-            x = (width - w) / 2
-            y = start_y + (i * line_height)
-            
-            # 1. Draw Black Outline (Stroke)
-            for ox in range(-outline_range, outline_range + 1):
-                for oy in range(-outline_range, outline_range + 1):
-                    draw.text((x + ox, y + oy), line, font=font, fill=(0, 0, 0))
-            
-            # 2. Draw Soft Shadow (Optional, simulates depth)
-            draw.text((x + 5, y + 5), line, font=font, fill=(0, 0, 0, 120))
-
-            # 3. Draw Main White Text
-            draw.text((x, y), line, font=font, fill=(255, 255, 255))
-
-        # Save
-        output = BytesIO()
-        img.save(output, format='JPEG', quality=95)
-        return output.getvalue()
-
-    except Exception as e:
-        log(f"⚠️ Text Overlay Failed: {e}")
-        return image_data
+    if match: return match.group(1)
+    match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
+    if match: return match.group(1)
+    return text
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
@@ -529,32 +354,24 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
     
     for attempt in range(3):
         try:
-            # 1. Generate CLEAN Image (Flux Model)
-            # We explicitly ask for NO text in the generation to keep it clean for our overlay
-            clean_prompt = f"{prompt_text}, masterpiece, high quality, 8k, cinematic lighting, --no text, words, typography, watermarks, signature"
-            safe_prompt = requests.utils.quote(clean_prompt)
-            seed = random.randint(1, 99999)
-            
-            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={seed}&model=flux"
+            safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, high quality, --no people, humans, animals, faces")
+            text_param = ""
+            if overlay_text:
+                safe_text = requests.utils.quote(overlay_text)
+                text_param = f"&text={safe_text}&font=roboto&fontsize=50"
+
+            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux{text_param}"
             
             img_response = requests.get(url, timeout=45)
             if img_response.status_code != 200:
                 time.sleep(5)
                 continue
             
-            image_data = img_response.content
-
-            # 2. Apply Professional Python Overlay
-            if overlay_text:
-                log(f"   🖌️ Drawing text overlay: '{overlay_text}'")
-                image_data = add_text_overlay(image_data, overlay_text)
-            
-            # 3. Upload to ImgBB
             log("   ☁️ Uploading to ImgBB...")
             res = requests.post(
                 "https://api.imgbb.com/1/upload", 
                 data={"key":key, "expiration":0}, 
-                files={"image":image_data},
+                files={"image":img_response.content},
                 timeout=45
             )
             
@@ -564,7 +381,6 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
                 return direct_link
                 
         except Exception as e:
-            log(f"      ⚠️ Image Error (Attempt {attempt+1}): {e}")
             time.sleep(5)
             
     log("❌ Failed to generate/upload image after 3 attempts.")
@@ -743,7 +559,7 @@ def run_pipeline(category, config, mode="trending"):
         # 1. Inject CSS Style
         content = ARTICLE_STYLE 
         
-        # 2. Image Generation (Hybrid: AI + Pillow)
+        # 2. Image Generation
         img_prompt = final.get('imageGenPrompt', f"Abstract {category} technology")
         overlay_text = final.get('imageOverlayText', title[:20])
         img_url = generate_and_upload_image(img_prompt, overlay_text)
@@ -768,20 +584,6 @@ def run_pipeline(category, config, mode="trending"):
         if real_url:
             update_kg(title, real_url, category)
             
-            # --- SOCIAL MEDIA DISTRIBUTION (FIXED) ---
-            if img_url:
-                # Generate Facebook Hook using the ROBUST generate_step (handles 429)
-                fb_prompt = PROMPT_FACEBOOK_HOOK.format(title=title, category=category, url=real_url)
-                fb_json = generate_step(model, fb_prompt, "Generating Facebook Hook")
-                
-                if fb_json:
-                    try:
-                        fb_data = json.loads(fb_json)
-                        # Pass text to social manager to publish
-                        social_manager.distribute_content(fb_data.get('facebook', ''), real_url, img_url)
-                    except:
-                        log("⚠️ Failed to parse Facebook hook JSON.")
-
     except Exception as e:
         log(f"❌ Final processing failed: {e}")
 
