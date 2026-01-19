@@ -6,6 +6,8 @@ import re
 import random
 import sys
 import datetime
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from google import genai
 from google.genai import types
 
@@ -197,7 +199,7 @@ Create author byline and short author bio (40–60 words). Use placeholder if un
 
 **IMAGE STRATEGY:**
 1. `imageGenPrompt`: Create a specific English prompt for an AI image generator. Rules: Abstract, futuristic, technological style (3D render). NO HUMANS, NO FACES, NO ANIMALS, NO TEXT. Focus on concepts.
-2. `imageOverlayText`: A very short, punchy text (2-4 words max) to be written ON the image (e.g., "AI vs Human", "New GPT-5").
+2. `imageOverlayText`: A very short, punchy text (2-5 words max) to be written ON the image (e.g., "AI vs Human", "New GPT-5").
 
 NETWORK-LEVEL OPTIMIZATION:
 Analyze knowledge_graph array and select 3–5 best internal articles to link.
@@ -294,7 +296,7 @@ class KeyManager:
 key_manager = KeyManager()
 
 # ==============================================================================
-# 4. HELPER FUNCTIONS
+# 4. HELPER FUNCTIONS & IMAGE PROCESSING
 # ==============================================================================
 
 def get_blogger_token():
@@ -338,11 +340,97 @@ def publish_post(title, content, labels):
 
 def clean_json(text):
     text = text.strip()
+    # 1. Remove Markdown code blocks
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
-    if match: return match.group(1)
-    match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
-    if match: return match.group(1)
+    if match: 
+        text = match.group(1)
+    else:
+        match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
+        if match: 
+            text = match.group(1)
+    
+    # 2. Fix "Invalid \escape" error
+    # This regex finds backslashes NOT followed by valid JSON escape chars and doubles them
+    text = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
+    
     return text
+
+# --- IMAGE PROCESSING FUNCTIONS (PILLOW) ---
+
+def load_dynamic_font(size):
+    """Downloads a bold font dynamically to ensure it works on GitHub Actions."""
+    # Using Roboto Black for that thick YouTube thumbnail look
+    font_url = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Black.ttf"
+    try:
+        r = requests.get(font_url, timeout=10)
+        return ImageFont.truetype(BytesIO(r.content), size)
+    except:
+        log("⚠️ Could not load custom font, using default.")
+        return ImageFont.load_default()
+
+def create_thumbnail_overlay(image_bytes, text):
+    """
+    Creates a YouTube-style thumbnail:
+    1. Darkens the background slightly for contrast.
+    2. Writes text in center with heavy shadow/stroke.
+    """
+    try:
+        img = Image.open(BytesIO(image_bytes)).convert("RGBA")
+        width, height = img.size
+        
+        # 1. Add a subtle dark overlay to make text pop
+        # Black layer with 30% opacity (approx 80/255)
+        overlay = Image.new('RGBA', img.size, (0, 0, 0, 80)) 
+        img = Image.alpha_composite(img, overlay)
+        
+        draw = ImageDraw.Draw(img)
+        
+        # 2. Dynamic Font Sizing
+        font_size = int(height * 0.15) # Font is 15% of image height
+        font = load_dynamic_font(font_size)
+        
+        # 3. Text Wrapping
+        words = text.split()
+        lines = []
+        current_line = []
+        
+        # Logic to wrap text if it's too wide
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            bbox = draw.textbbox((0, 0), test_line, font=font)
+            text_width = bbox[2] - bbox[0]
+            
+            if text_width < (width * 0.9): # Keep within 90% of width
+                current_line.append(word)
+            else:
+                lines.append(' '.join(current_line))
+                current_line = [word]
+        lines.append(' '.join(current_line))
+        
+        # 4. Draw Text (Centered with Stroke)
+        total_text_height = len(lines) * font_size * 1.2
+        y_text = (height - total_text_height) / 2
+        
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            line_width = bbox[2] - bbox[0]
+            x_text = (width - line_width) / 2
+            
+            # Thick Black Outline (Stroke)
+            stroke_width = int(font_size / 15)
+            draw.text((x_text, y_text), line, font=font, fill="white", stroke_width=stroke_width, stroke_fill="black")
+            
+            y_text += font_size * 1.2 # Line spacing
+
+        # Convert back to RGB for saving
+        final_img = img.convert("RGB")
+        output_buffer = BytesIO()
+        final_img.save(output_buffer, format="JPEG", quality=95)
+        return output_buffer.getvalue()
+        
+    except Exception as e:
+        log(f"⚠️ Image Processing Error: {e}")
+        return image_bytes # Return original if edit fails
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
@@ -350,28 +438,34 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
         log("⚠️ No IMGBB_API_KEY found.")
         return None
     
+    # Enhanced prompt for cinematic background (no text generation requested from AI)
+    enhanced_prompt = f"{prompt_text}, cinematic lighting, detailed, 4k, youtube thumbnail background, sharp focus, --no text, words, watermark"
+    
     log(f"   🎨 Generating Image: '{prompt_text}'...")
     
     for attempt in range(3):
         try:
-            safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, high quality, --no people, humans, animals, faces")
-            text_param = ""
-            if overlay_text:
-                safe_text = requests.utils.quote(overlay_text)
-                text_param = f"&text={safe_text}&font=roboto&fontsize=50"
-
-            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux{text_param}"
+            safe_prompt = requests.utils.quote(enhanced_prompt)
+            # Request image from Pollinations
+            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux"
             
             img_response = requests.get(url, timeout=45)
             if img_response.status_code != 200:
                 time.sleep(5)
                 continue
             
+            # --- Process Image with Pillow ---
+            if overlay_text:
+                log(f"   🖌️ Applying Text Overlay: '{overlay_text}'")
+                final_image_bytes = create_thumbnail_overlay(img_response.content, overlay_text)
+            else:
+                final_image_bytes = img_response.content
+            
             log("   ☁️ Uploading to ImgBB...")
             res = requests.post(
                 "https://api.imgbb.com/1/upload", 
                 data={"key":key, "expiration":0}, 
-                files={"image":img_response.content},
+                files={"image": ("image.jpg", final_image_bytes)},
                 timeout=45
             )
             
@@ -381,6 +475,7 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
                 return direct_link
                 
         except Exception as e:
+            log(f"   ⚠️ Image Gen Error: {e}")
             time.sleep(5)
             
     log("❌ Failed to generate/upload image after 3 attempts.")
@@ -553,13 +648,25 @@ def run_pipeline(category, config, mode="trending"):
 
     # --- FINAL PROCESSING ---
     try:
+        # Attempt 1: Normal Load
         final = json.loads(json_e)
+    except json.JSONDecodeError:
+        try:
+            # Attempt 2: Aggressive Fix for Backslashes
+            log("      ⚠️ JSON Error detected. Attempting aggressive repair...")
+            json_fixed = json_e.replace('\\', '\\\\')
+            final = json.loads(json_fixed)
+        except Exception as e:
+            log(f"❌ Final processing failed (JSON Error): {e}")
+            return
+
+    try:
         title = final.get('finalTitle', f"{category} Article")
         
         # 1. Inject CSS Style
         content = ARTICLE_STYLE 
         
-        # 2. Image Generation
+        # 2. Image Generation (Updated with Pillow Overlay)
         img_prompt = final.get('imageGenPrompt', f"Abstract {category} technology")
         overlay_text = final.get('imageOverlayText', title[:20])
         img_url = generate_and_upload_image(img_prompt, overlay_text)
@@ -585,7 +692,7 @@ def run_pipeline(category, config, mode="trending"):
             update_kg(title, real_url, category)
             
     except Exception as e:
-        log(f"❌ Final processing failed: {e}")
+        log(f"❌ Final processing logic failed: {e}")
 
 # ==============================================================================
 # 7. MAIN
