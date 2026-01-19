@@ -6,8 +6,7 @@ import re
 import random
 import sys
 import datetime
-from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import social_manager  # المكتبة الخاصة بنشر الفيسبوك
 from google import genai
 from google.genai import types
 
@@ -73,7 +72,7 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS
+# 2. PROMPTS DEFINITIONS (FULL ORIGINAL VERSIONS)
 # ==============================================================================
 
 PROMPT_A_TRENDING = """
@@ -199,7 +198,7 @@ Create author byline and short author bio (40–60 words). Use placeholder if un
 
 **IMAGE STRATEGY:**
 1. `imageGenPrompt`: Create a specific English prompt for an AI image generator. Rules: Abstract, futuristic, technological style (3D render). NO HUMANS, NO FACES, NO ANIMALS, NO TEXT. Focus on concepts.
-2. `imageOverlayText`: A very short, punchy text (2-5 words max) to be written ON the image (e.g., "AI vs Human", "New GPT-5").
+2. `imageOverlayText`: A very short, punchy text (2-4 words max) to be written ON the image (e.g., "AI vs Human", "New GPT-5").
 
 NETWORK-LEVEL OPTIMIZATION:
 Analyze knowledge_graph array and select 3–5 best internal articles to link.
@@ -265,20 +264,18 @@ STEP-BY-STEP WORKFLOW:
 """
 
 PROMPT_FACEBOOK_HOOK = """
-You are a Social Media Manager. Create an engaging Facebook post for this article:
+You are a Social Media Manager. Create an engaging Facebook post for this article.
+Input:
 Title: "{title}"
 Category: "{category}"
-Link: "{url}"
 
-**Facebook Rules:**
-- Engaging, uses emojis, asks a question.
-- Length: Max 60 words.
-- Tone: Professional yet exciting.
-
-Output JSON ONLY:
-{{
-  "facebook": "..."
-}}
+Rules:
+1. Write a short, punchy caption (max 50 words).
+2. Use 2-3 emojis relevant to the tech topic.
+3. Ask a question to encourage comments.
+4. Include 3 relevant hashtags at the end.
+5. DO NOT include the article link (system adds it automatically).
+6. Output JSON ONLY in this format: {{"facebook": "YOUR_CAPTION_HERE"}}
 """
 
 # ==============================================================================
@@ -313,7 +310,7 @@ class KeyManager:
 key_manager = KeyManager()
 
 # ==============================================================================
-# 4. HELPER FUNCTIONS & SOCIAL MEDIA
+# 4. HELPER FUNCTIONS
 # ==============================================================================
 
 def get_blogger_token():
@@ -357,6 +354,7 @@ def publish_post(title, content, labels):
 
 def clean_json(text):
     text = text.strip()
+    # 1. Remove Markdown code blocks (existing logic)
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
     if match: 
         text = match.group(1)
@@ -365,103 +363,12 @@ def clean_json(text):
         if match: 
             text = match.group(1)
     
-    # Fix "Invalid \escape" error
+    # 2. Fix "Invalid \escape" error
+    # يقوم هذا السطر بالبحث عن أي شرطة مائلة لا يتبعها حرف هروب صحيح ويقوم بمضاعفتها
+    # Valid JSON escapes: " \ / b f n r t u
     text = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
+    
     return text
-
-def post_to_facebook(content, image_url, link):
-    """Publishes content to Facebook Page."""
-    page_id = os.getenv('FB_PAGE_ID')
-    access_token = os.getenv('FB_PAGE_ACCESS_TOKEN')
-    
-    if not page_id or not access_token:
-        log("⚠️ Facebook credentials missing (FB_PAGE_ID or FB_PAGE_ACCESS_TOKEN).")
-        return
-
-    # Using the /photos endpoint to post an image with a caption
-    post_url = f"https://graph.facebook.com/{page_id}/photos"
-    payload = {
-        'url': image_url,
-        'caption': f"{content}\n\n🔗 Read here: {link}",
-        'access_token': access_token
-    }
-    
-    try:
-        log("   📤 Posting to Facebook...")
-        r = requests.post(post_url, data=payload)
-        if r.status_code == 200:
-            log("   ✅ Posted to Facebook successfully.")
-        else:
-            log(f"   ❌ Facebook Post Failed: {r.text}")
-    except Exception as e:
-        log(f"   ❌ Facebook Error: {e}")
-
-# --- IMAGE PROCESSING FUNCTIONS (PILLOW) ---
-
-def load_dynamic_font(size):
-    """Downloads a bold font dynamically."""
-    font_url = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Black.ttf"
-    try:
-        r = requests.get(font_url, timeout=10)
-        return ImageFont.truetype(BytesIO(r.content), size)
-    except:
-        log("⚠️ Could not load custom font, using default.")
-        return ImageFont.load_default()
-
-def create_thumbnail_overlay(image_bytes, text):
-    """Creates a YouTube-style thumbnail with text overlay."""
-    try:
-        img = Image.open(BytesIO(image_bytes)).convert("RGBA")
-        width, height = img.size
-        
-        # Dark overlay
-        overlay = Image.new('RGBA', img.size, (0, 0, 0, 80)) 
-        img = Image.alpha_composite(img, overlay)
-        
-        draw = ImageDraw.Draw(img)
-        
-        # Dynamic Font Sizing
-        font_size = int(height * 0.15)
-        font = load_dynamic_font(font_size)
-        
-        # Text Wrapping
-        words = text.split()
-        lines = []
-        current_line = []
-        
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            bbox = draw.textbbox((0, 0), test_line, font=font)
-            text_width = bbox[2] - bbox[0]
-            
-            if text_width < (width * 0.9):
-                current_line.append(word)
-            else:
-                lines.append(' '.join(current_line))
-                current_line = [word]
-        lines.append(' '.join(current_line))
-        
-        # Draw Text
-        total_text_height = len(lines) * font_size * 1.2
-        y_text = (height - total_text_height) / 2
-        
-        for line in lines:
-            bbox = draw.textbbox((0, 0), line, font=font)
-            line_width = bbox[2] - bbox[0]
-            x_text = (width - line_width) / 2
-            
-            stroke_width = int(font_size / 15)
-            draw.text((x_text, y_text), line, font=font, fill="white", stroke_width=stroke_width, stroke_fill="black")
-            y_text += font_size * 1.2
-
-        final_img = img.convert("RGB")
-        output_buffer = BytesIO()
-        final_img.save(output_buffer, format="JPEG", quality=95)
-        return output_buffer.getvalue()
-        
-    except Exception as e:
-        log(f"⚠️ Image Processing Error: {e}")
-        return image_bytes
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
@@ -469,30 +376,28 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
         log("⚠️ No IMGBB_API_KEY found.")
         return None
     
-    enhanced_prompt = f"{prompt_text}, cinematic lighting, detailed, 4k, youtube thumbnail background, sharp focus, --no text, words, watermark"
     log(f"   🎨 Generating Image: '{prompt_text}'...")
     
     for attempt in range(3):
         try:
-            safe_prompt = requests.utils.quote(enhanced_prompt)
-            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux"
+            safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, high quality, --no people, humans, animals, faces")
+            text_param = ""
+            if overlay_text:
+                safe_text = requests.utils.quote(overlay_text)
+                text_param = f"&text={safe_text}&font=roboto&fontsize=50"
+
+            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux{text_param}"
             
             img_response = requests.get(url, timeout=45)
             if img_response.status_code != 200:
                 time.sleep(5)
                 continue
             
-            if overlay_text:
-                log(f"   🖌️ Applying Text Overlay: '{overlay_text}'")
-                final_image_bytes = create_thumbnail_overlay(img_response.content, overlay_text)
-            else:
-                final_image_bytes = img_response.content
-            
             log("   ☁️ Uploading to ImgBB...")
             res = requests.post(
                 "https://api.imgbb.com/1/upload", 
                 data={"key":key, "expiration":0}, 
-                files={"image": ("image.jpg", final_image_bytes)},
+                files={"image":img_response.content},
                 timeout=45
             )
             
@@ -502,7 +407,6 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
                 return direct_link
                 
         except Exception as e:
-            log(f"   ⚠️ Image Gen Error: {e}")
             time.sleep(5)
             
     log("❌ Failed to generate/upload image after 3 attempts.")
@@ -518,38 +422,22 @@ def get_recent_titles_string(limit=50):
     titles = [item['title'] for item in kg[-limit:]] if kg else []
     return ", ".join(titles)
 
-# --- OPTIMIZED TOKEN SAVER FUNCTION ---
-def get_relevant_kg_for_linking(current_category, limit=30):
-    """
-    Returns JSON string of relevant articles with REAL URLs.
-    OPTIMIZED: Limits strictly to 30 items to save tokens.
-    """
+def get_relevant_kg_for_linking(current_category, limit=60):
+    """Returns JSON string of relevant articles with REAL URLs."""
     full_kg = load_kg()
     if not full_kg: return "[]"
     
-    # Prioritize same category and guides
     relevant = [item for item in full_kg if item.get('section') == current_category]
     guides = [item for item in full_kg if "Guide" in item.get('title', '') and item.get('section') != current_category]
     
-    # Take latest 15 from category + 10 guides + 5 random/recent
-    combined = relevant[-15:] + guides[:10] + full_kg[-5:]
+    combined = relevant + guides[:10]
+    if len(combined) > limit: combined = combined[-limit:]
     
-    # Deduplicate based on URL
-    seen_urls = set()
-    unique_list = []
-    for item in combined:
-        if item.get('url') and item['url'] not in seen_urls:
-            seen_urls.add(item['url'])
-            unique_list.append(item)
-            
-    # Strict Limit to prevent token explosion
-    if len(unique_list) > limit: 
-        unique_list = unique_list[:limit]
-    
-    simplified = [{"title": item['title'], "url": item['url']} for item in unique_list]
+    simplified = [{"title": item['title'], "url": item['url']} for item in combined if 'url' in item]
     return json.dumps(simplified)
 
 def update_kg(title, url, section):
+    """Updates the KG with the REAL URL returned by Blogger."""
     try:
         data = load_kg()
         for item in data:
@@ -567,26 +455,27 @@ def perform_maintenance_cleanup():
     try:
         kg_path = 'knowledge_graph.json'
         archive_dir = 'archive'
+        
         if not os.path.exists(kg_path): return
         with open(kg_path, 'r', encoding='utf-8') as f: data = json.load(f)
-        
-        # SAFETY VALVE: If file gets too big (800+), archive half of it.
+            
         if len(data) < 800: return
+
         log("   🧹 Performing Database Maintenance...")
-        
         guides = [item for item in data if "Guide" in item.get('title', '')]
         others = [item for item in data if item not in guides]
         
         keep_count = 400
         if len(others) <= keep_count: return
-        
+
         kept_others = others[-keep_count:] 
         to_archive = others[:-keep_count]
         
         new_main_data = guides + kept_others
         with open(kg_path, 'w', encoding='utf-8') as f: json.dump(new_main_data, f, indent=2)
-        
+            
         if not os.path.exists(archive_dir): os.makedirs(archive_dir)
+        
         current_year = datetime.datetime.now().year
         archive_path = os.path.join(archive_dir, f'history_{current_year}.json')
         
@@ -596,6 +485,7 @@ def perform_maintenance_cleanup():
         
         archive_data.extend(to_archive)
         with open(archive_path, 'w', encoding='utf-8') as f: json.dump(archive_data, f, indent=2)
+            
         log(f"   ✅ Archived {len(to_archive)} articles.")
     except Exception as e:
         log(f"   ⚠️ Maintenance Warning: {e}")
@@ -661,35 +551,26 @@ def run_pipeline(category, config, mode="trending"):
 
     json_a = generate_step(model, prompt_a, "Step A (Research)")
     if not json_a: return
-    
-    # Increased wait time to prevent 429 errors
-    log("   ⏳ Waiting 40s to respect API Rate Limits...")
-    time.sleep(40) 
+    time.sleep(10)
 
     # --- STEP B ---
     prompt_b = PROMPT_B_TEMPLATE.format(json_input=json_a)
     json_b = generate_step(model, prompt_b, "Step B (Drafting)")
     if not json_b: return
-    
-    log("   ⏳ Waiting 40s to respect API Rate Limits...")
-    time.sleep(40)
+    time.sleep(10)
 
     # --- STEP C ---
-    relevant_kg_str = get_relevant_kg_for_linking(category, limit=30) # Reduced Limit
+    relevant_kg_str = get_relevant_kg_for_linking(category, limit=50)
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b, knowledge_graph=relevant_kg_str)
     json_c = generate_step(model, prompt_c, "Step C (SEO & Images)")
     if not json_c: return
-    
-    log("   ⏳ Waiting 40s to respect API Rate Limits...")
-    time.sleep(40)
+    time.sleep(10)
 
     # --- STEP D ---
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json_c)
     json_d = generate_step(model, prompt_d, "Step D (Audit)")
     if not json_d: return
-    
-    log("   ⏳ Waiting 40s to respect API Rate Limits...")
-    time.sleep(40)
+    time.sleep(10)
 
     # --- STEP E ---
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
@@ -698,19 +579,25 @@ def run_pipeline(category, config, mode="trending"):
 
     # --- FINAL PROCESSING ---
     try:
+        # Try primary parse
+        final = json.loads(json_e)
+    except json.JSONDecodeError:
         try:
-            final = json.loads(json_e)
-        except json.JSONDecodeError:
+            # Secondary aggressive repair
             log("      ⚠️ JSON Error detected. Attempting aggressive repair...")
-            json_fixed = json_e.replace('\\', '\\\\')
+            json_fixed = json_e.replace('\\', '\\\\') 
             final = json.loads(json_fixed)
+        except Exception as e:
+            log(f"❌ Final processing failed (JSON Error): {e}")
+            return 
 
+    try:
         title = final.get('finalTitle', f"{category} Article")
         
         # 1. Inject CSS Style
         content = ARTICLE_STYLE 
         
-        # 2. Image Generation (Updated with Pillow Overlay)
+        # 2. Image Generation
         img_prompt = final.get('imageGenPrompt', f"Abstract {category} technology")
         overlay_text = final.get('imageOverlayText', title[:20])
         img_url = generate_and_upload_image(img_prompt, overlay_text)
@@ -726,6 +613,7 @@ def run_pipeline(category, config, mode="trending"):
         if 'auditMetadata' in final:
             content += f"<hr style='margin-top:50px; border:0; border-top:1px solid #eee;'><small style='color:#999;'><i>Audit Stats: AI Prob {final['auditMetadata'].get('aiProbability')}%</i></small>"
 
+        # --- FIX: ONLY USE THE CATEGORY NAME AS LABEL ---
         labels = [category]
         
         # Publish and Get Real URL
@@ -733,31 +621,29 @@ def run_pipeline(category, config, mode="trending"):
         
         if real_url:
             update_kg(title, real_url, category)
-            
-            # --- FACEBOOK AUTO-POSTING ---
-            if img_url:
-                log("   📢 Preparing Facebook Post...")
-                time.sleep(10)
-                
-                fb_prompt = PROMPT_FACEBOOK_HOOK.format(title=title, category=category, url=real_url)
-                
-                # Generate Hook
-                fb_json = generate_step(model, fb_prompt, "Generating Facebook Hook")
-                
-                if fb_json:
-                    try:
-                        fb_data = json.loads(fb_json)
-                        fb_text = fb_data.get('facebook', '')
-                        if fb_text:
-                            post_to_facebook(fb_text, img_url, real_url)
-                        else:
-                            log("   ⚠️ Generated Facebook text was empty.")
-                    except Exception as e:
-                        log(f"   ⚠️ Failed to process Facebook JSON: {e}")
-            # -----------------------------
+
+            # ========================================
+            # 📢 FACEBOOK PUBLISHING (Integrated)
+            # ========================================
+            if img_url: 
+                try:
+                    fb_prompt = PROMPT_FACEBOOK_HOOK.format(title=title, category=category)
+                    fb_json = generate_step(model, fb_prompt, "Facebook Hook Generation")
+                    
+                    if fb_json:
+                        try:
+                            fb_data = json.loads(fb_json)
+                        except:
+                             fb_data = json.loads(clean_json(fb_json))
+
+                        facebook_text = fb_data.get('facebook', '')
+                        social_manager.distribute_content(facebook_text, real_url, img_url)
+                        
+                except Exception as e:
+                    log(f"⚠️ Facebook Automation Skipped: {e}")
             
     except Exception as e:
-        log(f"❌ Final processing logic failed: {e}")
+        log(f"❌ Final processing failed: {e}")
 
 # ==============================================================================
 # 7. MAIN
