@@ -288,7 +288,8 @@ Rules:
 2. Make it sound like a quick text conversation (Short sentences, Emojis).
 3. Language: ENGLISH ONLY.
 4. Max 10-12 exchange messages total.
-5. Output JSON ONLY:
+5. DO NOT use backslashes or LaTeX formatting.
+6. Output JSON ONLY:
 [
   {{"speaker": "Alex", "type": "send", "text": "..."}},
   {{"speaker": "Sam", "type": "receive", "text": "..."}}
@@ -384,6 +385,7 @@ def publish_post(title, content, labels):
         return None
 
 def clean_json(text):
+    """Cleans JSON string from Markdown and common errors."""
     text = text.strip()
     # 1. Remove Markdown code blocks
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
@@ -394,10 +396,44 @@ def clean_json(text):
         if match: 
             text = match.group(1)
     
-    # 2. Fix "Invalid \escape" error
-    text = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
-    
+    # 2. Remove "JSON" word if it appears at start
+    if text.lower().startswith("json"):
+        text = text[4:].strip()
+
     return text
+
+def try_parse_json(text, context=""):
+    """Robust JSON parsing with multiple fallback strategies."""
+    # Strategy 1: Direct Parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: Fix Backslashes (Common Invalid \escape error)
+    try:
+        # Replace single backslashes with double, but try to preserve valid escapes
+        # This regex looks for backslashes NOT followed by valid escape chars
+        fixed_text = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
+        return json.loads(fixed_text)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 3: Aggressive Backslash Fix (Double ALL backslashes)
+    try:
+        fixed_text = text.replace('\\', '\\\\')
+        return json.loads(fixed_text)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 4: Fix Control Characters (Newlines in strings)
+    try:
+        # Remove newlines that are not escaped
+        fixed_text = text.replace('\n', ' ').replace('\r', '')
+        return json.loads(fixed_text)
+    except json.JSONDecodeError as e:
+        log(f"      ❌ JSON Parse Failed in {context}: {e}")
+        return None
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
@@ -607,54 +643,59 @@ def run_pipeline(category, config, mode="trending"):
     video_embed_html = ""
     try:
         # Parse JSON D to get content for script generation
-        final_d = json.loads(json_d)
-        content_text_only = re.sub('<[^<]+?>', '', final_d.get('draftContent', '')) 
+        final_d = try_parse_json(json_d, "Step D Parsing")
         
-        # 1. Generate Script
-        log("   🎬 Step F: Generating Video Script...")
-        script_prompt = PROMPT_VIDEO_SCRIPT.format(article_text=content_text_only[:4000])
-        script_json = generate_step(model, script_prompt, "Video Scripting")
-        
-        if script_json:
-            chat_script = json.loads(script_json)
+        if final_d:
+            content_text_only = re.sub('<[^<]+?>', '', final_d.get('draftContent', '')) 
             
-            # 2. Render Video
-            renderer = video_renderer.VideoRenderer()
-            video_filename = f"vid_{int(time.time())}.mp4"
-            video_path = renderer.render_video(chat_script, filename=video_filename)
+            # 1. Generate Script
+            log("   🎬 Step F: Generating Video Script...")
+            script_prompt = PROMPT_VIDEO_SCRIPT.format(article_text=content_text_only[:4000])
+            script_json_text = generate_step(model, script_prompt, "Video Scripting")
             
-            if video_path and os.path.exists(video_path):
-                # 3. Generate YouTube Metadata
-                yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=final_d.get('draftTitle', ''))
-                yt_meta_json = generate_step(model, yt_prompt, "YouTube SEO")
+            if script_json_text:
+                # Use robust parser for script
+                chat_script = try_parse_json(script_json_text, "Video Script Parsing")
                 
-                if yt_meta_json:
-                    yt_meta = json.loads(yt_meta_json)
+                if chat_script:
+                    # 2. Render Video
+                    renderer = video_renderer.VideoRenderer()
+                    video_filename = f"vid_{int(time.time())}.mp4"
+                    video_path = renderer.render_video(chat_script, filename=video_filename)
                     
-                    # 4. Upload to YouTube
-                    short_link, embed_link = youtube_manager.upload_video_to_youtube(
-                        video_path, 
-                        yt_meta.get('title', 'Tech Update'),
-                        yt_meta.get('description', 'Latest Tech News') + "\n\nRead more at our blog!",
-                        yt_meta.get('tags', [])
-                    )
-                    
-                    if embed_link:
-                        # 5. Create Embed HTML
-                        video_embed_html = f"""
-                        <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; margin: 30px 0;">
-                            <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 10px;" 
-                            src="{embed_link}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-                        </div>
-                        """
+                    if video_path and os.path.exists(video_path):
+                        # 3. Generate YouTube Metadata
+                        yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=final_d.get('draftTitle', ''))
+                        yt_meta_json_text = generate_step(model, yt_prompt, "YouTube SEO")
                         
-                        # Inject into content (Prepend to content)
-                        current_content = final_d.get('draftContent', '')
-                        final_d['draftContent'] = video_embed_html + current_content
-                        
-                        # Update json_d for the next step
-                        json_d = json.dumps(final_d)
-                        log("   ✅ Video integrated into Article Content.")
+                        if yt_meta_json_text:
+                            yt_meta = try_parse_json(yt_meta_json_text, "YouTube Meta Parsing")
+                            
+                            if yt_meta:
+                                # 4. Upload to YouTube
+                                short_link, embed_link = youtube_manager.upload_video_to_youtube(
+                                    video_path, 
+                                    yt_meta.get('title', 'Tech Update'),
+                                    yt_meta.get('description', 'Latest Tech News') + "\n\nRead more at our blog!",
+                                    yt_meta.get('tags', [])
+                                )
+                                
+                                if embed_link:
+                                    # 5. Create Embed HTML
+                                    video_embed_html = f"""
+                                    <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; margin: 30px 0;">
+                                        <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 10px;" 
+                                        src="{embed_link}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                                    </div>
+                                    """
+                                    
+                                    # Inject into content (Prepend to content)
+                                    current_content = final_d.get('draftContent', '')
+                                    final_d['draftContent'] = video_embed_html + current_content
+                                    
+                                    # Update json_d for the next step
+                                    json_d = json.dumps(final_d)
+                                    log("   ✅ Video integrated into Article Content.")
             
     except Exception as e:
         log(f"⚠️ Video Generation Failed (Skipping): {e}")
@@ -666,19 +707,13 @@ def run_pipeline(category, config, mode="trending"):
 
     # --- FINAL PROCESSING ---
     try:
-        # Try primary parse
-        final = json.loads(json_e)
-    except json.JSONDecodeError:
-        try:
-            # Secondary aggressive repair
-            log("      ⚠️ JSON Error detected. Attempting aggressive repair...")
-            json_fixed = json_e.replace('\\', '\\\\') 
-            final = json.loads(json_fixed)
-        except Exception as e:
-            log(f"❌ Final processing failed (JSON Error): {e}")
-            return 
+        # Use robust parser for final step
+        final = try_parse_json(json_e, "Step E Parsing")
+        
+        if not final:
+            log("❌ Final processing failed: Could not parse JSON after multiple attempts.")
+            return
 
-    try:
         title = final.get('finalTitle', f"{category} Article")
         
         # 1. Inject CSS Style
@@ -715,16 +750,13 @@ def run_pipeline(category, config, mode="trending"):
             if img_url: 
                 try:
                     fb_prompt = PROMPT_FACEBOOK_HOOK.format(title=title, category=category)
-                    fb_json = generate_step(model, fb_prompt, "Facebook Hook Generation")
+                    fb_json_text = generate_step(model, fb_prompt, "Facebook Hook Generation")
                     
-                    if fb_json:
-                        try:
-                            fb_data = json.loads(fb_json)
-                        except:
-                             fb_data = json.loads(clean_json(fb_json))
-
-                        facebook_text = fb_data.get('facebook', '')
-                        social_manager.distribute_content(facebook_text, real_url, img_url)
+                    if fb_json_text:
+                        fb_data = try_parse_json(fb_json_text, "Facebook Parsing")
+                        if fb_data:
+                            facebook_text = fb_data.get('facebook', '')
+                            social_manager.distribute_content(facebook_text, real_url, img_url)
                         
                 except Exception as e:
                     log(f"⚠️ Facebook Automation Skipped: {e}")
