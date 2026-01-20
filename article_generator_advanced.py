@@ -74,7 +74,7 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL ORIGINAL VERSIONS)
+# 2. PROMPTS DEFINITIONS (FULL VERSIONS)
 # ==============================================================================
 
 PROMPT_A_TRENDING = """
@@ -281,16 +281,16 @@ Rules:
 """
 
 PROMPT_VIDEO_SCRIPT = """
-You are a Screenwriter. Create a Chat/Messaging script between two characters (Alex: AI Expert, Sam: Curious User) based on this SPECIFIC article.
+You are a Screenwriter. Create a Chat/Messaging script between two characters (Alex: AI Expert, Sam: Curious User) based on this SPECIFIC news headline.
 
-INPUT TITLE: "{title}"
-INPUT TEXT SUMMARY: "{text_summary}"
+INPUT HEADLINE: "{title}"
+INPUT SUMMARY: "{text_summary}"
 
 Rules:
-1. The script MUST be about the Input Title above. Do NOT hallucinate a different topic.
-2. Make it sound like a quick text conversation (Short sentences, Emojis).
+1. The script MUST be strictly about the Input Headline. DO NOT write about generic "Tech News".
+2. Mention specific company names, numbers, or models from the summary.
 3. Language: ENGLISH ONLY.
-4. Max 8-10 exchange messages total (Keep it short for Shorts/Reels).
+4. Max 8-10 exchange messages total.
 5. DO NOT use backslashes or LaTeX formatting.
 6. Output JSON ONLY:
 [
@@ -300,12 +300,12 @@ Rules:
 """
 
 PROMPT_YOUTUBE_METADATA = """
-You are a YouTube SEO Expert. Based on this article title, generate metadata.
-Input Title: {draft_title}
+You are a YouTube SEO Expert. Based on this specific headline, generate metadata.
+Input Headline: {draft_title}
 
 Output JSON ONLY:
 {{
-  "title": "Catchy YouTube Title (Max 60 chars)",
+  "title": "Catchy YouTube Title (Max 60 chars) - Must relate to {draft_title}",
   "description": "Engaging description (first 2 lines hook), includes keywords.",
   "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
 }}
@@ -556,19 +556,6 @@ def perform_maintenance_cleanup():
     except Exception as e:
         log(f"   ⚠️ Maintenance Warning: {e}")
 
-def estimate_blogger_url(title):
-    """Estimates the Blogger URL to put in YouTube description before publishing."""
-    # Clean title to slug
-    slug = re.sub(r'[^a-zA-Z0-9\s-]', '', title).strip().lower()
-    slug = re.sub(r'[\s-]+', '-', slug)
-    
-    today = datetime.date.today()
-    year = today.year
-    month = f"{today.month:02d}"
-    
-    # Placeholder URL structure
-    return f"https://www.latestai.me/{year}/{month}/{slug}.html"
-
 # ==============================================================================
 # 5. CORE GENERATION LOGIC
 # ==============================================================================
@@ -652,84 +639,86 @@ def run_pipeline(category, config, mode="trending"):
     time.sleep(10)
 
     # -------------------------------------------------------------
-    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (FIXED)
+    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (FIXED & WIDE)
     # -------------------------------------------------------------
     video_embed_html = ""
+    uploaded_video_id = None # To store ID for later update
+    youtube_description_cache = "" # To store description for later update
+
     try:
-        # Parse JSON D to get content for script generation
         final_d = try_parse_json(json_d, "Step D Parsing")
         
+        # Try to get the original headline from json_a if possible, otherwise draftTitle
+        data_a = try_parse_json(json_a, "Step A Parsing") if json_a else {}
+        
+        # Use the most specific title available (Headline from Research is best)
+        specific_title = data_a.get('headline') if data_a else final_d.get('draftTitle', 'Tech News')
+        
         if final_d:
-            # CRITICAL FIX: Pass Title explicitly to avoid hallucination
-            draft_title = final_d.get('draftTitle', 'Tech News')
-            content_text = re.sub('<[^<]+?>', '', final_d.get('draftContent', ''))[:1000] # First 1000 chars
+            content_text = re.sub('<[^<]+?>', '', final_d.get('draftContent', ''))[:1000]
             
-            log(f"   🎬 Step F: Generating Video Script for '{draft_title}'...")
+            log(f"   🎬 Step F: Generating Video Script for '{specific_title}'...")
             
-            script_prompt = PROMPT_VIDEO_SCRIPT.format(title=draft_title, text_summary=content_text)
+            script_prompt = PROMPT_VIDEO_SCRIPT.format(title=specific_title, text_summary=content_text)
             script_json_text = generate_step(model, script_prompt, "Video Scripting")
             
             if script_json_text:
-                # Use robust parser for script
                 chat_script = try_parse_json(script_json_text, "Video Script Parsing")
                 
                 if chat_script:
-                    # 2. Render Video (Pass Title for Header)
+                    # Render Video (Wide 16:9)
                     renderer = video_renderer.VideoRenderer()
                     video_filename = f"vid_{int(time.time())}.mp4"
-                    video_path = renderer.render_video(chat_script, draft_title, filename=video_filename)
+                    video_path = renderer.render_video(chat_script, specific_title, filename=video_filename)
                     
                     if video_path and os.path.exists(video_path):
-                        # 3. Generate YouTube Metadata
-                        yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=draft_title)
-                        yt_meta_json_text = generate_step(model, yt_prompt, "YouTube SEO")
+                        # YouTube SEO
+                        yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=specific_title)
+                        yt_meta_json = generate_step(model, yt_prompt, "YouTube SEO")
                         
-                        if yt_meta_json_text:
-                            yt_meta = try_parse_json(yt_meta_json_text, "YouTube Meta Parsing")
+                        if yt_meta_json:
+                            yt_meta = try_parse_json(yt_meta_json, "YouTube Meta")
                             
-                            if yt_meta:
-                                # Estimate URL for Description
-                                estimated_url = estimate_blogger_url(draft_title)
-                                description = yt_meta.get('description', '') + f"\n\n📄 Read full article: {estimated_url}\n👉 Subscribe for more AI News!"
-
-                                # 4. Upload to YouTube
-                                short_link, embed_link = youtube_manager.upload_video_to_youtube(
-                                    video_path, 
-                                    yt_meta.get('title', draft_title),
-                                    description,
-                                    yt_meta.get('tags', [])
-                                )
+                            # Initial Description (Placeholder URL)
+                            youtube_description_cache = yt_meta.get('description', '')
+                            initial_desc = youtube_description_cache + "\n\n📄 Read full article: [Link coming soon]\n👉 Subscribe for more AI News!"
+                            
+                            # Upload
+                            vid_id, embed_link = youtube_manager.upload_video_to_youtube(
+                                video_path, 
+                                yt_meta.get('title', specific_title),
+                                initial_desc,
+                                yt_meta.get('tags', [])
+                            )
+                            
+                            if vid_id:
+                                uploaded_video_id = vid_id # Save ID
                                 
-                                if embed_link:
-                                    # 5. Create Embed HTML
-                                    video_embed_html = f"""
-                                    <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; margin: 30px 0;">
-                                        <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 10px;" 
-                                        src="{embed_link}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-                                    </div>
-                                    """
-                                    
-                                    # Inject into content (Prepend to content)
-                                    current_content = final_d.get('draftContent', '')
-                                    final_d['draftContent'] = video_embed_html + current_content
-                                    
-                                    # Update json_d for the next step
-                                    json_d = json.dumps(final_d)
-                                    log("   ✅ Video integrated into Article Content.")
+                                # Create Embed HTML (Responsive 16:9)
+                                video_embed_html = f"""
+                                <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; margin: 30px 0;">
+                                    <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 10px;" 
+                                    src="https://www.youtube.com/embed/{vid_id}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                                </div>
+                                """
+                                
+                                # Inject into content
+                                current_content = final_d.get('draftContent', '')
+                                final_d['draftContent'] = video_embed_html + current_content
+                                json_d = json.dumps(final_d)
+                                log("   ✅ Video integrated into Article Content.")
             
     except Exception as e:
-        log(f"⚠️ Video Generation Failed (Skipping): {e}")
+        log(f"⚠️ Video Generation Failed: {e}")
 
     # --- STEP E ---
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
     json_e = generate_step(model, prompt_e, "Step E (Final)")
     if not json_e: return
 
-    # --- FINAL PROCESSING ---
+    # --- FINAL PROCESSING & PUBLISHING ---
     try:
-        # Use robust parser for final step
         final = try_parse_json(json_e, "Step E Parsing")
-        
         if not final:
             log("❌ Final processing failed: Could not parse JSON after multiple attempts.")
             return
@@ -763,6 +752,13 @@ def run_pipeline(category, config, mode="trending"):
         
         if real_url:
             update_kg(title, real_url, category)
+            
+            # ---------------------------------------------------------
+            # 🔄 UPDATE YOUTUBE DESCRIPTION WITH REAL URL (NEW)
+            # ---------------------------------------------------------
+            if uploaded_video_id:
+                new_desc = youtube_description_cache + f"\n\n📄 Read full article: {real_url}\n👉 Subscribe for more AI News!"
+                youtube_manager.update_video_description(uploaded_video_id, new_desc)
 
             # ========================================
             # 📢 FACEBOOK PUBLISHING (Integrated)
