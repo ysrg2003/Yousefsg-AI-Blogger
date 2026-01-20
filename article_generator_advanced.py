@@ -74,7 +74,7 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS
+# 2. PROMPTS DEFINITIONS (FULL ORIGINAL VERSIONS)
 # ==============================================================================
 
 PROMPT_A_TRENDING = """
@@ -281,26 +281,27 @@ Rules:
 """
 
 PROMPT_VIDEO_SCRIPT = """
-You are a Screenwriter. Create a Chat/Messaging script between two characters (Alex: AI Expert, Sam: Curious User) based on this article.
+You are a Screenwriter. Create a Chat/Messaging script between two characters (Alex: AI Expert, Sam: Curious User) based on this SPECIFIC article.
+
+INPUT TITLE: "{title}"
+INPUT TEXT SUMMARY: "{text_summary}"
 
 Rules:
-1. Summarize the main exciting point of the article.
+1. The script MUST be about the Input Title above. Do NOT hallucinate a different topic.
 2. Make it sound like a quick text conversation (Short sentences, Emojis).
 3. Language: ENGLISH ONLY.
-4. Max 10-12 exchange messages total.
+4. Max 8-10 exchange messages total (Keep it short for Shorts/Reels).
 5. DO NOT use backslashes or LaTeX formatting.
 6. Output JSON ONLY:
 [
   {{"speaker": "Alex", "type": "send", "text": "..."}},
   {{"speaker": "Sam", "type": "receive", "text": "..."}}
 ]
-Input Article:
-{article_text}
 """
 
 PROMPT_YOUTUBE_METADATA = """
-You are a YouTube SEO Expert. Based on this article, generate metadata for a video.
-Input Article: {draft_title}
+You are a YouTube SEO Expert. Based on this article title, generate metadata.
+Input Title: {draft_title}
 
 Output JSON ONLY:
 {{
@@ -555,6 +556,19 @@ def perform_maintenance_cleanup():
     except Exception as e:
         log(f"   ⚠️ Maintenance Warning: {e}")
 
+def estimate_blogger_url(title):
+    """Estimates the Blogger URL to put in YouTube description before publishing."""
+    # Clean title to slug
+    slug = re.sub(r'[^a-zA-Z0-9\s-]', '', title).strip().lower()
+    slug = re.sub(r'[\s-]+', '-', slug)
+    
+    today = datetime.date.today()
+    year = today.year
+    month = f"{today.month:02d}"
+    
+    # Placeholder URL structure
+    return f"https://www.latestai.me/{year}/{month}/{slug}.html"
+
 # ==============================================================================
 # 5. CORE GENERATION LOGIC
 # ==============================================================================
@@ -638,7 +652,7 @@ def run_pipeline(category, config, mode="trending"):
     time.sleep(10)
 
     # -------------------------------------------------------------
-    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (Inserted BEFORE Step E)
+    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (FIXED)
     # -------------------------------------------------------------
     video_embed_html = ""
     try:
@@ -646,11 +660,13 @@ def run_pipeline(category, config, mode="trending"):
         final_d = try_parse_json(json_d, "Step D Parsing")
         
         if final_d:
-            content_text_only = re.sub('<[^<]+?>', '', final_d.get('draftContent', '')) 
+            # CRITICAL FIX: Pass Title explicitly to avoid hallucination
+            draft_title = final_d.get('draftTitle', 'Tech News')
+            content_text = re.sub('<[^<]+?>', '', final_d.get('draftContent', ''))[:1000] # First 1000 chars
             
-            # 1. Generate Script
-            log("   🎬 Step F: Generating Video Script...")
-            script_prompt = PROMPT_VIDEO_SCRIPT.format(article_text=content_text_only[:4000])
+            log(f"   🎬 Step F: Generating Video Script for '{draft_title}'...")
+            
+            script_prompt = PROMPT_VIDEO_SCRIPT.format(title=draft_title, text_summary=content_text)
             script_json_text = generate_step(model, script_prompt, "Video Scripting")
             
             if script_json_text:
@@ -658,25 +674,29 @@ def run_pipeline(category, config, mode="trending"):
                 chat_script = try_parse_json(script_json_text, "Video Script Parsing")
                 
                 if chat_script:
-                    # 2. Render Video
+                    # 2. Render Video (Pass Title for Header)
                     renderer = video_renderer.VideoRenderer()
                     video_filename = f"vid_{int(time.time())}.mp4"
-                    video_path = renderer.render_video(chat_script, filename=video_filename)
+                    video_path = renderer.render_video(chat_script, draft_title, filename=video_filename)
                     
                     if video_path and os.path.exists(video_path):
                         # 3. Generate YouTube Metadata
-                        yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=final_d.get('draftTitle', ''))
+                        yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=draft_title)
                         yt_meta_json_text = generate_step(model, yt_prompt, "YouTube SEO")
                         
                         if yt_meta_json_text:
                             yt_meta = try_parse_json(yt_meta_json_text, "YouTube Meta Parsing")
                             
                             if yt_meta:
+                                # Estimate URL for Description
+                                estimated_url = estimate_blogger_url(draft_title)
+                                description = yt_meta.get('description', '') + f"\n\n📄 Read full article: {estimated_url}\n👉 Subscribe for more AI News!"
+
                                 # 4. Upload to YouTube
                                 short_link, embed_link = youtube_manager.upload_video_to_youtube(
                                     video_path, 
-                                    yt_meta.get('title', 'Tech Update'),
-                                    yt_meta.get('description', 'Latest Tech News') + "\n\nRead more at our blog!",
+                                    yt_meta.get('title', draft_title),
+                                    description,
                                     yt_meta.get('tags', [])
                                 )
                                 
