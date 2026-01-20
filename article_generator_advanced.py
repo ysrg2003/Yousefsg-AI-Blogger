@@ -287,15 +287,18 @@ INPUT HEADLINE: "{title}"
 INPUT SUMMARY: "{text_summary}"
 
 Rules:
-1. The script MUST be strictly about the Input Headline. DO NOT write about generic "Tech News".
-2. Mention specific company names, numbers, or models from the summary.
-3. Language: ENGLISH ONLY.
-4. Max 8-10 exchange messages total.
-5. DO NOT use backslashes or LaTeX formatting.
-6. Output JSON ONLY:
+1. **CRITICAL:** Split long thoughts into MULTIPLE short messages (Max 10-12 words per bubble).
+2. It is okay to have the same speaker send 2-3 messages in a row.
+3. The text must be HUGE and readable, so keep sentences SHORT.
+4. Strictly about the Input Headline.
+5. Language: ENGLISH ONLY.
+6. Total script length: 15-20 short messages.
+7. Output JSON ONLY:
 [
-  {{"speaker": "Alex", "type": "send", "text": "..."}},
-  {{"speaker": "Sam", "type": "receive", "text": "..."}}
+  {{"speaker": "Alex", "type": "send", "text": "Did you see the new update?"}},
+  {{"speaker": "Alex", "type": "send", "text": "It's absolutely massive for AI speed."}},
+  {{"speaker": "Sam", "type": "receive", "text": "No, what happened?"}},
+  {{"speaker": "Sam", "type": "receive", "text": "Tell me more!"}}
 ]
 """
 
@@ -408,7 +411,13 @@ def try_parse_json(text, context=""):
     # Strategy 1: Direct Parse
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        # Strategy 1.5: Handle "Extra data" error (content after JSON)
+        if "Extra data" in str(e):
+            try:
+                # Truncate text at the position of the error
+                return json.loads(text[:e.pos])
+            except: pass
         pass
 
     # Strategy 2: Fix Backslashes (Common Invalid \escape error)
@@ -427,14 +436,20 @@ def try_parse_json(text, context=""):
     except json.JSONDecodeError:
         pass
 
-    # Strategy 4: Fix Control Characters (Newlines in strings)
+    # Strategy 4: Find first [ and last ] for lists
     try:
-        # Remove newlines that are not escaped
-        fixed_text = text.replace('\n', ' ').replace('\r', '')
-        return json.loads(fixed_text)
-    except json.JSONDecodeError as e:
-        log(f"      ❌ JSON Parse Failed in {context}: {e}")
-        return None
+        match = re.search(r'(\[.*\])', text, re.DOTALL)
+        if match: return json.loads(match.group(1))
+    except: pass
+
+    # Strategy 5: Find first { and last } for objects
+    try:
+        match = re.search(r'(\{.*\})', text, re.DOTALL)
+        if match: return json.loads(match.group(1))
+    except: pass
+
+    log(f"      ❌ JSON Parse Failed in {context}.")
+    return None
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
@@ -556,6 +571,19 @@ def perform_maintenance_cleanup():
     except Exception as e:
         log(f"   ⚠️ Maintenance Warning: {e}")
 
+def estimate_blogger_url(title):
+    """Estimates the Blogger URL to put in YouTube description before publishing."""
+    # Clean title to slug
+    slug = re.sub(r'[^a-zA-Z0-9\s-]', '', title).strip().lower()
+    slug = re.sub(r'[\s-]+', '-', slug)
+    
+    today = datetime.date.today()
+    year = today.year
+    month = f"{today.month:02d}"
+    
+    # Placeholder URL structure
+    return f"https://www.latestai.me/{year}/{month}/{slug}.html"
+
 # ==============================================================================
 # 5. CORE GENERATION LOGIC
 # ==============================================================================
@@ -639,19 +667,16 @@ def run_pipeline(category, config, mode="trending"):
     time.sleep(10)
 
     # -------------------------------------------------------------
-    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (FIXED & WIDE)
+    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (HUGE TEXT)
     # -------------------------------------------------------------
     video_embed_html = ""
-    uploaded_video_id = None # To store ID for later update
-    youtube_description_cache = "" # To store description for later update
+    uploaded_video_id = None 
+    youtube_description_cache = "" 
 
     try:
         final_d = try_parse_json(json_d, "Step D Parsing")
+        data_a = try_parse_json(json_a, "Step A Parsing") if 'json_a' in locals() and json_a else {}
         
-        # Try to get the original headline from json_a if possible, otherwise draftTitle
-        data_a = try_parse_json(json_a, "Step A Parsing") if json_a else {}
-        
-        # Use the most specific title available (Headline from Research is best)
         specific_title = data_a.get('headline') if data_a else final_d.get('draftTitle', 'Tech News')
         
         if final_d:
@@ -666,7 +691,7 @@ def run_pipeline(category, config, mode="trending"):
                 chat_script = try_parse_json(script_json_text, "Video Script Parsing")
                 
                 if chat_script:
-                    # Render Video (Wide 16:9)
+                    # Render Video (Huge Text)
                     renderer = video_renderer.VideoRenderer()
                     video_filename = f"vid_{int(time.time())}.mp4"
                     video_path = renderer.render_video(chat_script, specific_title, filename=video_filename)
@@ -679,7 +704,7 @@ def run_pipeline(category, config, mode="trending"):
                         if yt_meta_json:
                             yt_meta = try_parse_json(yt_meta_json, "YouTube Meta")
                             
-                            # Initial Description (Placeholder URL)
+                            # Initial Description
                             youtube_description_cache = yt_meta.get('description', '')
                             initial_desc = youtube_description_cache + "\n\n📄 Read full article: [Link coming soon]\n👉 Subscribe for more AI News!"
                             
@@ -692,9 +717,9 @@ def run_pipeline(category, config, mode="trending"):
                             )
                             
                             if vid_id:
-                                uploaded_video_id = vid_id # Save ID
+                                uploaded_video_id = vid_id 
                                 
-                                # Create Embed HTML (Responsive 16:9)
+                                # Create Embed HTML
                                 video_embed_html = f"""
                                 <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; margin: 30px 0;">
                                     <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 10px;" 
@@ -724,11 +749,9 @@ def run_pipeline(category, config, mode="trending"):
             return
 
         title = final.get('finalTitle', f"{category} Article")
-        
-        # 1. Inject CSS Style
         content = ARTICLE_STYLE 
         
-        # 2. Image Generation
+        # Image Gen
         img_prompt = final.get('imageGenPrompt', f"Abstract {category} technology")
         overlay_text = final.get('imageOverlayText', title[:20])
         img_url = generate_and_upload_image(img_prompt, overlay_text)
@@ -738,42 +761,29 @@ def run_pipeline(category, config, mode="trending"):
             img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}"><img border="0" src="{img_url}" alt="{alt_text}" /></a></div>'
             content += img_html
         
-        # 3. Add Content
         content += final.get('finalContent', '')
-
-        if 'auditMetadata' in final:
-            content += f"<hr style='margin-top:50px; border:0; border-top:1px solid #eee;'><small style='color:#999;'><i>Audit Stats: AI Prob {final['auditMetadata'].get('aiProbability')}%</i></small>"
-
-        # --- FIX: ONLY USE THE CATEGORY NAME AS LABEL ---
-        labels = [category]
         
-        # Publish and Get Real URL
+        # Publish to Blogger
+        labels = [category]
         real_url = publish_post(title, content, labels)
         
         if real_url:
             update_kg(title, real_url, category)
             
-            # ---------------------------------------------------------
-            # 🔄 UPDATE YOUTUBE DESCRIPTION WITH REAL URL (NEW)
-            # ---------------------------------------------------------
+            # Update YouTube Description
             if uploaded_video_id:
                 new_desc = youtube_description_cache + f"\n\n📄 Read full article: {real_url}\n👉 Subscribe for more AI News!"
                 youtube_manager.update_video_description(uploaded_video_id, new_desc)
 
-            # ========================================
-            # 📢 FACEBOOK PUBLISHING (Integrated)
-            # ========================================
+            # Facebook
             if img_url: 
                 try:
                     fb_prompt = PROMPT_FACEBOOK_HOOK.format(title=title, category=category)
                     fb_json_text = generate_step(model, fb_prompt, "Facebook Hook Generation")
-                    
                     if fb_json_text:
                         fb_data = try_parse_json(fb_json_text, "Facebook Parsing")
                         if fb_data:
-                            facebook_text = fb_data.get('facebook', '')
-                            social_manager.distribute_content(facebook_text, real_url, img_url)
-                        
+                            social_manager.distribute_content(fb_data.get('facebook', ''), real_url, img_url)
                 except Exception as e:
                     log(f"⚠️ Facebook Automation Skipped: {e}")
             
