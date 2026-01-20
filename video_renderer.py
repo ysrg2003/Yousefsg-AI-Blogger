@@ -8,10 +8,12 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
 
 class VideoRenderer:
-    def __init__(self, assets_dir='assets', output_dir='output'):
+    # تعديل: إضافة width و height كمعاملات اختيارية
+    def __init__(self, assets_dir='assets', output_dir='output', width=1920, height=1080):
         self.assets_dir = assets_dir
         self.output_dir = output_dir
-        self.w, self.h = 1920, 1080 
+        self.w = width
+        self.h = height
         self.fps = 24
         
         # Colors
@@ -25,38 +27,33 @@ class VideoRenderer:
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(assets_dir, exist_ok=True)
         
-        # --- 1. تحميل الخطوط (الحل الجذري) ---
-        # نحاول استخدام خطوط النظام في لينكس (GitHub Actions) مباشرة
-        # هذا يمنع المشكلة التي تجعل الخط يعود للحجم الصغير
-        self.font = self._load_best_font(100) # حجم ضخم 100
-        self.header_font = self._load_best_font(60)
-        self.sub_header_font = self._load_best_font(40)
-        self.time_font = self._load_best_font(35)
+        # تعديل حجم الخط بناءً على دقة الفيديو
+        # إذا كان فيديو طولي (Shorts)، نصغر الخط قليلاً ليتناسب مع العرض الضيق
+        base_font_size = 100 if self.w > 1500 else 70 
+        
+        self.font = self._load_best_font(base_font_size)
+        self.header_font = self._load_best_font(int(base_font_size * 0.6))
+        self.sub_header_font = self._load_best_font(int(base_font_size * 0.4))
+        self.time_font = self._load_best_font(int(base_font_size * 0.35))
 
-        # --- 2. تحميل صورة البروفايل ---
+        # تحميل صورة البروفايل
         self.profile_pic = self._load_profile_image("https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791")
 
         self.snd_sent = self._load_audio("send.wav")
         self.snd_recv = self._load_audio("receive.wav")
 
     def _load_best_font(self, size):
-        """يحاول العثور على أفضل خط متاح في النظام لتجنب الخط الافتراضي الصغير."""
         font_candidates = [
-            # مسارات خطوط لينكس (Ubuntu/GitHub Actions)
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
             "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-            # مسار محلي احتياطي
             os.path.join(self.assets_dir, "Roboto-Bold.ttf")
         ]
-        
         for path in font_candidates:
             if os.path.exists(path):
-                try:
-                    return ImageFont.truetype(path, size)
+                try: return ImageFont.truetype(path, size)
                 except: continue
         
-        # محاولة أخيرة لتحميل روبوتو من النت إذا لم نجد شيئاً
         try:
             font_path = os.path.join(self.assets_dir, "Roboto-Bold.ttf")
             if not os.path.exists(font_path):
@@ -65,30 +62,21 @@ class VideoRenderer:
                 with open(font_path, 'wb') as f: f.write(r.content)
             return ImageFont.truetype(font_path, size)
         except:
-            print("⚠️ WARNING: Using default font! Text will be tiny.")
             return ImageFont.load_default()
 
     def _load_profile_image(self, url):
-        """تحميل وقص صورة البروفايل كدائرة."""
         try:
             response = requests.get(url)
             img = Image.open(BytesIO(response.content)).convert("RGBA")
-            
-            # تغيير الحجم
             size = (120, 120)
             img = img.resize(size, Image.LANCZOS)
-            
-            # عمل قناع دائري
             mask = Image.new('L', size, 0)
             draw = ImageDraw.Draw(mask)
             draw.ellipse((0, 0) + size, fill=255)
-            
             output = ImageOps.fit(img, mask.size, centering=(0.5, 0.5))
             output.putalpha(mask)
             return output
-        except Exception as e:
-            print(f"⚠️ Failed to load profile pic: {e}")
-            return None
+        except: return None
 
     def _load_audio(self, filename):
         path = os.path.join(self.assets_dir, filename)
@@ -96,51 +84,46 @@ class VideoRenderer:
         return None
 
     def draw_whatsapp_header(self, draw, title, base_img):
-        # رسم الخلفية الخضراء
         header_h = 180
         draw.rectangle([0, 0, self.w, header_h], fill=self.header_color)
         
-        # رسم صورة البروفايل
         if self.profile_pic:
-            # لصق الصورة (نحتاج للصقها على الـ Base Image لأن Draw لا يدعم لصق الصور)
             base_img.paste(self.profile_pic, (130, 30), self.profile_pic)
         else:
-            # رسم دائرة بديلة إذا فشل التحميل
             draw.ellipse([130, 30, 250, 150], fill=(200, 200, 200))
 
-        # زر الرجوع
         arrow_x, arrow_y = 40, 90
         draw.line([(arrow_x, arrow_y), (arrow_x+25, arrow_y-25)], fill="white", width=6)
         draw.line([(arrow_x, arrow_y), (arrow_x+25, arrow_y+25)], fill="white", width=6)
         draw.line([(arrow_x, arrow_y), (arrow_x+50, arrow_y)], fill="white", width=6)
 
-        # الاسم والحالة
         text_x = 270
-        draw.text((text_x, 50), title[:20], font=self.header_font, fill="white")
-        draw.text((text_x, 120), "Online", font=self.sub_header_font, fill="white")
+        # تقصير العنوان إذا كان طويلاً جداً بالنسبة للشاشة
+        max_chars = 20 if self.w < 1500 else 35
+        display_title = title[:max_chars] + "..." if len(title) > max_chars else title
         
+        draw.text((text_x, 50), display_title, font=self.header_font, fill="white")
+        draw.text((text_x, 120), "Online", font=self.sub_header_font, fill="white")
         return header_h
 
     def calculate_bubble_height(self, text):
-        max_width = 1500 
+        # عرض الفقاعة يعتمد على عرض الفيديو
+        max_width = int(self.w * 0.8) 
         padding_y = 40
         
-        # استخدام دالة getbbox بأمان
         try:
             avg_char_width = self.font.getbbox("x")[2]
             line_height = self.font.getbbox("Ah")[3] + 30
         except:
-            avg_char_width = 50 # قيمة تقريبية للخط الكبير
+            avg_char_width = 50
             line_height = 120
 
         chars_per_line = int(max_width / avg_char_width)
         lines = textwrap.wrap(text, width=chars_per_line)
-        
-        text_height = len(lines) * line_height
-        return text_height + (padding_y * 2) + 40 
+        return (len(lines) * line_height) + (padding_y * 2) + 40 
 
     def draw_bubble(self, draw, text, is_sender, y_pos, time_str):
-        max_width = 1500
+        max_width = int(self.w * 0.8)
         padding_x = 50
         padding_y = 40
         
@@ -154,7 +137,6 @@ class VideoRenderer:
         chars_per_line = int(max_width / avg_char_width)
         lines = textwrap.wrap(text, width=chars_per_line)
         
-        # حساب العرض
         max_line_w = 0
         for line in lines:
             try:
@@ -168,7 +150,6 @@ class VideoRenderer:
 
         box_height = (len(lines) * line_height) + (padding_y * 2) + 40
 
-        # الإحداثيات
         margin_side = 60
         if is_sender:
             x1 = self.w - margin_side - box_width
@@ -182,20 +163,16 @@ class VideoRenderer:
         y1 = y_pos
         y2 = y_pos + box_height
         
-        # رسم الفقاعة
+        draw.rounded_rectangle([x1+5, y1+5, x2+5, y2+5], radius=35, fill=(200,200,200))
         draw.rounded_rectangle([x1, y1, x2, y2], radius=35, fill=bg)
         
-        # رسم النص
         curr_y = y1 + padding_y
         for line in lines:
             draw.text((x1 + padding_x, curr_y), line, font=self.font, fill="black")
             curr_y += line_height
             
-        # رسم التوقيت
-        try:
-            time_w = self.time_font.getbbox(time_str)[2]
-        except:
-            time_w = 100
+        try: time_w = self.time_font.getbbox(time_str)[2]
+        except: time_w = 100
             
         time_x = x2 - time_w - 30
         time_y = y2 - 50
@@ -209,17 +186,15 @@ class VideoRenderer:
         return box_height
 
     def create_frame(self, history, article_title):
-        img = Image.new('RGBA', (self.w, self.h), self.bg_color) # RGBA للصق الصورة
+        img = Image.new('RGBA', (self.w, self.h), self.bg_color)
         draw = ImageDraw.Draw(img)
         
-        # 1. حساب الارتفاعات
         bubble_heights = []
         spacing = 40
         for msg in history:
             h = self.calculate_bubble_height(msg['text'])
             bubble_heights.append(h)
             
-        # 2. منطق التموضع (من الأسفل للأعلى)
         bottom_anchor = self.h - 100
         reversed_history = list(reversed(history))
         reversed_heights = list(reversed(bubble_heights))
@@ -248,17 +223,15 @@ class VideoRenderer:
             current_bottom_y = top_y - spacing
             if current_bottom_y < -500: break
         
-        # 3. رسم الرسائل
         for item in reversed(draw_queue):
             self.draw_bubble(draw, item['text'], item['is_sender'], item['y'], item['time'])
             
-        # 4. رسم الهيدر (فوق الرسائل)
         self.draw_whatsapp_header(draw, article_title, img)
             
         return np.array(img.convert("RGB"))
 
     def render_video(self, script_json, article_title, filename="final_video.mp4"):
-        print(f"🎬 Rendering Video (System Fonts) for: {article_title[:30]}...")
+        print(f"🎬 Rendering Video ({self.w}x{self.h}) for: {article_title[:30]}...")
         clips = []
         history = []
         
