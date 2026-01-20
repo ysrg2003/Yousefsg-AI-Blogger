@@ -662,10 +662,11 @@ def run_pipeline(category, config, mode="trending"):
     if not json_e: return
 
     # -------------------------------------------------------------
-    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (AFTER STEP E)
+    # 🎥 STEP F: DUAL VIDEO PRODUCTION (LANDSCAPE + SHORTS)
     # -------------------------------------------------------------
     video_embed_html = ""
-    uploaded_video_id = None 
+    uploaded_video_id_main = None 
+    uploaded_video_id_short = None
     youtube_description_cache = "" 
 
     try:
@@ -694,42 +695,57 @@ def run_pipeline(category, config, mode="trending"):
                 chat_script = try_parse_json(script_json_text, "Video Script Parsing")
                 
                 if chat_script:
-                    # Render Video (WhatsApp Style)
-                    renderer = video_renderer.VideoRenderer()
-                    video_filename = f"vid_{int(time.time())}.mp4"
-                    video_path = renderer.render_video(chat_script, specific_title, filename=video_filename)
+                    # --- 1. RENDER LANDSCAPE (1920x1080) ---
+                    renderer_main = video_renderer.VideoRenderer(width=1920, height=1080)
+                    vid_main_file = f"vid_main_{int(time.time())}.mp4"
+                    path_main = renderer_main.render_video(chat_script, specific_title, filename=vid_main_file)
                     
-                    if video_path and os.path.exists(video_path):
-                        # YouTube SEO
-                        yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=specific_title)
-                        yt_meta_json = generate_step(model, yt_prompt, "YouTube SEO")
+                    # --- 2. RENDER PORTRAIT (1080x1920) FOR SHORTS ---
+                    renderer_short = video_renderer.VideoRenderer(width=1080, height=1920)
+                    vid_short_file = f"vid_short_{int(time.time())}.mp4"
+                    path_short = renderer_short.render_video(chat_script, specific_title, filename=vid_short_file)
+
+                    # --- 3. YOUTUBE METADATA ---
+                    yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=specific_title)
+                    yt_meta_json = generate_step(model, yt_prompt, "YouTube SEO")
+                    
+                    if yt_meta_json:
+                        yt_meta = try_parse_json(yt_meta_json, "YouTube Meta")
+                        youtube_description_cache = yt_meta.get('description', '')
+                        initial_desc = youtube_description_cache + "\n\n📄 Read full article: [Link coming soon]\n👉 Subscribe for more AI News!"
                         
-                        if yt_meta_json:
-                            yt_meta = try_parse_json(yt_meta_json, "YouTube Meta")
-                            
-                            # Initial Description
-                            youtube_description_cache = yt_meta.get('description', '')
-                            initial_desc = youtube_description_cache + "\n\n📄 Read full article: [Link coming soon]\n👉 Subscribe for more AI News!"
-                            
-                            # Upload
+                        # --- 4. UPLOAD MAIN VIDEO ---
+                        if path_main and os.path.exists(path_main):
                             vid_id, embed_link = youtube_manager.upload_video_to_youtube(
-                                video_path, 
+                                path_main, 
                                 yt_meta.get('title', specific_title),
                                 initial_desc,
                                 yt_meta.get('tags', [])
                             )
-                            
                             if vid_id:
-                                uploaded_video_id = vid_id 
-                                
-                                # Create Embed HTML
+                                uploaded_video_id_main = vid_id
+                                # Create Embed HTML for Blog
                                 video_embed_html = f"""
                                 <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; margin: 30px 0;">
                                     <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 10px;" 
                                     src="https://www.youtube.com/embed/{vid_id}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                                 </div>
                                 """
-                                log("   ✅ Video Ready for Injection.")
+                                log("   ✅ Main Video Uploaded & Ready for Injection.")
+
+                        # --- 5. UPLOAD SHORTS VIDEO ---
+                        if path_short and os.path.exists(path_short):
+                            # Add #Shorts to title
+                            short_title = yt_meta.get('title', specific_title)[:90] + " #Shorts"
+                            vid_id_short, _ = youtube_manager.upload_video_to_youtube(
+                                path_short, 
+                                short_title,
+                                initial_desc, # Same description
+                                yt_meta.get('tags', []) + ["shorts", "reels"]
+                            )
+                            if vid_id_short:
+                                uploaded_video_id_short = vid_id_short
+                                log("   ✅ Shorts Video Uploaded Successfully.")
             
     except Exception as e:
         log(f"⚠️ Video Generation Failed: {e}")
@@ -772,10 +788,14 @@ def run_pipeline(category, config, mode="trending"):
         if real_url:
             update_kg(title, real_url, category)
             
-            # Update YouTube Description
-            if uploaded_video_id:
-                new_desc = youtube_description_cache + f"\n\n📄 Read full article: {real_url}\n👉 Subscribe for more AI News!"
-                youtube_manager.update_video_description(uploaded_video_id, new_desc)
+            # UPDATE YOUTUBE DESCRIPTIONS (BOTH VIDEOS)
+            new_desc = youtube_description_cache + f"\n\n📄 Read full article: {real_url}\n👉 Subscribe for more AI News!"
+            
+            if uploaded_video_id_main:
+                youtube_manager.update_video_description(uploaded_video_id_main, new_desc)
+            
+            if uploaded_video_id_short:
+                youtube_manager.update_video_description(uploaded_video_id_short, new_desc)
 
             # Facebook
             if img_url: 
