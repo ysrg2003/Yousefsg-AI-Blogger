@@ -281,24 +281,23 @@ Rules:
 """
 
 PROMPT_VIDEO_SCRIPT = """
-You are a Screenwriter. Create a Chat/Messaging script between two characters (Alex: AI Expert, Sam: Curious User) based on this SPECIFIC news headline.
+You are a Screenwriter. Create a WhatsApp-style chat script between two friends (Alex & Sam) discussing this news.
 
 INPUT HEADLINE: "{title}"
 INPUT SUMMARY: "{text_summary}"
 
 Rules:
-1. **CRITICAL:** Split long thoughts into MULTIPLE short messages (Max 10-12 words per bubble).
-2. It is okay to have the same speaker send 2-3 messages in a row.
-3. The text must be HUGE and readable, so keep sentences SHORT.
-4. Strictly about the Input Headline.
-5. Language: ENGLISH ONLY.
-6. Total script length: 15-20 short messages.
-7. Output JSON ONLY:
+1. **STYLE:** Casual, fast, like real texting. Use slang like "OMG", "No way", "Seriously?".
+2. **FORMAT:** Short bubbles. Max 6-8 words per bubble.
+3. **CONTENT:** Explain the news simply but accurately.
+4. **LENGTH:** 15-20 bubbles total.
+5. **LANGUAGE:** English Only.
+6. Output JSON ONLY:
 [
-  {{"speaker": "Alex", "type": "send", "text": "Did you see the new update?"}},
-  {{"speaker": "Alex", "type": "send", "text": "It's absolutely massive for AI speed."}},
-  {{"speaker": "Sam", "type": "receive", "text": "No, what happened?"}},
-  {{"speaker": "Sam", "type": "receive", "text": "Tell me more!"}}
+  {{"speaker": "Alex", "type": "send", "text": "Bro did u see the news?"}},
+  {{"speaker": "Alex", "type": "send", "text": "NVIDIA just dropped a bomb 🤯"}},
+  {{"speaker": "Sam", "type": "receive", "text": "No what happened??"}},
+  {{"speaker": "Sam", "type": "receive", "text": "Tell me!"}}
 ]
 """
 
@@ -391,7 +390,6 @@ def publish_post(title, content, labels):
 def clean_json(text):
     """Cleans JSON string from Markdown and common errors."""
     text = text.strip()
-    # 1. Remove Markdown code blocks
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
     if match: 
         text = match.group(1)
@@ -400,7 +398,6 @@ def clean_json(text):
         if match: 
             text = match.group(1)
     
-    # 2. Remove "JSON" word if it appears at start
     if text.lower().startswith("json"):
         text = text[4:].strip()
 
@@ -408,41 +405,32 @@ def clean_json(text):
 
 def try_parse_json(text, context=""):
     """Robust JSON parsing with multiple fallback strategies."""
-    # Strategy 1: Direct Parse
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        # Strategy 1.5: Handle "Extra data" error (content after JSON)
         if "Extra data" in str(e):
             try:
-                # Truncate text at the position of the error
                 return json.loads(text[:e.pos])
             except: pass
         pass
 
-    # Strategy 2: Fix Backslashes (Common Invalid \escape error)
     try:
-        # Replace single backslashes with double, but try to preserve valid escapes
-        # This regex looks for backslashes NOT followed by valid escape chars
         fixed_text = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
         return json.loads(fixed_text)
     except json.JSONDecodeError:
         pass
 
-    # Strategy 3: Aggressive Backslash Fix (Double ALL backslashes)
     try:
         fixed_text = text.replace('\\', '\\\\')
         return json.loads(fixed_text)
     except json.JSONDecodeError:
         pass
 
-    # Strategy 4: Find first [ and last ] for lists
     try:
         match = re.search(r'(\[.*\])', text, re.DOTALL)
         if match: return json.loads(match.group(1))
     except: pass
 
-    # Strategy 5: Find first { and last } for objects
     try:
         match = re.search(r'(\{.*\})', text, re.DOTALL)
         if match: return json.loads(match.group(1))
@@ -504,7 +492,6 @@ def get_recent_titles_string(limit=50):
     return ", ".join(titles)
 
 def get_relevant_kg_for_linking(current_category, limit=60):
-    """Returns JSON string of relevant articles with REAL URLs."""
     full_kg = load_kg()
     if not full_kg: return "[]"
     
@@ -518,7 +505,6 @@ def get_relevant_kg_for_linking(current_category, limit=60):
     return json.dumps(simplified)
 
 def update_kg(title, url, section):
-    """Updates the KG with the REAL URL returned by Blogger."""
     try:
         data = load_kg()
         for item in data:
@@ -667,7 +653,7 @@ def run_pipeline(category, config, mode="trending"):
     time.sleep(10)
 
     # -------------------------------------------------------------
-    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (HUGE TEXT)
+    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (WHATSAPP STYLE)
     # -------------------------------------------------------------
     video_embed_html = ""
     uploaded_video_id = None 
@@ -691,7 +677,7 @@ def run_pipeline(category, config, mode="trending"):
                 chat_script = try_parse_json(script_json_text, "Video Script Parsing")
                 
                 if chat_script:
-                    # Render Video (Huge Text)
+                    # Render Video (WhatsApp Style)
                     renderer = video_renderer.VideoRenderer()
                     video_filename = f"vid_{int(time.time())}.mp4"
                     video_path = renderer.render_video(chat_script, specific_title, filename=video_filename)
