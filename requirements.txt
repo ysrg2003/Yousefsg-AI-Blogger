@@ -11,4 +11,3 @@ pillow
 imageio-ffmpeg
 decorator
 tqdm
-social_manager
