@@ -13,29 +13,29 @@ class VideoRenderer:
         self.w, self.h = 1920, 1080 
         self.fps = 24
         
-        # --- WhatsApp Colors ---
-        self.bg_color = (236, 229, 221)      # WhatsApp Beige Background
-        self.header_color = (0, 128, 105)    # WhatsApp Teal Green
-        self.sender_bg = (220, 248, 198)     # Light Green Bubble
-        self.receiver_bg = (255, 255, 255)   # White Bubble
+        # Colors
+        self.bg_color = (236, 229, 221)      # WhatsApp Beige
+        self.header_color = (0, 128, 105)    # WhatsApp Green
+        self.sender_bg = (220, 248, 198)     # Light Green
+        self.receiver_bg = (255, 255, 255)   # White
         self.text_color = (0, 0, 0)
-        self.time_color = (153, 153, 153)
-        self.name_color = (255, 255, 255)
+        self.time_color = (120, 120, 120)
         
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(assets_dir, exist_ok=True)
         
-        # --- Fonts ---
+        # --- Fonts Setup (HUGE SIZE) ---
         self.font_path = os.path.join(assets_dir, "Roboto-Regular.ttf")
         self.font_bold_path = os.path.join(assets_dir, "Roboto-Bold.ttf")
         self._ensure_fonts()
         
         try:
-            self.font_size = 65 # خط كبير جداً
+            # تكبير الخط بشكل هائل
+            self.font_size = 90 
             self.font = ImageFont.truetype(self.font_path, self.font_size)
-            self.header_font = ImageFont.truetype(self.font_bold_path, 55)
-            self.sub_header_font = ImageFont.truetype(self.font_path, 35)
-            self.time_font = ImageFont.truetype(self.font_path, 30)
+            self.header_font = ImageFont.truetype(self.font_bold_path, 60)
+            self.sub_header_font = ImageFont.truetype(self.font_path, 40)
+            self.time_font = ImageFont.truetype(self.font_path, 35)
         except:
             self.font = ImageFont.load_default()
             self.header_font = ImageFont.load_default()
@@ -46,7 +46,6 @@ class VideoRenderer:
         self.snd_recv = self._load_audio("receive.wav")
 
     def _ensure_fonts(self):
-        # تحميل خطوط روبوتو لضمان الشكل الأصلي
         urls = {
             self.font_path: "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Regular.ttf",
             self.font_bold_path: "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
@@ -66,68 +65,72 @@ class VideoRenderer:
 
     def draw_whatsapp_header(self, draw, title):
         # رسم الشريط الأخضر
-        header_h = 160
+        header_h = 180
         draw.rectangle([0, 0, self.w, header_h], fill=self.header_color)
         
-        # رسم دائرة البروفايل (وهمية)
-        profile_x, profile_y = 120, 80
-        r = 50
-        draw.ellipse([profile_x-r, profile_y-r, profile_x+r, profile_y+r], fill=(200, 200, 200))
-        # أيقونة شخص بسيطة
-        draw.ellipse([profile_x-20, profile_y-20, profile_x+20, profile_y], fill=(255, 255, 255))
-        draw.pieslice([profile_x-30, profile_y+10, profile_x+30, profile_y+70], 180, 360, fill=(255, 255, 255))
+        # Profile Pic
+        profile_x, profile_y = 130, 90
+        r = 60
+        draw.ellipse([profile_x-r, profile_y-r, profile_x+r, profile_y+r], fill=(210, 210, 210))
+        draw.ellipse([profile_x-25, profile_y-25, profile_x+25, profile_y], fill=(255, 255, 255))
+        draw.pieslice([profile_x-35, profile_y+10, profile_x+35, profile_y+80], 180, 360, fill=(255, 255, 255))
 
-        # زر الرجوع (سهم)
-        arrow_x, arrow_y = 40, 80
-        draw.line([(arrow_x, arrow_y), (arrow_x+20, arrow_y-20)], fill="white", width=5)
-        draw.line([(arrow_x, arrow_y), (arrow_x+20, arrow_y+20)], fill="white", width=5)
-        draw.line([(arrow_x, arrow_y), (arrow_x+40, arrow_y)], fill="white", width=5)
+        # Back Arrow
+        arrow_x, arrow_y = 40, 90
+        draw.line([(arrow_x, arrow_y), (arrow_x+25, arrow_y-25)], fill="white", width=6)
+        draw.line([(arrow_x, arrow_y), (arrow_x+25, arrow_y+25)], fill="white", width=6)
+        draw.line([(arrow_x, arrow_y), (arrow_x+50, arrow_y)], fill="white", width=6)
 
-        # الاسم
-        text_x = 200
-        draw.text((text_x, 45), title[:25], font=self.header_font, fill="white")
-        draw.text((text_x, 105), "Online", font=self.sub_header_font, fill="white")
-        
-        # أيقونات القائمة (ثلاث نقاط)
-        dots_x = self.w - 50
-        draw.ellipse([dots_x-5, 60-5, dots_x+5, 60+5], fill="white")
-        draw.ellipse([dots_x-5, 80-5, dots_x+5, 80+5], fill="white")
-        draw.ellipse([dots_x-5, 100-5, dots_x+5, 100+5], fill="white")
+        # Name & Status
+        text_x = 220
+        draw.text((text_x, 50), title[:20], font=self.header_font, fill="white")
+        draw.text((text_x, 120), "Online", font=self.sub_header_font, fill="white")
         
         return header_h
 
-    def draw_bubble(self, draw, text, is_sender, y_pos, time_str="10:30 PM"):
-        # إعدادات الفقاعة
-        max_width = 1400
-        padding_x = 40
-        padding_y = 30
+    def calculate_bubble_height(self, text):
+        max_width = 1500 # عرض الفقاعة الأقصى
+        padding_y = 40
         
-        # التفاف النص
-        avg_char_width = self.font.getbbox("x")[2] if hasattr(self.font, 'getbbox') else 35
+        avg_char_width = self.font.getbbox("x")[2] if hasattr(self.font, 'getbbox') else 45
         chars_per_line = int(max_width / avg_char_width)
         lines = textwrap.wrap(text, width=chars_per_line)
         
-        # حساب الأبعاد
         if hasattr(self.font, 'getbbox'):
-            line_height = self.font.getbbox("Ah")[3] + 25
+            line_height = self.font.getbbox("Ah")[3] + 30
         else:
-            line_height = 80
+            line_height = 110
 
         text_height = len(lines) * line_height
-        box_height = text_height + (padding_y * 2) + 30 # +30 للتوقيت
+        return text_height + (padding_y * 2) + 40 # +40 للتوقيت
+
+    def draw_bubble(self, draw, text, is_sender, y_pos, time_str):
+        max_width = 1500
+        padding_x = 50
+        padding_y = 40
         
-        # حساب عرض الفقاعة بناءً على أطول سطر
+        avg_char_width = self.font.getbbox("x")[2] if hasattr(self.font, 'getbbox') else 45
+        chars_per_line = int(max_width / avg_char_width)
+        lines = textwrap.wrap(text, width=chars_per_line)
+        
+        if hasattr(self.font, 'getbbox'):
+            line_height = self.font.getbbox("Ah")[3] + 30
+        else:
+            line_height = 110
+
+        # حساب عرض الفقاعة
         max_line_w = 0
         for line in lines:
             bbox = self.font.getbbox(line)
             max_line_w = max(max_line_w, bbox[2])
         
         box_width = max_line_w + (padding_x * 2)
-        # تأكد أن العرض يكفي للتوقيت
-        if box_width < 200: box_width = 200
+        if box_width < 250: box_width = 250 # حد أدنى للعرض
+
+        box_height = (len(lines) * line_height) + (padding_y * 2) + 40
 
         # الإحداثيات
-        margin_side = 50
+        margin_side = 60
         if is_sender:
             x1 = self.w - margin_side - box_width
             x2 = self.w - margin_side
@@ -140,82 +143,100 @@ class VideoRenderer:
         y1 = y_pos
         y2 = y_pos + box_height
         
-        # رسم الفقاعة (مستطيل بحواف دائرية)
-        draw.rounded_rectangle([x1, y1, x2, y2], radius=30, fill=bg)
+        # رسم الظل الخفيف
+        draw.rounded_rectangle([x1+5, y1+5, x2+5, y2+5], radius=35, fill=(200,200,200))
+        # رسم الفقاعة
+        draw.rounded_rectangle([x1, y1, x2, y2], radius=35, fill=bg)
         
-        # رسم "الذيل" (Tail) الصغير للفقاعة
-        if is_sender:
-            draw.polygon([(x2, y1), (x2+20, y1), (x2, y1+20)], fill=bg)
-        else:
-            draw.polygon([(x1, y1), (x1-20, y1), (x1, y1+20)], fill=bg)
-
         # رسم النص
         curr_y = y1 + padding_y
         for line in lines:
             draw.text((x1 + padding_x, curr_y), line, font=self.font, fill="black")
             curr_y += line_height
             
-        # رسم التوقيت وعلامة الصح
+        # رسم التوقيت
         time_w = self.time_font.getbbox(time_str)[2]
-        time_x = x2 - time_w - 20
-        time_y = y2 - 45
+        time_x = x2 - time_w - 30
+        time_y = y2 - 50
         draw.text((time_x, time_y), time_str, font=self.time_font, fill=self.time_color)
         
         if is_sender:
-            # رسم صحين زرق (Blue Ticks)
-            tick_x = time_x - 35
-            # الصح الأول
-            draw.line([(tick_x, time_y+15), (tick_x+5, time_y+20), (tick_x+15, time_y+5)], fill="#34B7F1", width=3)
-            # الصح الثاني
-            draw.line([(tick_x+8, time_y+15), (tick_x+13, time_y+20), (tick_x+23, time_y+5)], fill="#34B7F1", width=3)
+            # صحين زرق
+            tick_x = time_x - 40
+            draw.line([(tick_x, time_y+20), (tick_x+10, time_y+30), (tick_x+25, time_y+10)], fill="#34B7F1", width=4)
+            draw.line([(tick_x+12, time_y+20), (tick_x+22, time_y+30), (tick_x+37, time_y+10)], fill="#34B7F1", width=4)
 
-        return box_height + 40 # المسافة بين الفقاعات
+        return box_height
 
     def create_frame(self, history, article_title):
         img = Image.new('RGB', (self.w, self.h), self.bg_color)
         draw = ImageDraw.Draw(img)
         
-        # 1. رسم الهيدر
-        header_h = self.draw_whatsapp_header(draw, "Tech News Update") # اسم ثابت أو عنوان المقال
-        
-        # 2. حساب الارتفاعات للتمرير (Scrolling)
-        temp_draw = ImageDraw.Draw(Image.new('RGB', (1,1)))
+        # 1. حساب ارتفاعات جميع الرسائل في التاريخ
+        # نحتاج هذا لنعرف أين نضع الرسالة الأخيرة
         bubble_heights = []
-        total_h = 0
+        spacing = 40 # مسافة بين الفقاعات
         
-        # محاكاة التوقيت
-        base_time = datetime.datetime(2024, 1, 1, 10, 0)
-        
-        for i, msg in enumerate(history):
-            msg_time = base_time + datetime.timedelta(minutes=i*2)
-            time_str = msg_time.strftime("%I:%M %p")
-            h = self.draw_bubble(temp_draw, msg['text'], msg['is_sender'], 0, time_str)
+        for msg in history:
+            h = self.calculate_bubble_height(msg['text'])
             bubble_heights.append(h)
-            total_h += h
             
-        # 3. تحديد نقطة البداية (Y)
-        # نريد آخر رسالة تكون ظاهرة فوق الكيبورد الوهمي (أو أسفل الشاشة)
-        target_bottom = self.h - 50
-        start_y = header_h + 30
+        # 2. تحديد مكان الرسالة الأخيرة (The Anchor)
+        # نريد أن تكون نهاية الرسالة الأخيرة عند Y = 950 (أسفل الشاشة)
+        bottom_anchor = self.h - 100
         
-        if (start_y + total_h) > target_bottom:
-            start_y = target_bottom - total_h
+        # 3. الرسم من الأسفل إلى الأعلى (Backwards Drawing Logic)
+        # نبدأ من آخر رسالة ونضعها في الأسفل، ثم نحسب مكان التي قبلها فوقها وهكذا
+        
+        # عكس القوائم للحساب من الأسفل
+        reversed_history = list(reversed(history))
+        reversed_heights = list(reversed(bubble_heights))
+        
+        current_bottom_y = bottom_anchor
+        
+        # قائمة لتخزين إحداثيات الرسم الصحيحة (سنعيد عكسها للرسم)
+        draw_queue = [] 
+        
+        base_time = datetime.datetime(2024, 1, 1, 10, 0)
+        total_msgs = len(history)
+
+        for i, msg in enumerate(reversed_history):
+            h = reversed_heights[i]
+            top_y = current_bottom_y - h
             
-        # 4. رسم الفقاعات
-        current_y = start_y
-        for i, msg in enumerate(history):
-            msg_time = base_time + datetime.timedelta(minutes=i*2)
+            # حساب الوقت (بناءً على الفهرس الأصلي)
+            original_index = total_msgs - 1 - i
+            msg_time = base_time + datetime.timedelta(minutes=original_index*2)
             time_str = msg_time.strftime("%I:%M %p")
             
-            # رسم فقط ما هو داخل الشاشة
-            if current_y + bubble_heights[i] > header_h and current_y < self.h:
-                self.draw_bubble(draw, msg['text'], msg['is_sender'], current_y, time_str)
-            current_y += bubble_heights[i]
+            # نضيف للأوامر
+            draw_queue.append({
+                "text": msg['text'],
+                "is_sender": msg['is_sender'],
+                "y": top_y,
+                "time": time_str
+            })
+            
+            # تحديث النقطة السفلية للرسالة التالية (التي هي السابقة زمنياً)
+            current_bottom_y = top_y - spacing
+            
+            # إذا خرجنا عن الشاشة من الأعلى بكثير، نتوقف عن الحساب
+            if current_bottom_y < -500:
+                break
+        
+        # 4. تنفيذ الرسم (Draw Messages)
+        # نرسم الرسائل أولاً
+        for item in reversed(draw_queue): # نعيد الترتيب للرسم الصحيح
+            self.draw_bubble(draw, item['text'], item['is_sender'], item['y'], item['time'])
+            
+        # 5. رسم الهيدر (Header) في النهاية
+        # هذا هو السر! نرسم الهيدر فوق كل شيء ليغطي أي رسالة تصعد تحته
+        self.draw_whatsapp_header(draw, article_title)
             
         return np.array(img)
 
     def render_video(self, script_json, article_title, filename="final_video.mp4"):
-        print(f"🎬 Rendering WhatsApp Style Video for: {article_title[:30]}...")
+        print(f"🎬 Rendering Fixed WhatsApp Video for: {article_title[:30]}...")
         clips = []
         history = []
         
@@ -230,7 +251,7 @@ class VideoRenderer:
             frame_img = self.create_frame(history, article_title)
             
             # مدة القراءة
-            read_duration = max(2.5, len(text) * 0.12)
+            read_duration = max(3.0, len(text) * 0.13)
             
             clip_main = ImageClip(frame_img).set_duration(read_duration)
             
