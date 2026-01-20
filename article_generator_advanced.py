@@ -280,6 +280,7 @@ Rules:
 6. Output JSON ONLY in this format: {{"facebook": "YOUR_CAPTION_HERE"}}
 """
 
+# --- UPDATED VIDEO PROMPT (COMPREHENSIVE & SHORT BURSTS) ---
 PROMPT_VIDEO_SCRIPT = """
 You are a Screenwriter. Create a WhatsApp-style chat script between two friends (Alex & Sam) discussing this news.
 
@@ -287,17 +288,20 @@ INPUT HEADLINE: "{title}"
 INPUT SUMMARY: "{text_summary}"
 
 Rules:
-1. **STYLE:** Casual, fast, like real texting. Use slang like "OMG", "No way", "Seriously?".
-2. **FORMAT:** Short bubbles. Max 6-8 words per bubble.
-3. **CONTENT:** Explain the news simply but accurately.
-4. **LENGTH:** 15-20 bubbles total.
-5. **LANGUAGE:** English Only.
-6. Output JSON ONLY:
+1. **GOAL:** The chat must cover the ENTIRE article content (Intro, Key Details, Why it matters, Conclusion). It should replace reading the article.
+2. **STYLE:** Casual, fast, like real texting. Use slang like "OMG", "No way", "Seriously?".
+3. **FORMAT:** Short bubbles. Max 6-8 words per bubble.
+4. **SPLITTING:** Split long explanations into 3-4 consecutive bubbles from the same speaker. NEVER write a long paragraph.
+5. **LENGTH:** 30-50 bubbles total (Comprehensive coverage).
+6. **LANGUAGE:** English Only.
+7. Output JSON ONLY:
 [
   {{"speaker": "Alex", "type": "send", "text": "Bro did u see the news?"}},
   {{"speaker": "Alex", "type": "send", "text": "NVIDIA just dropped a bomb 🤯"}},
   {{"speaker": "Sam", "type": "receive", "text": "No what happened??"}},
-  {{"speaker": "Sam", "type": "receive", "text": "Tell me!"}}
+  {{"speaker": "Sam", "type": "receive", "text": "Tell me everything!"}},
+  {{"speaker": "Alex", "type": "send", "text": "Okay so basically..."}},
+  {{"speaker": "Alex", "type": "send", "text": "They released a new chip."}}
 ]
 """
 
@@ -652,26 +656,39 @@ def run_pipeline(category, config, mode="trending"):
     if not json_d: return
     time.sleep(10)
 
+    # --- STEP E (FINAL POLISH) ---
+    prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
+    json_e = generate_step(model, prompt_e, "Step E (Final)")
+    if not json_e: return
+
     # -------------------------------------------------------------
-    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (WHATSAPP STYLE)
+    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (AFTER STEP E)
     # -------------------------------------------------------------
     video_embed_html = ""
     uploaded_video_id = None 
     youtube_description_cache = "" 
 
     try:
+        # We use json_d (Audit) for script generation as it has the full draft
         final_d = try_parse_json(json_d, "Step D Parsing")
         data_a = try_parse_json(json_a, "Step A Parsing") if 'json_a' in locals() and json_a else {}
         
         specific_title = data_a.get('headline') if data_a else final_d.get('draftTitle', 'Tech News')
         
         if final_d:
-            content_text = re.sub('<[^<]+?>', '', final_d.get('draftContent', ''))[:1000]
+            content_text = re.sub('<[^<]+?>', '', final_d.get('draftContent', ''))[:2000] # More context for long script
             
             log(f"   🎬 Step F: Generating Video Script for '{specific_title}'...")
             
             script_prompt = PROMPT_VIDEO_SCRIPT.format(title=specific_title, text_summary=content_text)
-            script_json_text = generate_step(model, script_prompt, "Video Scripting")
+            
+            # RETRY LOOP FOR SCRIPT GENERATION
+            script_json_text = None
+            for attempt in range(3):
+                script_json_text = generate_step(model, script_prompt, f"Video Scripting (Attempt {attempt+1})")
+                if try_parse_json(script_json_text):
+                    break
+                log("      ⚠️ Script JSON invalid, retrying...")
             
             if script_json_text:
                 chat_script = try_parse_json(script_json_text, "Video Script Parsing")
@@ -712,20 +729,10 @@ def run_pipeline(category, config, mode="trending"):
                                     src="https://www.youtube.com/embed/{vid_id}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                                 </div>
                                 """
-                                
-                                # Inject into content
-                                current_content = final_d.get('draftContent', '')
-                                final_d['draftContent'] = video_embed_html + current_content
-                                json_d = json.dumps(final_d)
-                                log("   ✅ Video integrated into Article Content.")
+                                log("   ✅ Video Ready for Injection.")
             
     except Exception as e:
         log(f"⚠️ Video Generation Failed: {e}")
-
-    # --- STEP E ---
-    prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
-    json_e = generate_step(model, prompt_e, "Step E (Final)")
-    if not json_e: return
 
     # --- FINAL PROCESSING & PUBLISHING ---
     try:
@@ -747,7 +754,16 @@ def run_pipeline(category, config, mode="trending"):
             img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}"><img border="0" src="{img_url}" alt="{alt_text}" /></a></div>'
             content += img_html
         
-        content += final.get('finalContent', '')
+        # INJECT VIDEO HERE (AFTER STEP E)
+        final_body = final.get('finalContent', '')
+        if video_embed_html:
+            # Inject after the first paragraph or H2
+            if "</h2>" in final_body:
+                final_body = final_body.replace("</h2>", "</h2>" + video_embed_html, 1)
+            else:
+                final_body = video_embed_html + final_body
+        
+        content += final_body
         
         # Publish to Blogger
         labels = [category]
