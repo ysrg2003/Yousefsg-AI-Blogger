@@ -6,7 +6,9 @@ import re
 import random
 import sys
 import datetime
-import social_manager  # المكتبة الخاصة بنشر الفيسبوك
+import social_manager
+import video_renderer
+import youtube_manager
 from google import genai
 from google.genai import types
 
@@ -72,7 +74,7 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL ORIGINAL VERSIONS)
+# 2. PROMPTS DEFINITIONS
 # ==============================================================================
 
 PROMPT_A_TRENDING = """
@@ -278,6 +280,35 @@ Rules:
 6. Output JSON ONLY in this format: {{"facebook": "YOUR_CAPTION_HERE"}}
 """
 
+PROMPT_VIDEO_SCRIPT = """
+You are a Screenwriter. Create a Chat/Messaging script between two characters (Alex: AI Expert, Sam: Curious User) based on this article.
+
+Rules:
+1. Summarize the main exciting point of the article.
+2. Make it sound like a quick text conversation (Short sentences, Emojis).
+3. Language: ENGLISH ONLY.
+4. Max 10-12 exchange messages total.
+5. Output JSON ONLY:
+[
+  {{"speaker": "Alex", "type": "send", "text": "..."}},
+  {{"speaker": "Sam", "type": "receive", "text": "..."}}
+]
+Input Article:
+{article_text}
+"""
+
+PROMPT_YOUTUBE_METADATA = """
+You are a YouTube SEO Expert. Based on this article, generate metadata for a video.
+Input Article: {draft_title}
+
+Output JSON ONLY:
+{{
+  "title": "Catchy YouTube Title (Max 60 chars)",
+  "description": "Engaging description (first 2 lines hook), includes keywords.",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+}}
+"""
+
 # ==============================================================================
 # 3. KEY MANAGER
 # ==============================================================================
@@ -354,7 +385,7 @@ def publish_post(title, content, labels):
 
 def clean_json(text):
     text = text.strip()
-    # 1. Remove Markdown code blocks (existing logic)
+    # 1. Remove Markdown code blocks
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
     if match: 
         text = match.group(1)
@@ -364,8 +395,6 @@ def clean_json(text):
             text = match.group(1)
     
     # 2. Fix "Invalid \escape" error
-    # يقوم هذا السطر بالبحث عن أي شرطة مائلة لا يتبعها حرف هروب صحيح ويقوم بمضاعفتها
-    # Valid JSON escapes: " \ / b f n r t u
     text = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
     
     return text
@@ -571,6 +600,64 @@ def run_pipeline(category, config, mode="trending"):
     json_d = generate_step(model, prompt_d, "Step D (Audit)")
     if not json_d: return
     time.sleep(10)
+
+    # -------------------------------------------------------------
+    # 🎥 STEP F: AUTOMATED VIDEO PRODUCTION (Inserted BEFORE Step E)
+    # -------------------------------------------------------------
+    video_embed_html = ""
+    try:
+        # Parse JSON D to get content for script generation
+        final_d = json.loads(json_d)
+        content_text_only = re.sub('<[^<]+?>', '', final_d.get('draftContent', '')) 
+        
+        # 1. Generate Script
+        log("   🎬 Step F: Generating Video Script...")
+        script_prompt = PROMPT_VIDEO_SCRIPT.format(article_text=content_text_only[:4000])
+        script_json = generate_step(model, script_prompt, "Video Scripting")
+        
+        if script_json:
+            chat_script = json.loads(script_json)
+            
+            # 2. Render Video
+            renderer = video_renderer.VideoRenderer()
+            video_filename = f"vid_{int(time.time())}.mp4"
+            video_path = renderer.render_video(chat_script, filename=video_filename)
+            
+            if video_path and os.path.exists(video_path):
+                # 3. Generate YouTube Metadata
+                yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=final_d.get('draftTitle', ''))
+                yt_meta_json = generate_step(model, yt_prompt, "YouTube SEO")
+                
+                if yt_meta_json:
+                    yt_meta = json.loads(yt_meta_json)
+                    
+                    # 4. Upload to YouTube
+                    short_link, embed_link = youtube_manager.upload_video_to_youtube(
+                        video_path, 
+                        yt_meta.get('title', 'Tech Update'),
+                        yt_meta.get('description', 'Latest Tech News') + "\n\nRead more at our blog!",
+                        yt_meta.get('tags', [])
+                    )
+                    
+                    if embed_link:
+                        # 5. Create Embed HTML
+                        video_embed_html = f"""
+                        <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; margin: 30px 0;">
+                            <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 10px;" 
+                            src="{embed_link}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                        </div>
+                        """
+                        
+                        # Inject into content (Prepend to content)
+                        current_content = final_d.get('draftContent', '')
+                        final_d['draftContent'] = video_embed_html + current_content
+                        
+                        # Update json_d for the next step
+                        json_d = json.dumps(final_d)
+                        log("   ✅ Video integrated into Article Content.")
+            
+    except Exception as e:
+        log(f"⚠️ Video Generation Failed (Skipping): {e}")
 
     # --- STEP E ---
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
