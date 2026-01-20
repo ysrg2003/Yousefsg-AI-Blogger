@@ -280,7 +280,7 @@ Rules:
 6. Output JSON ONLY in this format: {{"facebook": "YOUR_CAPTION_HERE"}}
 """
 
-# --- UPDATED VIDEO PROMPT (COMPREHENSIVE & SHORT BURSTS) ---
+# --- UPDATED VIDEO PROMPT (COMPREHENSIVE, SHORT BURSTS & CTA) ---
 PROMPT_VIDEO_SCRIPT = """
 You are a Screenwriter. Create a WhatsApp-style chat script between two friends (Alex & Sam) discussing this news.
 
@@ -293,15 +293,20 @@ Rules:
 3. **FORMAT:** Short bubbles. Max 6-8 words per bubble.
 4. **SPLITTING:** Split long explanations into 3-4 consecutive bubbles from the same speaker. NEVER write a long paragraph.
 5. **LENGTH:** 30-50 bubbles total (Comprehensive coverage).
-6. **LANGUAGE:** English Only.
-7. Output JSON ONLY:
+6. **ENDING (CRITICAL):** The chat MUST end with a strong Call-to-Action (CTA).
+   - Speaker A should ask where to find more details.
+   - Speaker B must say something like: "Link is in the description!", "Read the full article below", or "Check the bio for the link".
+7. **LANGUAGE:** English Only.
+8. Output JSON ONLY:
 [
   {{"speaker": "Alex", "type": "send", "text": "Bro did u see the news?"}},
   {{"speaker": "Alex", "type": "send", "text": "NVIDIA just dropped a bomb 🤯"}},
   {{"speaker": "Sam", "type": "receive", "text": "No what happened??"}},
   {{"speaker": "Sam", "type": "receive", "text": "Tell me everything!"}},
   {{"speaker": "Alex", "type": "send", "text": "Okay so basically..."}},
-  {{"speaker": "Alex", "type": "send", "text": "They released a new chip."}}
+  {{"speaker": "Alex", "type": "send", "text": "They released a new chip."}},
+  {{"speaker": "Sam", "type": "receive", "text": "Wow, I need to read more."}},
+  {{"speaker": "Alex", "type": "send", "text": "Full link is in the description 👇"}}
 ]
 """
 
