@@ -109,7 +109,7 @@ Output JSON only, EXACTLY in this format:
 """
 
 PROMPT_A_EVERGREEN = """
-A:You are an expert technical educator specialized in {section}. Your task is to outline a comprehensive "Ultimate Guide" or "Deep Dive" into a core concept of {section}.
+A:You are an expert technical educator specialized in {section}. Your task is to outline a comprehensive, authoritative article about a core concept of {section}.
 Instead of recent news, search for and cite: Foundational papers, Standard definitions, Official Documentation, and Key Textbooks.
 
 TOPIC PROMPT: {evergreen_prompt}
@@ -119,10 +119,18 @@ Check the following list of existing guides. Ensure your angle or specific topic
 {recent_titles}
 
 MANDATORY SOURCE & VERIFICATION RULES:
-1. Return a headline like "The Ultimate Guide to [Topic]" or "Understanding [Concept]: A Deep Dive".
+1. **HEADLINE STRATEGY (CRITICAL):** 
+   - Do NOT start with "The Ultimate Guide" or "A Deep Dive". These are forbidden.
+   - Create a specific, professional headline that reflects the exact angle of the content.
+   - Use varied structures. Examples:
+     * "Mastering [Concept]: Strategies for..."
+     * "The Architecture of [Concept]: A Technical Breakdown"
+     * "Why [Concept] Matters for Modern AI Pipelines"
+     * "Building Scalable [Concept] Systems: Best Practices"
+     * "[Concept] Explained: From Theory to Production"
 2. Provide 2–3 authoritative sources (Seminal Papers, Documentation, University Lectures).
 3. Output JSON ONLY (Same format as news to maintain pipeline compatibility):
-{{"headline": "...", "sources": [{{"title":"...", "url":"...", "date":"YYYY-MM-DD (or N/A)", "type":"documentation|paper|book", "why":"Foundational reference", "credibility":"High"}}], "riskNote":"..."}}
+{{"headline": "Your Unique Professional Headline", "sources": [{{"title":"...", "url":"...", "date":"YYYY-MM-DD (or N/A)", "type":"documentation|paper|book", "why":"Foundational reference", "credibility":"High"}}], "riskNote":"..."}}
 """
 
 PROMPT_B_TEMPLATE = """
@@ -673,6 +681,9 @@ def run_pipeline(category, config, mode="trending"):
     uploaded_video_id_main = None 
     uploaded_video_id_short = None
     youtube_description_cache = "" 
+    path_short_for_fb = None # Store path for later FB upload
+    video_title_for_fb = ""
+    video_tags_for_fb = []
 
     try:
         # We use json_d (Audit) for script generation as it has the full draft
@@ -709,6 +720,9 @@ def run_pipeline(category, config, mode="trending"):
                     renderer_short = video_renderer.VideoRenderer(width=1080, height=1920)
                     vid_short_file = f"vid_short_{int(time.time())}.mp4"
                     path_short = renderer_short.render_video(chat_script, specific_title, filename=vid_short_file)
+                    
+                    # Save for FB
+                    path_short_for_fb = path_short
 
                     # --- 3. YOUTUBE METADATA ---
                     yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=specific_title)
@@ -719,6 +733,10 @@ def run_pipeline(category, config, mode="trending"):
                         youtube_description_cache = yt_meta.get('description', '')
                         initial_desc = youtube_description_cache + "\n\n📄 Read full article: [Link coming soon]\n👉 Subscribe for more AI News!"
                         
+                        # Save for FB
+                        video_title_for_fb = yt_meta.get('title', specific_title)
+                        video_tags_for_fb = yt_meta.get('tags', [])
+
                         # --- 4. UPLOAD MAIN VIDEO ---
                         if path_main and os.path.exists(path_main):
                             vid_id, embed_link = youtube_manager.upload_video_to_youtube(
@@ -793,7 +811,11 @@ def run_pipeline(category, config, mode="trending"):
         if real_url:
             update_kg(title, real_url, category)
             
-            # UPDATE YOUTUBE DESCRIPTIONS (BOTH VIDEOS)
+            # ---------------------------------------------------------
+            # 🔄 POST-PUBLISH UPDATES (YOUTUBE & FACEBOOK REEL)
+            # ---------------------------------------------------------
+            
+            # 1. Update YouTube Descriptions
             new_desc = youtube_description_cache + f"\n\n📄 Read full article: {real_url}\n👉 Subscribe for more AI News!"
             
             if uploaded_video_id_main:
@@ -802,7 +824,16 @@ def run_pipeline(category, config, mode="trending"):
             if uploaded_video_id_short:
                 youtube_manager.update_video_description(uploaded_video_id_short, new_desc)
 
-            # Facebook
+            # 2. Upload Facebook Reel (NOW with Real URL)
+            if path_short_for_fb and os.path.exists(path_short_for_fb):
+                # Generate Hashtags
+                hashtags = " ".join([f"#{tag.replace(' ', '')}" for tag in video_tags_for_fb])
+                # Create Caption with Real URL
+                reel_caption = f"{video_title_for_fb} 🔥\n\n{youtube_description_cache}\n\n👇 Full story: {real_url}\n\n{hashtags} #AI #TechNews"
+                
+                social_manager.post_reel_to_facebook(path_short_for_fb, reel_caption)
+
+            # 3. Facebook Image Post (Standard)
             if img_url: 
                 try:
                     fb_prompt = PROMPT_FACEBOOK_HOOK.format(title=title, category=category)
