@@ -12,3 +12,4 @@ imageio-ffmpeg
 decorator
 tqdm
 PyGithub
+feedparser
