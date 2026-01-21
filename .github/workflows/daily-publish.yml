@@ -62,14 +62,13 @@ jobs:
 
       # --- Save Data (Knowledge Graph) with Conflict Fix ---
       - name: Commit and Push Knowledge Graph & Archive
-        if: always()  # يعمل دائماً حتى لو فشل السكريبت في المنتصف
+        if: always()  # يعمل دائماً حتى لو فشل السكريبت في المنتصف لضمان حفظ البيانات
         run: |
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'actions@github.com'
           
-          # 1. سحب التغييرات أولاً لحل مشكلة (rejected - fetch first)
-          # هذا السطر هو الحل لمشكلة Git التي ظهرت لك سابقاً
-          git pull origin main --rebase || echo "Rebase not needed or failed, continuing..."
+          # 1. سحب التغييرات أولاً لحل مشكلة التضارب (Git Conflict)
+          git pull origin main --rebase || echo "Rebase skipped"
           
           # 2. إضافة الملفات المعدلة
           git add knowledge_graph.json
@@ -78,81 +77,5 @@ jobs:
             git add archive/
           fi
           
-          # 3. التحقق مما إذا كانت هناك تغييرات فعلية قبل الرفع
-          if git diff --staged --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "Auto-update Knowledge Graph [Safety Save]"
-            git push origin main
-          fi
-          
-          name: Daily Article Publishing
-
-on:
-  schedule:
-    - cron: '0 9 * * *'
-  workflow_dispatch:
-
-permissions:
-  contents: write
-
-jobs:
-  publish-articles:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          pip install -r requirements.txt
-      
-      - name: Run article generator
-        env:
-          GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
-          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
-          GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
-          GEMINI_API_KEY_4: ${{ secrets.GEMINI_API_KEY_4 }}
-          GEMINI_API_KEY_5: ${{ secrets.GEMINI_API_KEY_5 }}
-          GEMINI_API_KEY_6: ${{ secrets.GEMINI_API_KEY_6 }}
-          
-          BLOGGER_BLOG_ID: ${{ secrets.BLOGGER_BLOG_ID }}
-          BLOGGER_CLIENT_ID: ${{ secrets.BLOGGER_CLIENT_ID }}
-          BLOGGER_CLIENT_SECRET: ${{ secrets.BLOGGER_CLIENT_SECRET }}
-          BLOGGER_REFRESH_TOKEN: ${{ secrets.BLOGGER_REFRESH_TOKEN }}
-          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
-          
-          FB_APP_ID: ${{ secrets.FB_APP_ID }}
-          FB_APP_SECRET: ${{ secrets.FB_APP_SECRET }}
-          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
-          FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
-          MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
-          GITHUB_REPO_NAME: ${{ github.repository }}
-          
-          YOUTUBE_CREDENTIALS_JSON: ${{ secrets.YOUTUBE_CREDENTIALS_JSON }}
-          
-        run: python -u article_generator_advanced.py
-
-      # --- الخطوة الأذكى والأكثر أماناً للحفظ ---
-      - name: Commit and Push Knowledge Graph & Archive
-        if: always()
-        run: |
-          git config --global user.name 'GitHub Actions'
-          git config --global user.email 'actions@github.com'
-          
-          # 1. سحب التحديثات (الحل الجذري لمشكلة الرفض)
-          git pull origin main --rebase || echo "Rebase skipped"
-          
-          # 2. إضافة التغييرات
-          git add knowledge_graph.json
-          if [ -d "archive" ]; then git add archive/; fi
-          
-          # 3. التحقق والرفع (نفس منطق السطر الذي سألت عنه لكن بطريقة آمنة)
+          # 3. التحقق مما إذا كانت هناك تغييرات فعلية قبل الرفع (Smart Commit)
           git diff --staged --quiet || (git commit -m "Auto-update Knowledge Graph [Safety Save]" && git push origin main)
