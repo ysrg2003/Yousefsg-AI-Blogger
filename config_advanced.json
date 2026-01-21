@@ -1,36 +1,17 @@
 {
   "categories": {
-    "Machine Learning": {
-      "trending_focus": "Machine Learning: SOTA comparisons, datasets, compute, energy cost, reproducibility.",
-      "evergreen_prompt": "Write a comprehensive, evergreen article about Machine Learning. Explain core concepts (supervised vs. unsupervised learning, neural networks, common architectures), key datasets, reproducibility best practices, compute and energy considerations, and practical applications. Tailor the piece to be useful to both beginners and experienced practitioners; include recommended further reading and resource links."
+    "AI Tools & Generative AI": {
+      "trending_focus": "New AI tools released today, ChatGPT updates, Midjourney v7 news, Gemini features, free AI alternatives, productivity AI software reviews"
     },
-    "Natural Language Processing": {
-      "trending_focus": "Natural Language Processing: eval metrics (BLEU/ROUGE/EM/Hallucination risk), dataset biases, safety.",
-      "evergreen_prompt": "Write a clear, practical guide that explains how Natural Language Processing works. Cover tokenization, word embeddings, transformers, common evaluation metrics (BLEU, ROUGE, EM), and provide real-world examples (translation, summarization, QA). Include commentary on dataset bias and safety considerations."
+    "AI Business & Crypto": {
+      "trending_focus": "AI startups funding news, NVIDIA stock updates, AI crypto tokens news, Tech giants AI earnings, OpenAI regulation news"
     },
-    "Computer Vision": {
-      "trending_focus": "Computer Vision: datasets (ImageNet/COCO/medical), segmentation/tracking benchmarks, edge vs cloud deployment.",
-      "evergreen_prompt": "Write an accessible overview of Computer Vision fundamentals. Cover image formation, common datasets (ImageNet, COCO, medical datasets), CNNs and modern transformer-based vision models, and practical considerations for edge vs cloud deployment. Include real-world examples and evaluation benchmarks."
-    },
-    "Robotics": {
-      "trending_focus": "Robotics: sim2real, ISO safety standards, real deployments.",
-      "evergreen_prompt": "Write a clear primer on Robotics fundamentals. Cover robot types (industrial, service, autonomous), sim-to-real transfer, key safety standards (ISO), and examples of real-world deployments. Discuss control stacks and common sensors/actuators."
-    },
-    "Generative AI": {
-      "trending_focus": "Generative AI: model provenance, licensing, watermarking, detectability.",
-      "evergreen_prompt": "Write an in-depth article on Generative AI. Cover model architectures (transformers, diffusion models, GANs), training methodologies, licensing and provenance issues, watermarking techniques, and detectability challenges. Include real-world applications and ethical considerations."
-    },
-    "AI Applications": {
-      "trending_focus": "AI Applications: enterprise ROI, integration case studies, deployment cost.",
-      "evergreen_prompt": "Write a comprehensive guide to AI Applications across industries. Cover healthcare, finance, manufacturing, retail, and education. For each domain, explain ROI metrics, integration challenges, deployment costs, and real-world case studies. Include best practices and lessons learned."
-    },
-    "AI Research": {
-      "trending_focus": "AI Research: arXiv/NeurIPS/CVPR papers, ablations, reproducibility, code availability.",
-      "evergreen_prompt": "Write a detailed overview of recent AI research trends. Discuss landmark papers from NeurIPS, CVPR, ICLR, and arXiv. Cover topics like scaling laws, few-shot learning, multimodal models, and reproducibility challenges. Include analysis of ablation studies and code availability in the research community."
+    "Robotics & Future Tech": {
+      "trending_focus": "Tesla Optimus updates, Boston Dynamics new robots, Rabbit r1 updates, Humanoid robots releases, Neuralink news"
     }
   },
   "settings": {
-    "date_range_query": "last 60 days",
+    "date_range_query": "when:1d",
     "model_name": "models/gemini-2.5-flash",
     "publish_time": "11:00 UTC",
     "adsense_optimization": true
