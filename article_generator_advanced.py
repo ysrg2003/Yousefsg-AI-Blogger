@@ -6,6 +6,8 @@ import re
 import random
 import sys
 import datetime
+import urllib.parse
+import feedparser  # يجب التأكد من وجود هذه المكتبة
 import social_manager
 import video_renderer
 import youtube_manager
@@ -13,10 +15,33 @@ from google import genai
 from google.genai import types
 
 # ==============================================================================
-# 0. LOGGING HELPER
+# 0. CONFIG & LOGGING & HUMANIZATION
 # ==============================================================================
+
+# قائمة الكلمات المحظورة (إضافة جديدة لتحسين الجودة)
+FORBIDDEN_PHRASES = [
+    "In today's digital age",
+    "The world of AI is ever-evolving",
+    "unveils",
+    "unveiled",
+    "poised to",
+    "delve into",
+    "game-changer",
+    "paradigm shift",
+    "tapestry",
+    "robust",
+    "leverage",
+    "underscore",
+    "testament to",
+    "beacon of",
+    "In conclusion",
+    "Remember that",
+    "It is important to note",
+    "Imagine a world"
+]
+
 def log(msg):
-    print(msg, flush=True)
+    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 # ==============================================================================
 # 1. CSS STYLING (MODERN TECH LOOK)
@@ -24,88 +49,80 @@ def log(msg):
 ARTICLE_STYLE = """
 <style>
     /* General Typography */
-    .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.8; color: #2c3e50; font-size: 18px; }
-    h2 { color: #1a252f; font-weight: 700; margin-top: 40px; margin-bottom: 20px; border-bottom: 2px solid #3498db; padding-bottom: 10px; display: inline-block; }
-    h3 { color: #2980b9; font-weight: 600; margin-top: 30px; }
+    .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.8; color: #2c3e50; font-size: 19px; }
+    h2 { color: #1a252f; font-weight: 800; margin-top: 45px; margin-bottom: 25px; border-bottom: 3px solid #ffd700; padding-bottom: 5px; display: inline-block; font-size: 28px; }
+    h3 { color: #2980b9; font-weight: 700; margin-top: 35px; font-size: 24px; }
     
     /* Key Takeaways Box */
     .takeaways-box {
-        background: #f0f8ff;
-        border-left: 5px solid #3498db;
-        padding: 20px;
-        margin: 30px 0;
+        background: #f8f9fa;
+        border-left: 6px solid #2c3e50;
+        padding: 25px;
+        margin: 35px 0;
         border-radius: 8px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
-    .takeaways-box h3 { margin-top: 0; color: #2c3e50; }
+    .takeaways-box h3 { margin-top: 0; color: #2c3e50; font-size: 22px; }
     .takeaways-box ul { margin-bottom: 0; padding-left: 20px; }
-    .takeaways-box li { margin-bottom: 10px; }
+    .takeaways-box li { margin-bottom: 10px; font-weight: 500; }
 
     /* Tables */
-    .table-wrapper { overflow-x: auto; margin: 30px 0; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    table { width: 100%; border-collapse: collapse; background: #fff; }
-    th { background: #34495e; color: #fff; padding: 15px; text-align: left; }
-    td { padding: 12px 15px; border-bottom: 1px solid #eee; }
+    .table-wrapper { overflow-x: auto; margin: 35px 0; border-radius: 12px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; background: #fff; min-width: 600px; }
+    th { background: #34495e; color: #fff; padding: 16px; text-align: left; }
+    td { padding: 14px 16px; border-bottom: 1px solid #eee; }
     tr:nth-child(even) { background-color: #f9f9f9; }
     tr:hover { background-color: #f1f1f1; }
 
     /* Blockquotes */
     blockquote {
-        background: #fff;
-        border-left: 5px solid #e74c3c;
-        margin: 30px 0;
+        background: #fffaf0;
+        border-left: 5px solid #ffb703;
+        margin: 35px 0;
         padding: 20px 30px;
         font-style: italic;
         color: #555;
-        font-size: 1.1em;
+        font-size: 1.15em;
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
     }
 
     /* Links */
-    a { color: #3498db; text-decoration: none; font-weight: 500; transition: color 0.3s; }
-    a:hover { color: #2980b9; text-decoration: underline; }
+    a { color: #d35400; text-decoration: none; font-weight: 600; transition: color 0.3s; }
+    a:hover { color: #e67e22; text-decoration: underline; }
     
     /* Images */
-    .separator img { border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.15); max-width: 100%; height: auto; }
+    .separator img { border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); max-width: 100%; height: auto; }
     
     /* Sources Section */
-    .sources-section { background: #f9f9f9; padding: 20px; border-radius: 8px; font-size: 0.9em; color: #666; margin-top: 50px; }
+    .sources-section { background: #fdfdfd; padding: 20px; border-radius: 8px; font-size: 0.9em; color: #7f8c8d; margin-top: 60px; border-top: 1px solid #eee; }
 </style>
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL VERSIONS)
+# 2. PROMPTS DEFINITIONS (FULL & UPDATED)
 # ==============================================================================
 
+# PROMPT A: تم تحديثه ليعمل مع RSS
 PROMPT_A_TRENDING = """
-A:You are an investigative tech reporter specialized in {section}. Search the modern index (Google Search, Google Scholar, arXiv, official blogs, SEC/10-Q when financial figures are used) for one specific, high-impact case, study, deployment, or company announcement that occurred within {date_range} (for example "last 60 days").
+A: You are a Lead Investigative Tech Reporter. I have fetched the LATEST REAL-TIME headlines from Google News RSS for "{section}".
 
-SECTION FOCUS (choose the relevant focus for {section}; these must guide your search terms):
+INPUT RSS DATA (Real headlines from last 24h):
+{rss_data}
+
+SECTION FOCUS:
 {section_focus}
 
 **CRITICAL ANTI-DUPLICATION RULE:**
-The following topics have already been covered recently. DO NOT write about them again. Find a DIFFERENT story:
+The following topics have already been covered. DO NOT write about them again. Find a NEW story:
 {recent_titles}
 
-MANDATORY SOURCE & VERIFICATION RULES (follow EXACTLY):
-
-Return exactly one headline (plain English, single line) — a journalist-style headline that connects technical advance to human/commercial impact.
-
-Provide 2–3 primary sources that verify the story. At least:
-One PRIMARY TECH SOURCE: (peer-reviewed DOI or arXiv paper with version/date OR official GitHub repo with commit/PR date OR official company technical blog post).
-One SECONDARY CORROBORATING SOURCE: (reputable news outlet, conference proceeding, or company press release).
-
-For each source, include:
-title, exact URL, publication date (YYYY-MM-DD), type (paper/blog/repo/press/SEC), and a one-line note: "why it verifies".
-
-For any numeric claim you will later assert (e.g., "88% of queries"), ensure the source actually contains that number. If the source gives a figure differently, report the exact figure and location of the figure in the source (e.g., "see Figure 2, page 6" or "arXiv v2, paragraph 3").
-
-If the story touches YMYL topics (health/finance/legal), include an immediate risk note listing which regulations may apply (e.g., HIPAA, FDA, CE, GDPR, SEC) and what kind of verification is required.
-
-Check basic credibility signals for each source and report them: (a) publisher credibility (Nature/IEEE/ACM/official corp blog), (b) if arXiv — indicate whether paper has code/benchmarks, (c) if GitHub — include last commit date and license, (d) if press release — confirm corporate domain and date/time.
+TASK:
+1. Analyze the RSS headlines.
+2. Select ONE high-impact story. Ignore generic "What is AI?" articles. Look for Launches, Breakthroughs, or Legal news.
+3. Extract the core event and main entity.
 
 Output JSON only, EXACTLY in this format:
-{{"headline": "One-line headline","sources": [{{"title":"Exact source title","url":"https://...","date":"YYYY-MM-DD","type":"paper|arXiv|repo|blog|press|SEC","why":"One-line why this verifies (include exact page/figure if relevant)","credibility":"short note: Nature/IEEE/company blog/press/etc","notes":"any caveats about the source"}}],"riskNote":"If YMYL risk exists list regulators and verification steps; otherwise empty string"}}
+{{"headline": "One-line journalist-style headline","sources": [{{"title":"Original RSS Title","url":"Link provided in RSS","date":"{today_date}","type":"news","why":"Main Source","credibility":"High"}}],"riskNote":"..."}}
 """
 
 PROMPT_A_EVERGREEN = """
@@ -137,6 +154,9 @@ PROMPT_B_TEMPLATE = """
 B:You are Editor-in-Chief of 'AI News Hub'. Input: the JSON output from Prompt A (headline + sources). Write a polished HTML article (1500–2000 words) using the provided headline and sources. Follow these rules exactly.
 INPUT: {json_input}
 
+**STRICT FORBIDDEN PHRASES (DO NOT USE):**
+{forbidden_phrases}
+
 I. STRUCTURE & VOICE RULES (mandatory):
 
 H1 = headline exactly as provided (unless you correct minor grammar, then keep original in an attribute).
@@ -151,12 +171,6 @@ Sentence length distribution: ~40% short (6–12 words), ~45% medium (13–22 wo
 Use contractions where natural (e.g., "it's", "they're") to sound human.
 Include exactly one first-person editorial sentence from the writer (e.g., "In my experience covering X, I've seen...") — keep it 1 sentence only.
 Include one rhetorical question in the article (short).
-
-Avoid AI-template phrasing: forbid the following exact phrases (do not use them anywhere):
-"In today's digital age"
-"The world of AI is ever-evolving"
-"This matters because" — instead use 1–2 human sentences that explain significance.
-"In conclusion" (use a forward-looking takeaway instead).
 
 Tone: authoritative but approachable. Use occasional colloquial connectors (e.g., "That said," "Crucially,") — sparingly.
 
@@ -288,50 +302,39 @@ Rules:
 6. Output JSON ONLY in this format: {{"facebook": "YOUR_CAPTION_HERE"}}
 """
 
-# --- UPDATED VIDEO PROMPT (COMPREHENSIVE, SHORT BURSTS & CTA) ---
 PROMPT_VIDEO_SCRIPT = """
-You are a Screenwriter. Create a WhatsApp-style chat script between two friends (Alex & Sam) discussing this news.
-
-INPUT HEADLINE: "{title}"
-INPUT SUMMARY: "{text_summary}"
+You are a Screenwriter for a Viral Tech Short. Create a WhatsApp-style chat script between "Alex" and "Sam".
+Input Title: "{title}"
+Input Summary: "{text_summary}"
 
 Rules:
-1. **GOAL:** The chat must cover the ENTIRE article content (Intro, Key Details, Why it matters, Conclusion). It should replace reading the article.
-2. **STYLE:** Casual, fast, like real texting. Use slang like "OMG", "No way", "Seriously?".
-3. **FORMAT:** Short bubbles. Max 6-8 words per bubble.
-4. **SPLITTING:** Split long explanations into 3-4 consecutive bubbles from the same speaker. NEVER write a long paragraph.
-5. **LENGTH:** 30-50 bubbles total (Comprehensive coverage).
-6. **ENDING (CRITICAL):** The chat MUST end with a strong Call-to-Action (CTA).
-   - Speaker A should ask where to find more details.
-   - Speaker B must say something like: "Link is in the description!", "Read the full article below", or "Check the bio for the link".
-7. **LANGUAGE:** English Only.
-8. Output JSON ONLY:
+1. **Goal:** Hook the viewer immediately.
+2. **Style:** Casual, fast, like real texting (Use slang like "OMG", "Bro", "Crazy").
+3. **Ending:** Must include Call-to-Action: "Link in description for the full story!".
+4. **Length:** 20-30 bubbles.
+
+Output JSON ONLY:
 [
-  {{"speaker": "Alex", "type": "send", "text": "Bro did u see the news?"}},
-  {{"speaker": "Alex", "type": "send", "text": "NVIDIA just dropped a bomb 🤯"}},
-  {{"speaker": "Sam", "type": "receive", "text": "No what happened??"}},
-  {{"speaker": "Sam", "type": "receive", "text": "Tell me everything!"}},
-  {{"speaker": "Alex", "type": "send", "text": "Okay so basically..."}},
-  {{"speaker": "Alex", "type": "send", "text": "They released a new chip."}},
-  {{"speaker": "Sam", "type": "receive", "text": "Wow, I need to read more."}},
-  {{"speaker": "Alex", "type": "send", "text": "Full link is in the description 👇"}}
+  {{"speaker": "Alex", "type": "send", "text": "Bro, did you see the news? 🤯"}},
+  {{"speaker": "Sam", "type": "receive", "text": "No, what happened?"}},
+  ...
 ]
 """
 
 PROMPT_YOUTUBE_METADATA = """
-You are a YouTube SEO Expert. Based on this specific headline, generate metadata.
+You are a YouTube SEO Expert.
 Input Headline: {draft_title}
 
 Output JSON ONLY:
 {{
-  "title": "Catchy YouTube Title (Max 60 chars) - Must relate to {draft_title}",
-  "description": "Engaging description (first 2 lines hook), includes keywords.",
-  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+  "title": "Clickbaity YouTube Title (Max 60 chars)",
+  "description": "Engaging description hooks the viewer.",
+  "tags": ["tag1", "tag2", "tag3", "tag4"]
 }}
 """
 
 # ==============================================================================
-# 3. KEY MANAGER
+# 3. KEY MANAGER & UTILITIES
 # ==============================================================================
 
 class KeyManager:
@@ -361,9 +364,58 @@ class KeyManager:
 
 key_manager = KeyManager()
 
-# ==============================================================================
-# 4. HELPER FUNCTIONS
-# ==============================================================================
+def clean_json(text):
+    text = text.strip()
+    match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
+    if match: text = match.group(1)
+    else:
+        match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
+        if match: text = match.group(1)
+    if text.lower().startswith("json"): text = text[4:].strip()
+    return text
+
+def try_parse_json(text, context=""):
+    try: return json.loads(text)
+    except:
+        try:
+            # Fix backslashes for escaped paths
+            fixed = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
+            return json.loads(fixed)
+        except: 
+            log(f"      ❌ JSON Parse Failed in {context}.")
+            return None
+
+def get_real_news_rss(query_keywords, category):
+    """
+    جلب الأخبار الحقيقية باستخدام RSS مع تصفية 'when:1d' لضمان الحداثة
+    """
+    try:
+        query = f"{query_keywords} when:1d"
+        encoded_query = urllib.parse.quote(query)
+        rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
+        
+        log(f"   📡 Connecting to RSS Feed for: {query_keywords}...")
+        feed = feedparser.parse(rss_url)
+        
+        items = []
+        if feed.entries:
+            for entry in feed.entries[:7]:
+                pub_date = entry.published if 'published' in entry else "Today"
+                items.append(f"- Headline: {entry.title}\n  Link: {entry.link}\n  Date: {pub_date}")
+            return "\n".join(items)
+        else:
+            log("   ⚠️ No specific RSS found. Falling back to category search.")
+            query = f"{category} technology when:1d"
+            encoded_query = urllib.parse.quote(query)
+            rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
+            feed = feedparser.parse(rss_url)
+            for entry in feed.entries[:3]:
+                 items.append(f"- Headline: {entry.title}\n  Link: {entry.link}")
+            return "\n".join(items) if items else "No RSS data."
+            
+    except Exception as e:
+        log(f"❌ RSS Error: {e}")
+        return "RSS unavailable."
 
 def get_blogger_token():
     payload = {
@@ -381,121 +433,64 @@ def get_blogger_token():
         return None
 
 def publish_post(title, content, labels):
-    """Publishes to Blogger and returns the ACTUAL URL."""
     token = get_blogger_token()
     if not token: return None
     
     blog_id = os.getenv('BLOGGER_BLOG_ID')
     url = f"https://www.googleapis.com/blogger/v3/blogs/{blog_id}/posts"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    data = {"title": title, "content": content, "labels": labels}
+    
+    data = {"title": title, "content": content, "labels": labels, "status": "LIVE"}
     
     try:
         r = requests.post(url, headers=headers, json=data)
         if r.status_code == 200:
             post_data = r.json()
             real_url = post_data.get('url')
-            log(f"✅ Published: {title} -> {real_url}")
+            log(f"✅ Published: {real_url}")
             return real_url
         else:
             log(f"❌ Publish Error: {r.text}")
             return None
     except Exception as e:
-        log(f"❌ Connection Error: {e}")
+        log(f"❌ Publish Connection Error: {e}")
         return None
-
-def clean_json(text):
-    """Cleans JSON string from Markdown and common errors."""
-    text = text.strip()
-    match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
-    if match: 
-        text = match.group(1)
-    else:
-        match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
-        if match: 
-            text = match.group(1)
-    
-    if text.lower().startswith("json"):
-        text = text[4:].strip()
-
-    return text
-
-def try_parse_json(text, context=""):
-    """Robust JSON parsing with multiple fallback strategies."""
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError as e:
-        if "Extra data" in str(e):
-            try:
-                return json.loads(text[:e.pos])
-            except: pass
-        pass
-
-    try:
-        fixed_text = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
-        return json.loads(fixed_text)
-    except json.JSONDecodeError:
-        pass
-
-    try:
-        fixed_text = text.replace('\\', '\\\\')
-        return json.loads(fixed_text)
-    except json.JSONDecodeError:
-        pass
-
-    try:
-        match = re.search(r'(\[.*\])', text, re.DOTALL)
-        if match: return json.loads(match.group(1))
-    except: pass
-
-    try:
-        match = re.search(r'(\{.*\})', text, re.DOTALL)
-        if match: return json.loads(match.group(1))
-    except: pass
-
-    log(f"      ❌ JSON Parse Failed in {context}.")
-    return None
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
     if not key: 
-        log("⚠️ No IMGBB_API_KEY found.")
+        log("⚠️ No IMGBB Key.")
         return None
     
-    log(f"   🎨 Generating Image: '{prompt_text}'...")
-    
+    log(f"   🎨 Generating Image...")
     for attempt in range(3):
         try:
-            safe_prompt = requests.utils.quote(f"{prompt_text}, abstract, futuristic, 3d render, high quality, --no people, humans, animals, faces")
+            safe_prompt = requests.utils.quote(f"{prompt_text}, abstract technology, 8k, --no text, humans")
             text_param = ""
             if overlay_text:
                 safe_text = requests.utils.quote(overlay_text)
                 text_param = f"&text={safe_text}&font=roboto&fontsize=50"
 
-            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&nologo=true&seed={random.randint(1,99999)}&model=flux{text_param}"
+            url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1280&height=720&model=flux&nologo=true&seed={random.randint(1,9999)}{text_param}"
             
-            img_response = requests.get(url, timeout=45)
-            if img_response.status_code != 200:
-                time.sleep(5)
+            img_res = requests.get(url, timeout=45)
+            if img_res.status_code != 200:
+                time.sleep(3)
                 continue
             
-            log("   ☁️ Uploading to ImgBB...")
+            log("   ☁️ Uploading Image...")
             res = requests.post(
                 "https://api.imgbb.com/1/upload", 
                 data={"key":key, "expiration":0}, 
-                files={"image":img_response.content},
+                files={"image":img_res.content},
                 timeout=45
             )
             
             if res.status_code == 200:
-                direct_link = res.json()['data']['url']
-                log(f"   ✅ Image Ready: {direct_link}")
-                return direct_link
+                return res.json()['data']['url']
                 
         except Exception as e:
-            time.sleep(5)
-            
-    log("❌ Failed to generate/upload image after 3 attempts.")
+            time.sleep(3)
     return None
 
 def load_kg():
@@ -505,94 +500,33 @@ def load_kg():
 
 def get_recent_titles_string(limit=50):
     kg = load_kg()
-    titles = [item['title'] for item in kg[-limit:]] if kg else []
-    return ", ".join(titles)
+    return ", ".join([item.get('title','UNKNOWN') for item in kg[-limit:]]) if kg else ""
 
 def get_relevant_kg_for_linking(current_category, limit=60):
     full_kg = load_kg()
     if not full_kg: return "[]"
-    
-    relevant = [item for item in full_kg if item.get('section') == current_category]
-    guides = [item for item in full_kg if "Guide" in item.get('title', '') and item.get('section') != current_category]
-    
-    combined = relevant + guides[:10]
-    if len(combined) > limit: combined = combined[-limit:]
-    
-    simplified = [{"title": item['title'], "url": item['url']} for item in combined if 'url' in item]
-    return json.dumps(simplified)
+    rel = [{"title": i['title'], "url": i['url']} for i in full_kg if i.get('section')==current_category][:limit]
+    return json.dumps(rel)
 
 def update_kg(title, url, section):
     try:
         data = load_kg()
-        for item in data:
-            if item.get('url') == url: return
-        
+        for i in data: 
+            if i.get('url')==url: return
         data.append({"title": title, "url": url, "section": section, "date": str(datetime.date.today())})
-        
-        with open('knowledge_graph.json', 'w', encoding='utf-8') as f: 
-            json.dump(data, f, indent=2)
-        log(f"   💾 Saved to Knowledge Graph: {title}")
-    except Exception as e:
-        log(f"   ⚠️ KG Update Error: {e}")
+        with open('knowledge_graph.json','w', encoding='utf-8') as f: json.dump(data, f, indent=2)
+    except: pass
 
 def perform_maintenance_cleanup():
     try:
-        kg_path = 'knowledge_graph.json'
-        archive_dir = 'archive'
-        
-        if not os.path.exists(kg_path): return
-        with open(kg_path, 'r', encoding='utf-8') as f: data = json.load(f)
-            
-        if len(data) < 800: return
-
-        log("   🧹 Performing Database Maintenance...")
-        guides = [item for item in data if "Guide" in item.get('title', '')]
-        others = [item for item in data if item not in guides]
-        
-        keep_count = 400
-        if len(others) <= keep_count: return
-
-        kept_others = others[-keep_count:] 
-        to_archive = others[:-keep_count]
-        
-        new_main_data = guides + kept_others
-        with open(kg_path, 'w', encoding='utf-8') as f: json.dump(new_main_data, f, indent=2)
-            
-        if not os.path.exists(archive_dir): os.makedirs(archive_dir)
-        
-        current_year = datetime.datetime.now().year
-        archive_path = os.path.join(archive_dir, f'history_{current_year}.json')
-        
-        archive_data = []
-        if os.path.exists(archive_path):
-            with open(archive_path, 'r', encoding='utf-8') as f: archive_data = json.load(f)
-        
-        archive_data.extend(to_archive)
-        with open(archive_path, 'w', encoding='utf-8') as f: json.dump(archive_data, f, indent=2)
-            
-        log(f"   ✅ Archived {len(to_archive)} articles.")
-    except Exception as e:
-        log(f"   ⚠️ Maintenance Warning: {e}")
-
-def estimate_blogger_url(title):
-    """Estimates the Blogger URL to put in YouTube description before publishing."""
-    # Clean title to slug
-    slug = re.sub(r'[^a-zA-Z0-9\s-]', '', title).strip().lower()
-    slug = re.sub(r'[\s-]+', '-', slug)
-    
-    today = datetime.date.today()
-    year = today.year
-    month = f"{today.month:02d}"
-    
-    # Placeholder URL structure
-    return f"https://www.latestai.me/{year}/{month}/{slug}.html"
-
-# ==============================================================================
-# 5. CORE GENERATION LOGIC
-# ==============================================================================
+        if not os.path.exists('knowledge_graph.json'): return
+        with open('knowledge_graph.json','r') as f: d=json.load(f)
+        if len(d) > 800:
+            with open('knowledge_graph.json','w') as f: json.dump(d[-400:], f, indent=2)
+    except: pass
 
 def generate_step(model_name, prompt, step_name):
-    log(f"   👉 Executing {step_name}...")
+    log(f"   👉 Generating: {step_name}...")
     while True:
         current_key = key_manager.get_current_key()
         if not current_key: return None
@@ -605,39 +539,39 @@ def generate_step(model_name, prompt, step_name):
             )
             return clean_json(response.text)
         except Exception as e:
-            error_msg = str(e)
-            if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-                log(f"      ⚠️ Quota hit on Key #{key_manager.current_index + 1}.")
-                if key_manager.switch_key():
-                    log("      🔄 Retrying with new key...")
-                    continue
+            if "429" in str(e) or "quota" in str(e).lower():
+                if key_manager.switch_key(): continue
                 else: return None
-            elif "503" in error_msg:
-                time.sleep(30)
-                continue
-            else:
-                log(f"      ❌ Error: {e}")
-                return None
+            log(f"      ❌ AI Error: {e}")
+            return None
 
 # ==============================================================================
-# 6. UNIFIED PIPELINE
+# 5. CORE PIPELINE LOGIC (RSS + 5-STEP GENERATION)
 # ==============================================================================
 
 def run_pipeline(category, config, mode="trending"):
     model = config['settings'].get('model_name', 'models/gemini-2.5-flash')
     cat_config = config['categories'][category]
     
-    log(f"\n🚀 STARTING {mode.upper()} CHAIN FOR: {category}")
-
+    log(f"\n🚀 STARTING PIPELINE: {category} ({mode})")
     recent_titles = get_recent_titles_string(limit=40)
 
-    # --- STEP A ---
+    # --- STEP 1: RSS RESEARCH ---
     if mode == "trending":
+        rss_keys = cat_config.get('trending_focus', category)
+        rss_data_str = get_real_news_rss(rss_keys, category)
+        
+        # Stop if no valid news to avoid hallucinations
+        if "No RSS" in rss_data_str:
+            log("⚠️ Aborting: No fresh RSS data found today.")
+            return
+
         prompt_a = PROMPT_A_TRENDING.format(
+            rss_data=rss_data_str,
             section=category,
-            date_range=config['settings'].get('date_range_query', 'last 60 days'),
-            section_focus=cat_config.get('trending_focus', ''),
-            recent_titles=recent_titles
+            section_focus=rss_keys,
+            recent_titles=recent_titles,
+            today_date=str(datetime.date.today())
         )
     else:
         prompt_a = PROMPT_A_EVERGREEN.format(
@@ -646,226 +580,149 @@ def run_pipeline(category, config, mode="trending"):
             recent_titles=recent_titles
         )
 
-    json_a = generate_step(model, prompt_a, "Step A (Research)")
-    if not json_a: return
-    time.sleep(10)
+    json_a_text = generate_step(model, prompt_a, "Step A (Selection)")
+    if not json_a_text: return
+    time.sleep(5)
 
-    # --- STEP B ---
-    prompt_b = PROMPT_B_TEMPLATE.format(json_input=json_a)
-    json_b = generate_step(model, prompt_b, "Step B (Drafting)")
-    if not json_b: return
-    time.sleep(10)
+    # --- STEP 2: DRAFTING ---
+    prompt_b = PROMPT_B_TEMPLATE.format(json_input=json_a_text, forbidden_phrases=", ".join(FORBIDDEN_PHRASES))
+    json_b_text = generate_step(model, prompt_b, "Step B (Drafting)")
+    if not json_b_text: return
+    time.sleep(5)
 
-    # --- STEP C ---
-    relevant_kg_str = get_relevant_kg_for_linking(category, limit=50)
-    prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b, knowledge_graph=relevant_kg_str)
-    json_c = generate_step(model, prompt_c, "Step C (SEO & Images)")
-    if not json_c: return
-    time.sleep(10)
+    # --- STEP 3: SEO ---
+    kg_links = get_relevant_kg_for_linking(category)
+    prompt_c = PROMPT_C_TEMPLATE.format(json_input=json_b_text, knowledge_graph=kg_links)
+    json_c_text = generate_step(model, prompt_c, "Step C (SEO)")
+    if not json_c_text: return
+    time.sleep(5)
 
-    # --- STEP D ---
-    prompt_d = PROMPT_D_TEMPLATE.format(json_input=json_c)
-    json_d = generate_step(model, prompt_d, "Step D (Audit)")
-    if not json_d: return
-    time.sleep(10)
+    # --- STEP 4: AUDIT (RESTORED!) ---
+    prompt_d = PROMPT_D_TEMPLATE.format(json_input=json_c_text)
+    json_d_text = generate_step(model, prompt_d, "Step D (Audit)")
+    if not json_d_text: return
+    time.sleep(5)
 
-    # --- STEP E (FINAL POLISH) ---
-    prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d)
-    json_e = generate_step(model, prompt_e, "Step E (Final)")
-    if not json_e: return
+    # --- STEP 5: FINAL PACKAGE (RESTORED!) ---
+    prompt_e = PROMPT_E_TEMPLATE.format(json_input=json_d_text)
+    json_e_text = generate_step(model, prompt_e, "Step E (Publisher)")
+    if not json_e_text: return
 
-    # -------------------------------------------------------------
-    # 🎥 STEP F: DUAL VIDEO PRODUCTION (LANDSCAPE + SHORTS)
-    # -------------------------------------------------------------
+    final_data = try_parse_json(json_e_text, "Final")
+    if not final_data: return
+
+    final_title = final_data.get('finalTitle', f"{category} Update")
+
+    # ==============================================================================
+    # 🎥 MEDIA
+    # ==============================================================================
     video_embed_html = ""
-    uploaded_video_id_main = None 
-    uploaded_video_id_short = None
-    youtube_description_cache = "" 
-    path_short_for_fb = None # Store path for later FB upload
-    video_title_for_fb = ""
-    video_tags_for_fb = []
+    vid_id_main = None
+    vid_id_short = None
+    path_video_short = None # for FB Reel
 
     try:
-        # We use json_d (Audit) for script generation as it has the full draft
-        final_d = try_parse_json(json_d, "Step D Parsing")
-        data_a = try_parse_json(json_a, "Step A Parsing") if 'json_a' in locals() and json_a else {}
+        content_stripped = re.sub('<[^<]+?>', '', final_data.get('finalContent', ''))[:2000]
+        script_raw = generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=final_title, text_summary=content_stripped), "Script")
         
-        specific_title = data_a.get('headline') if data_a else final_d.get('draftTitle', 'Tech News')
-        
-        if final_d:
-            content_text = re.sub('<[^<]+?>', '', final_d.get('draftContent', ''))[:2000] # More context for long script
+        script = try_parse_json(script_raw)
+        if script:
+            # Main Video (16:9)
+            r1 = video_renderer.VideoRenderer(width=1920, height=1080)
+            p1 = r1.render_video(script, final_title, f"main_{int(time.time())}.mp4")
             
-            log(f"   🎬 Step F: Generating Video Script for '{specific_title}'...")
+            # Short Video (9:16)
+            r2 = video_renderer.VideoRenderer(width=1080, height=1920)
+            p2 = r2.render_video(script, final_title, f"short_{int(time.time())}.mp4")
+            path_video_short = p2
             
-            script_prompt = PROMPT_VIDEO_SCRIPT.format(title=specific_title, text_summary=content_text)
-            
-            # RETRY LOOP FOR SCRIPT GENERATION
-            script_json_text = None
-            for attempt in range(3):
-                script_json_text = generate_step(model, script_prompt, f"Video Scripting (Attempt {attempt+1})")
-                if try_parse_json(script_json_text):
-                    break
-                log("      ⚠️ Script JSON invalid, retrying...")
-            
-            if script_json_text:
-                chat_script = try_parse_json(script_json_text, "Video Script Parsing")
-                
-                if chat_script:
-                    # --- 1. RENDER LANDSCAPE (1920x1080) ---
-                    renderer_main = video_renderer.VideoRenderer(width=1920, height=1080)
-                    vid_main_file = f"vid_main_{int(time.time())}.mp4"
-                    path_main = renderer_main.render_video(chat_script, specific_title, filename=vid_main_file)
-                    
-                    # --- 2. RENDER PORTRAIT (1080x1920) FOR SHORTS ---
-                    renderer_short = video_renderer.VideoRenderer(width=1080, height=1920)
-                    vid_short_file = f"vid_short_{int(time.time())}.mp4"
-                    path_short = renderer_short.render_video(chat_script, specific_title, filename=vid_short_file)
-                    
-                    # Save for FB
-                    path_short_for_fb = path_short
+            # Metadata
+            meta_raw = generate_step(model, PROMPT_YOUTUBE_METADATA.format(draft_title=final_title), "YT Meta")
+            meta = try_parse_json(meta_raw) or {"title": final_title, "tags": []}
 
-                    # --- 3. YOUTUBE METADATA ---
-                    yt_prompt = PROMPT_YOUTUBE_METADATA.format(draft_title=specific_title)
-                    yt_meta_json = generate_step(model, yt_prompt, "YouTube SEO")
-                    
-                    if yt_meta_json:
-                        yt_meta = try_parse_json(yt_meta_json, "YouTube Meta")
-                        youtube_description_cache = yt_meta.get('description', '')
-                        initial_desc = youtube_description_cache + "\n\n📄 Read full article: [Link coming soon]\n👉 Subscribe for more AI News!"
-                        
-                        # Save for FB
-                        video_title_for_fb = yt_meta.get('title', specific_title)
-                        video_tags_for_fb = yt_meta.get('tags', [])
+            # Upload
+            if p1:
+                vid_id_main, _ = youtube_manager.upload_video_to_youtube(
+                    p1, meta.get('title', final_title), "Generated by LatestAI\nLink below!", meta.get('tags', [])
+                )
+                if vid_id_main:
+                    video_embed_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:35px 0;"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_id_main}" frameborder="0" allowfullscreen></iframe></div>'
 
-                        # --- 4. UPLOAD MAIN VIDEO ---
-                        if path_main and os.path.exists(path_main):
-                            vid_id, embed_link = youtube_manager.upload_video_to_youtube(
-                                path_main, 
-                                yt_meta.get('title', specific_title),
-                                initial_desc,
-                                yt_meta.get('tags', [])
-                            )
-                            if vid_id:
-                                uploaded_video_id_main = vid_id
-                                # Create Embed HTML for Blog
-                                video_embed_html = f"""
-                                <div class="video-container" style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; margin: 30px 0;">
-                                    <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 10px;" 
-                                    src="https://www.youtube.com/embed/{vid_id}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-                                </div>
-                                """
-                                log("   ✅ Main Video Uploaded & Ready for Injection.")
+            if p2:
+                 vid_id_short, _ = youtube_manager.upload_video_to_youtube(
+                    p2, f"{meta.get('title', final_title)[:90]} #Shorts", "Sub for daily news!", meta.get('tags', [])+['shorts']
+                )
 
-                        # --- 5. UPLOAD SHORTS VIDEO ---
-                        if path_short and os.path.exists(path_short):
-                            # Add #Shorts to title
-                            short_title = yt_meta.get('title', specific_title)[:90] + " #Shorts"
-                            vid_id_short, _ = youtube_manager.upload_video_to_youtube(
-                                path_short, 
-                                short_title,
-                                initial_desc, # Same description
-                                yt_meta.get('tags', []) + ["shorts", "reels"]
-                            )
-                            if vid_id_short:
-                                uploaded_video_id_short = vid_id_short
-                                log("   ✅ Shorts Video Uploaded Successfully.")
-            
     except Exception as e:
-        log(f"⚠️ Video Generation Failed: {e}")
+        log(f"⚠️ Video Pipeline Error: {e}")
 
-    # --- FINAL PROCESSING & PUBLISHING ---
-    try:
-        final = try_parse_json(json_e, "Step E Parsing")
-        if not final:
-            log("❌ Final processing failed: Could not parse JSON after multiple attempts.")
-            return
-
-        title = final.get('finalTitle', f"{category} Article")
-        content = ARTICLE_STYLE 
+    # ==============================================================================
+    # 📝 PUBLISHING
+    # ==============================================================================
+    content_html = ARTICLE_STYLE
+    
+    # Image
+    img_url = generate_and_upload_image(final_data.get('imageGenPrompt', final_title), final_data.get('imageOverlayText', 'Tech News'))
+    if img_url:
+        alt = final_data.get('seo', {}).get('imageAltText', final_title)
+        content_html += f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}"><img src="{img_url}" alt="{alt}" /></a></div>'
+    
+    if video_embed_html: content_html += video_embed_html
+    
+    content_html += final_data.get('finalContent', '')
+    
+    # Safe Schema Injection
+    if 'schemaMarkup' in final_data:
+        try:
+            s_dump = json.dumps(final_data['schemaMarkup'])
+            content_html += f'\n<script type="application/ld+json">\n{s_dump}\n</script>'
+        except: pass
         
-        # Image Gen
-        img_prompt = final.get('imageGenPrompt', f"Abstract {category} technology")
-        overlay_text = final.get('imageOverlayText', title[:20])
-        img_url = generate_and_upload_image(img_prompt, overlay_text)
+    real_link = publish_post(final_title, content_html, [category])
+    
+    if real_link:
+        update_kg(final_title, real_link, category)
+        log("✅ Knowledge Graph Saved.")
         
-        if img_url:
-            alt_text = final.get('seo', {}).get('imageAltText', title)
-            img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}"><img border="0" src="{img_url}" alt="{alt_text}" /></a></div>'
-            content += img_html
+        # Social Updates
+        new_desc = f"🚀 READ STORY: {real_link}\n\nDon't forget to Sub!"
+        if vid_id_main: youtube_manager.update_video_description(vid_id_main, new_desc)
+        if vid_id_short: youtube_manager.update_video_description(vid_id_short, new_desc)
         
-        # INJECT VIDEO HERE (AFTER STEP E)
-        final_body = final.get('finalContent', '')
-        if video_embed_html:
-            # Inject after the first paragraph or H2
-            if "</h2>" in final_body:
-                final_body = final_body.replace("</h2>", "</h2>" + video_embed_html, 1)
-            else:
-                final_body = video_embed_html + final_body
-        
-        content += final_body
-        
-        # Publish to Blogger
-        labels = [category]
-        real_url = publish_post(title, content, labels)
-        
-        if real_url:
-            update_kg(title, real_url, category)
-            
-            # ---------------------------------------------------------
-            # 🔄 POST-PUBLISH UPDATES (YOUTUBE & FACEBOOK REEL)
-            # ---------------------------------------------------------
-            
-            # 1. Update YouTube Descriptions
-            new_desc = youtube_description_cache + f"\n\n📄 Read full article: {real_url}\n👉 Subscribe for more AI News!"
-            
-            if uploaded_video_id_main:
-                youtube_manager.update_video_description(uploaded_video_id_main, new_desc)
-            
-            if uploaded_video_id_short:
-                youtube_manager.update_video_description(uploaded_video_id_short, new_desc)
-
-            # 2. Upload Facebook Reel (NOW with Real URL)
-            if path_short_for_fb and os.path.exists(path_short_for_fb):
-                # Generate Hashtags
-                hashtags = " ".join([f"#{tag.replace(' ', '')}" for tag in video_tags_for_fb])
-                # Create Caption with Real URL
-                reel_caption = f"{video_title_for_fb} 🔥\n\n{youtube_description_cache}\n\n👇 Full story: {real_url}\n\n{hashtags} #AI #TechNews"
-                
-                social_manager.post_reel_to_facebook(path_short_for_fb, reel_caption)
-
-            # 3. Facebook Image Post (Standard)
-            if img_url: 
-                try:
-                    fb_prompt = PROMPT_FACEBOOK_HOOK.format(title=title, category=category)
-                    fb_json_text = generate_step(model, fb_prompt, "Facebook Hook Generation")
-                    if fb_json_text:
-                        fb_data = try_parse_json(fb_json_text, "Facebook Parsing")
-                        if fb_data:
-                            social_manager.distribute_content(fb_data.get('facebook', ''), real_url, img_url)
-                except Exception as e:
-                    log(f"⚠️ Facebook Automation Skipped: {e}")
-            
-    except Exception as e:
-        log(f"❌ Final processing failed: {e}")
+        try:
+            if path_video_short:
+                social_manager.post_reel_to_facebook(path_video_short, f"{final_title} 🔥\n\nFull: {real_link} #Tech")
+            elif img_url:
+                 fb_cap_raw = generate_step(model, PROMPT_FACEBOOK_HOOK.format(title=final_title, category=category), "FB Caption")
+                 fb_cap = try_parse_json(fb_cap_raw).get('facebook', final_title)
+                 social_manager.distribute_content(fb_cap, real_link, img_url)
+        except Exception as e: log(f"⚠️ Social Error: {e}")
 
 # ==============================================================================
-# 7. MAIN
+# 6. MAIN (ROULETTE & ANTI-BOT)
 # ==============================================================================
 
 def main():
-    with open('config_advanced.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
+    # 1. Anti-Bot Sleep (1 min to 30 mins)
+    sleep_t = random.randint(60, 1800)
+    log(f"🕵️‍♂️ Waiting {sleep_t} seconds...")
+    time.sleep(sleep_t)
 
-    for category in config['categories']:
-        run_pipeline(category, config, mode="trending")
-        log("💤 Cooling down (30s)...")
-        time.sleep(30)
-        
-        run_pipeline(category, config, mode="evergreen")
-        log("💤 Cooling down (30s)...")
-        time.sleep(30)
+    # 2. Config
+    with open('config_advanced.json','r') as f: config = json.load(f)
+
+    # 3. Roulette Selection
+    categories = list(config['categories'].keys())
+    if not categories: return
     
+    selected_cat = random.choice(categories)
+    log(f"🎰 Selected Category: '{selected_cat}'")
+
+    # 4. Run One Good Article (Trend Only)
+    run_pipeline(selected_cat, config, mode="trending")
+
     perform_maintenance_cleanup()
+    log("✅ Finished.")
 
 if __name__ == "__main__":
     main()
