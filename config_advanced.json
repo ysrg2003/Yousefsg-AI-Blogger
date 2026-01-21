@@ -27,10 +27,6 @@
     "AI Research": {
       "trending_focus": "AI Research: arXiv/NeurIPS/CVPR papers, ablations, reproducibility, code availability.",
       "evergreen_prompt": "Write a detailed overview of recent AI research trends. Discuss landmark papers from NeurIPS, CVPR, ICLR, and arXiv. Cover topics like scaling laws, few-shot learning, multimodal models, and reproducibility challenges. Include analysis of ablation studies and code availability in the research community."
-    },
-    "AI Ethics": {
-      "trending_focus": "AI Ethics: audits, impact assessments, governance, legal cases.",
-      "evergreen_prompt": "Write a comprehensive article on AI Ethics. Cover algorithmic bias, fairness metrics, transparency and explainability (XAI), privacy concerns (GDPR, CCPA), and governance frameworks. Include case studies of AI audits, impact assessments, and legal precedents. Discuss responsible AI principles."
     }
   },
   "settings": {
