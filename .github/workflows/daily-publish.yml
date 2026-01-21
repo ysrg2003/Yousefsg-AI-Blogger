@@ -2,7 +2,9 @@ name: Daily Article Publishing
 
 on:
   schedule:
-    - cron: '0 11 * * *'
+    # يعمل يومياً الساعة 9 صباحاً بتوقيت UTC
+    - cron: '0 9 * * *'
+  # يسمح بالتشغيل اليدوي للتجربة
   workflow_dispatch:
 
 permissions:
@@ -28,6 +30,7 @@ jobs:
       
       - name: Run article generator
         env:
+          # --- Gemini Keys ---
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
@@ -35,34 +38,52 @@ jobs:
           GEMINI_API_KEY_5: ${{ secrets.GEMINI_API_KEY_5 }}
           GEMINI_API_KEY_6: ${{ secrets.GEMINI_API_KEY_6 }}
           
+          # --- Blogger Secrets ---
           BLOGGER_BLOG_ID: ${{ secrets.BLOGGER_BLOG_ID }}
           BLOGGER_CLIENT_ID: ${{ secrets.BLOGGER_CLIENT_ID }}
           BLOGGER_CLIENT_SECRET: ${{ secrets.BLOGGER_CLIENT_SECRET }}
           BLOGGER_REFRESH_TOKEN: ${{ secrets.BLOGGER_REFRESH_TOKEN }}
+          
+          # --- ImgBB Secret ---
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
           
+          # --- Facebook & GitHub Automation Secrets ---
+          FB_APP_ID: ${{ secrets.FB_APP_ID }}
+          FB_APP_SECRET: ${{ secrets.FB_APP_SECRET }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
-
-          # GitHub Access for Facebook Secret Updates
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
-          GITHUB_REPO_NAME: ${{ github.repository }}  # هذه قيمة
+          GITHUB_REPO_NAME: ${{ github.repository }}
           
-          # New Secret for YouTube
+          # --- YouTube Secret ---
           YOUTUBE_CREDENTIALS_JSON: ${{ secrets.YOUTUBE_CREDENTIALS_JSON }}
           
         run: python -u article_generator_advanced.py
 
+      # --- Save Data (Knowledge Graph) with Conflict Fix ---
       - name: Commit and Push Knowledge Graph & Archive
-        if: always()
+        if: always()  # يعمل دائماً حتى لو فشل السكريبت في المنتصف
         run: |
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'actions@github.com'
           
+          # 1. سحب التغييرات أولاً لحل مشكلة (rejected - fetch first)
+          # هذا السطر هو الحل لمشكلة Git التي ظهرت لك سابقاً
+          git pull origin main --rebase || echo "Rebase not needed or failed, continuing..."
+          
+          # 2. إضافة الملفات المعدلة
           git add knowledge_graph.json
           
           if [ -d "archive" ]; then
             git add archive/
+          fi
+          
+          # 3. التحقق مما إذا كانت هناك تغييرات فعلية قبل الرفع
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Auto-update Knowledge Graph [Safety Save]"
+            git push origin main
           fi
           
           git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update Knowledge Graph [Safety Save]" && git push)
