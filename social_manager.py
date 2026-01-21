@@ -13,17 +13,33 @@ def post_to_facebook(content, image_url, link):
         print("⚠️ Facebook credentials missing.")
         return
 
-    # استخدام نقطة نهاية الصور لأن التفاعل مع الصور أعلى
     post_url = f"https://graph.facebook.com/{page_id}/photos"
     
+    # 1. تحميل الصورة أولاً (Download Image)
+    try:
+        img_response = requests.get(image_url, timeout=30)
+        if img_response.status_code != 200:
+            print(f"❌ Failed to download image for Facebook: {img_response.status_code}")
+            return
+    except Exception as e:
+        print(f"❌ Error downloading image: {e}")
+        return
+
+    # 2. تجهيز البيانات (بدون رابط الصورة، بل الصورة نفسها)
     payload = {
-        'url': image_url,
-        'caption': f"{content}\n\n🔗 Rrad More: {link}", # تم التعريب أو تركه انجليزي حسب جمهورك
+        'caption': f"{content}\n\n🔗 Read here: {link}",
         'access_token': access_token
+    }
+    
+    # 3. إرسال الصورة كملف (Binary Source)
+    files = {
+        'source': ('image.jpg', img_response.content, 'image/jpeg')
     }
 
     try:
-        r = requests.post(post_url, data=payload, timeout=30)
+        # نستخدم files لرفع الصورة مباشرة
+        r = requests.post(post_url, data=payload, files=files, timeout=60)
+        
         if r.status_code == 200:
             print("   ✅ Posted to Facebook successfully.")
         else:
