@@ -94,8 +94,11 @@ ARTICLE_STYLE = """
 # 🛑 الصق البرومبتات التفصيلية "Beast Mode" هنا 🛑
 # (تأكد من أن PROMPT_B يطلب استخدام Source Text)
 
+
+
+
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL, UNABRIDGED, BEAST MODE v7.0)
+# 2. PROMPTS DEFINITIONS (FULL, UNABRIDGED, BEAST MODE v8.0)
 # ==============================================================================
 
 # ------------------------------------------------------------------
@@ -111,21 +114,21 @@ SECTION FOCUS:
 {section_focus}
 
 ANTI-DUPLICATION RULE:
-Do NOT select: {recent_titles}
+Do NOT select these titles: {recent_titles}
 
 TASK INSTRUCTIONS:
-1. Scan the headlines.
-2. Select EXACTLY ONE story that appeals to **General Public and Enthusiasts** (not just scientists).
-3. **Selection Logic:**
-   - Look for "Conflict" (US vs China).
-   - Look for "Daily Life Impact" (Jobs, Privacy, Costs).
-   - Look for "Big Releases" (ChatGPT, iPhone, Windows).
-   - **AVOID:** Dry academic papers, obscure version updates (e.g. LibTorch 1.1), or minute stock fluctuations.
-4. If a headline suggests a specific "Release", assume the role of explaining *if it's worth it* or *what it changes*.
+1. Scan the headlines for "High-Impact" stories.
+2. Select EXACTLY ONE story.
+3. **Selection Logic (The "Must-Click" Filter):**
+   - **Conflict/Drama:** (e.g., US sanctions China, OpenAI vs Google, Lawsuits).
+   - **Financial Impact:** (e.g., "This tool makes X free", "Jobs at risk").
+   - **Mass Adoption:** (e.g., New iPhone, Windows update, WhatsApp change).
+   - **REJECT:** Boring version updates (v1.2.3), dry financial reports, or niche scientific papers.
+4. **Contextual Analysis:** If the headline is vague, use your knowledge to infer *why* it matters today.
 
 Output JSON only:
 {{
-  "headline": "A catchy, viral-style headline (e.g. 'Why [Event] Changes Everything')",
+  "headline": "A catchy, viral-style headline (e.g. 'Why [Event] Changes Everything' or 'The End of [X]?')",
   "original_rss_link": "The URL Link from RSS",
   "original_rss_title": "The exact title...",
   "topic_focus": "The core implication/story",
@@ -142,7 +145,7 @@ Anti-Duplication: Avoid {recent_titles}.
 
 Output JSON ONLY:
 {{
-  "headline": "Definitive Guide: [Topic] in 2026",
+  "headline": "The Definitive Guide: [Topic] in 2026",
   "original_rss_link": "https://en.wikipedia.org/wiki/Technology",
   "topic_focus": "Educational Guide",
   "date_context": "Evergreen"
@@ -150,46 +153,57 @@ Output JSON ONLY:
 """
 
 # ------------------------------------------------------------------
-# PROMPT B: WRITER (Analyst + Fact Adherence)
+# PROMPT B: WRITER (Analyst + Fact Adherence + STRICT HTML)
 # ------------------------------------------------------------------
 PROMPT_B_TEMPLATE = """
 B: You are an Opinionated Tech Analyst and Editor-in-Chief of 'LatestAI'. 
-**CRITICAL CONTEXT:** I have visited the source URL and scraped the content for you. 
+**CRITICAL CONTEXT:** I have scraped the FULL content from the source URL. 
 Use the provided `SOURCE CONTENT` below as your PRIMARY source of facts.
 
 INPUT DATA: {json_input}
 STRICT FORBIDDEN PHRASES: {forbidden_phrases}
 
-**RULES OF ENGAGEMENT (Safety First):**
-1. **Fact Fidelity:** If the `SOURCE CONTENT` says "4.8 million", write "4.8 million". If it implies a number but doesn't state it, write "Millions of..." or "A significant number". **DO NOT HALLUCINATE NUMBERS.**
-2. **Name Safety:** Only name people explicit in the Source text. Otherwise, use "Officials", "Company Reps", or "Industry Insiders".
-3. **The Audience:** Write for the "Smart Beginner". Explain complex terms simply (ELI15). Use analogies.
+**TASK:**
+Write a **Long-Form, Deep-Dive Blog Post** (1500+ words equivalent). 
+Do NOT summarize. EXPAND and ANALYZE.
 
-I. ARCHITECTURE FOR VALUE (The Article Structure):
-1. **Headline:** Use the provided headline.
-2. **Introduction (The Hook):** Start with the context/problem, then drop the news. End the intro with a bridge: "Here is why this matters to you."
-3. **The Bottom Line (Snippet Trap):** An H2 titled "**Quick Summary**". Under it, write a 50-word **Bold** summary of the impact.
-4. **Table of Contents:** Insert exact string: `[[TOC_PLACEHOLDER]]`.
-5. **Section 1: The Core Story:** Explain WHAT happened using facts from Source Content.
-6. **Section 2: The Critical Analysis:** An H2 titled "**The Good, The Bad, and The Scary**". Discuss risks/benefits critically. Don't just hype it up.
-7. **Section 3: Future Outlook:** How does this affect the next 6 months?
-8. **Comparison Table:** Compare "Old Way vs New Way" or "This Tech vs Competitor".
+**STRICT HTML FORMATTING RULES (DO NOT IGNORE):**
+1. **NO Markdown:** Do not use **bold** or # headers. Use HTML tags ONLY.
+2. **Tags:** Use `<h2>` for main sections, `<h3>` for subsections, `<p>` for paragraphs.
+3. **Lists:** Use `<ul>` and `<li>` for bullet points.
+4. **Paragraphs:** Keep `<p>` blocks short (3-4 lines max) for readability.
+5. **Bold:** Use `<strong>` for key stats and names.
 
-II. TONE:
-- **Analytic:** "We believe...", "This suggests...".
-- **Engaging:** Use short paragraphs. Use Bullet points often.
+**ARTICLE ARCHITECTURE:**
+1. **Headline:** (As provided).
+2. **Introduction:** Hook the reader. What is the problem? What is the news? Why now?
+3. **The Bottom Line:** An `<h2>` titled "**Quick Summary**". Under it, a `<ul>` list of 5 key takeaways.
+4. **Navigation:** Insert exact string: `[[TOC_PLACEHOLDER]]`.
+5. **Deep Dive (Section 1):** `<h2>` Title. Explain the technology/news in depth using Source Content facts.
+6. **The Analysis (Section 2):** `<h2>` titled "**The Good, The Bad, and The Scary**". 
+   - Use `<h3>` for "The Good".
+   - Use `<h3>` for "The Risks".
+   - Be critical. Don't just praise it.
+7. **Future Outlook:** `<h2>` Title. Prediction for the next 12 months.
+8. **Comparison Table:** An HTML `<table>` comparing "Before vs After" or "This vs Competitor".
+   - Use `<thead>`, `<tr>`, `<th>`, `<tbody>`, `td`.
+
+**TONE & STYLE:**
+- **Authoritative:** "We believe", "The data suggests".
+- **Simple:** ELI15 (Explain Like I'm 15).
+- **Fact-Based:** If source says "50%", write "50%". Do not hallucinate numbers.
 
 Output JSON ONLY:
 {{
   "draftTitle": "Final Headline",
-  "draftContent": "<html>... Full Content ...</html>",
-  "excerpt": "A short, punchy summary for SEO.",
+  "draftContent": "<html>... Full Structured HTML Content ...</html>",
+  "excerpt": "A short, punchy summary (150 chars) for SEO.",
   "sources_used": ["Entities found in Source Content"]
 }}
 """
 
 # ------------------------------------------------------------------
-# PROMPT C: SEO (Structure & Schema)
+# PROMPT C: SEO (Structure & Schema & Visuals)
 # ------------------------------------------------------------------
 PROMPT_C_TEMPLATE = """
 C: You are the Strategic Editor & SEO Consultant.
@@ -198,53 +212,67 @@ KNOWLEDGE GRAPH LINKS: {knowledge_graph}
 
 YOUR TASKS (EXECUTE ALL):
 
-1. **TOC Injection:** Replace `[[TOC_PLACEHOLDER]]` with a styled HTML div (class="toc-box") containing a title "Quick Navigation" and a `<ul>` of anchor links to all H2s. **IMPORTANT:** You MUST add unique `id` attributes to all H2 tags in the content so the links work.
+1. **TOC Injection:** 
+   - Locate `[[TOC_PLACEHOLDER]]`.
+   - Replace it with `<div class="toc-box"><h3>Navigate this Guide</h3><ul>...</ul></div>`.
+   - **CRITICAL:** You MUST add unique `id="section-name"` attributes to EVERY `<h2>` in the `finalContent` so the anchors work (e.g. `<a href="#section-name">`).
 
-2. **FAQ Rich Snippets:** Extract 3 questions a *User* would ask about this topic. Create a VISUAL HTML section at the bottom (class="faq-section", `faq-title`, `faq-q`, `faq-a`).
+2. **FAQ Rich Snippets:** 
+   - Extract 3 logical user questions.
+   - Append a section at the bottom: `<div class="faq-section"><div class="faq-title">Frequently Asked Questions</div>...</div>`.
+   - Use classes: `faq-q` for questions, `faq-a` for answers.
 
 3. **Styling Wrappers:** 
-   - Wrap "Quick Summary/Takeaways" bullets in `class="takeaways-box"`. 
-   - Wrap tables in `class="table-wrapper"`.
-   - Wrap quotes in `blockquote`.
+   - Wrap the "Quick Summary" `<ul>` in `<div class="takeaways-box">...</div>`.
+   - Wrap the `<table>` in `<div class="table-wrapper">...</div>`.
+   - Wrap any quotes in `<blockquote>...</blockquote>`.
 
-4. **Internal Linking:** Scan for keywords from `KNOWLEDGE GRAPH LINKS`. Link naturally (Max 3 links).
+4. **Internal Linking:** 
+   - Scan text for keywords matching `KNOWLEDGE GRAPH LINKS`.
+   - Hyperlink them naturally (Max 3 links).
 
-5. **Schema Generation (Graph):** 
-   Generate a valid JSON-LD graph:
-   - Node 1: `NewsArticle` (headline, date, author="LatestAI").
-   - Node 2: `FAQPage` (the 3 extracted Q&A).
+5. **Schema Generation:** 
+   Generate valid JSON-LD:
+   - `NewsArticle`: Headline, date, author="LatestAI".
+   - `FAQPage`: The 3 extracted Q&A.
 
 Output JSON ONLY:
 {{
   "finalTitle": "...",
   "finalContent": "<html>...Modified HTML with IDs, TOC, Links, Visual FAQ...</html>",
-  "imageGenPrompt": "Detailed English prompt for Flux (abstract, futuristic, 3d, cinematic, 8k, no text)",
-  "imageOverlayText": "2-3 word Overlay Text",
+  "imageGenPrompt": "Detailed English prompt for Flux (cinematic, hyper-realistic, 8k, tech focused, no text, 16:9)",
+  "imageOverlayText": "2-3 word Overlay Text (e.g. 'AI REVOLUTION')",
   "seo": {{
-      "metaTitle": "SEO Title (60 chars)",
-      "metaDescription": "SEO Description (150 chars)",
-      "tags": ["tag1", "tag2", "tag3"],
-      "imageAltText": "Alt Text"
+      "metaTitle": "SEO Title (60 chars) - Keyword Optimized",
+      "metaDescription": "SEO Description (150 chars) - Click-worthy",
+      "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
+      "imageAltText": "Descriptive Alt Text"
   }},
   "schemaMarkup": {{ "@context": "https://schema.org", "@graph": [...] }}
 }}
 """
 
 # ------------------------------------------------------------------
-# PROMPT D: AUDIT (Final Safety Check)
+# PROMPT D: AUDIT (Final Safety & Humanization)
 # ------------------------------------------------------------------
 PROMPT_D_TEMPLATE = """
-PROMPT D — Humanization & Safety Audit
+PROMPT D — Quality Assurance & Logic Check
 Input: {json_input}
 
-MISSION: Purge robotic patterns and verify logic.
+MISSION: Purge robotic patterns and verify HTML integrity.
 
 CHECKLIST:
-1. **Robotic Word Purge:** Replace "Delve", "Realm", "Tapestry", "Game-changer", "Paramount", "Underscore" with simple human words.
-2. **Formatting Logic:** Verify `id` tags exist on H2s for TOC. Verify FAQ section exists.
-3. **Safety:** Ensure product names look real based on context (no "Spot Cam 3D" unless source confirms). Generalize if unsure ("New Camera").
+1. **Robotic Word Purge:** 
+   - Replace: "Delve", "Realm", "Tapestry", "Game-changer", "Paramount", "Underscore", "Unveil".
+   - Use simple words: "Explore", "World", "Mix", "Big deal", "Important", "Show".
+2. **HTML Logic:** 
+   - Verify `id="..."` tags exist on H2 headers.
+   - Verify `toc-box` class exists.
+   - Verify `faq-section` exists.
+3. **Safety:** 
+   - Ensure specific product names are real. Generalize if unsure.
 
-Output JSON ONLY (Preserve all fields from Input C):
+Output JSON ONLY (Preserve all fields):
 {{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "excerpt":"..."}}
 """
 
@@ -264,7 +292,7 @@ Output Structure:
 """
 
 # ------------------------------------------------------------------
-# VIDEO PROMPTS (Viral Scripts)
+# VIDEO PROMPTS (Viral Scripts - Fixed Logic)
 # ------------------------------------------------------------------
 PROMPT_VIDEO_SCRIPT = """
 Role: Viral Tech TikTok Screenwriter.
@@ -272,49 +300,68 @@ Input: "{title}" & "{text_summary}"
 
 Task: Create a "WhatsApp" style dialogue script.
 Characters:
-- "Alex" (Hype Tech Bro, uses emojis 🚀).
-- "Sam" (Normal person/Beginner).
+- "Alex" (Hype Tech Bro, Sender).
+- "Sam" (Skeptical Beginner, Receiver).
 
-Rules:
-1. **Opening:** Alex drops a bombshell headline.
-2. **Simplicity:** Alex explains the news using a real-world analogy.
-3. **Reaction:** Sam asks "Is it free?" or "When?" (Common questions).
-4. **CTA:** Alex: "Full details in the link below!".
-5. **Length:** 25-30 short bubbles.
+**STRICT JSON RULES:**
+1. Use `type: "send"` for Alex (Right side).
+2. Use `type: "receive"` for Sam (Left side).
+3. **Format:** Lowercase "send" / "receive" ONLY.
+
+**SCRIPT STRUCTURE:**
+1. **Alex:** Drops the news bombshell (Emoji included).
+2. **Sam:** Ask a skeptical question ("Is it actually good?" or "Is it free?").
+3. **Alex:** Explains the core benefit simply.
+4. **Sam:** Asks about the risk or downside.
+5. **Alex:** Mentions the risk but ends on a high note.
+6. **Alex:** CTA ("Link in bio!").
 
 Output JSON ONLY array:
-[ {{"speaker": "Alex", "type": "send", "text": "..."}}, ... ]
+[ 
+  {{"speaker": "Alex", "type": "send", "text": "Did you see this?? 🤯 [Headline]"}}, 
+  {{"speaker": "Sam", "type": "receive", "text": "Wait, what happened??"}},
+  ...
+]
 """
 
 # ------------------------------------------------------------------
-# SOCIAL PROMPTS (CTR Optimization)
+# SOCIAL PROMPTS (CTR & Hashtag Enforcement)
 # ------------------------------------------------------------------
 PROMPT_YOUTUBE_METADATA = """
-Role: YouTube Clickbait Expert (But Ethical).
+Role: YouTube Growth Expert.
 Input: {draft_title}
 
-Task: Generate High-CTR metadata.
+Task: Generate Metadata.
+
+**MANDATORY REQUIREMENTS:**
+1. **Title:** UPPERCASE key words. Clickbait but true.
+2. **Description:** 
+   - 2-3 sentence hook. 
+   - **MUST END WITH:** A list of 5 hashtags (e.g. #AI #Tech #Nvidia).
+3. **Tags:** List of 15 high-volume search terms.
+
 Output JSON ONLY:
 {{
-  "title": "Shocking/Viral Title (Max 60 chars) - Use ALL CAPS for keywords",
-  "description": "2-line spicy hook teasing the implications. #Hashtags",
-  "tags": ["tech", "ai", "news", "trend"]
+  "title": "SHOCKING: [Title] - What You Missed!",
+  "description": "This news changes everything about [Topic]. Here is why you need to pay attention.\\n\\n#Tag1 #Tag2 #Tag3 #TechNews #AI",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tech news", "ai tools", "future"]
 }}
 """
 
 PROMPT_FACEBOOK_HOOK = """
-Role: FB Growth Hacker.
+Role: Facebook Viral Post Creator.
 Input: {title}
 
-Rules:
-1. Don't start with "Here is". Start with "Did you know?" or "This is scary...".
-2. Keep it under 2 lines.
-3. Use 2 specific emojis.
+Task: Write a short, engaging caption.
+
+**RULES:**
+1. **Hook:** Start with a question or "Stop scrolling! 🛑".
+2. **Body:** 1 sentence summary of why it matters.
+3. **Hashtags:** **MUST include 3 hashtags** at the very end.
 
 Output JSON ONLY:
-{{"facebook": "Caption text here"}}
+{{"facebook": "Did you know...? 😲\\n\\nThis is a massive update for [Topic].\\n\\n#AI #TechUpdate #Innovation"}}
 """
-
 
 # ==============================================================================
 # 3. HELPER UTILITIES
@@ -341,8 +388,7 @@ class KeyManager:
             self.current_index += 1
             log(f"🔄 Switching Key #{self.current_index + 1}...")
             return True
-        log("❌ ALL KEYS EXHAUSTED.")
-        return False
+        log("❌ ALL KEYS EXHAUSTED.")        return False
 
 key_manager = KeyManager()
 
