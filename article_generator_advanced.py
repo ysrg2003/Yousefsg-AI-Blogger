@@ -89,6 +89,7 @@ ARTICLE_STYLE = """
 # ==============================================================================
 
 # 🛑 الصق البرومبتات التفصيلية "Beast Mode" هنا 🛑
+# IMPORTANT: In 'PROMPT_B_TEMPLATE', ensure it accepts source text context.
 
 # ==============================================================================
 # 2. PROMPTS DEFINITIONS (FULL, UNABRIDGED, BEAST MODE v7.0)
@@ -334,9 +335,9 @@ class KeyManager:
     def switch_key(self):
         if self.current_index < len(self.keys) - 1:
             self.current_index += 1
-            log(f"🔄 Key Limit. Switching #{self.current_index + 1}...")
+            log(f"🔄 Switching Key #{self.current_index + 1}...")
             return True
-        log("❌ FATAL: Keys Exhausted.")
+        log("❌ ALL KEYS EXHAUSTED.")
         return False
 
 key_manager = KeyManager()
@@ -364,113 +365,67 @@ def try_parse_json(text, context=""):
             fixed = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
             return json.loads(fixed)
         except:
-            log(f"      ❌ JSON Error ({context})")
+            log(f"      ❌ JSON Parse Error ({context}). Snippet: {text[:50]}...")
             return None
 
-def get_original_url(google_url):
+def resolve_google_redirect(url):
     """
-    CRITICAL FUNCTION: UNLOCKS GOOGLE NEWS REDIRECTS
-    Uses Decoding + Requests to find the destination.
+    Follows the Google News redirect to get the REAL publisher URL.
+    This fixes the scraping issue by feeding the real URL to the scraper.
     """
     try:
-        # METHOD 1: Clean Base64 Decoding
-        # Google RSS URLs often embed the target URL encoded in base64.
-        # Format usually has specific prefixes/suffixes. This attempts to clean and decode.
-        try:
-            base64_part = google_url.split('/')[-1].split('?')[0]
-            # Fix padding
-            base64_part += "=" * ((4 - len(base64_part) % 4) % 4)
-            decoded_bytes = base64.urlsafe_b64decode(base64_part)
-            decoded_str = decoded_bytes.decode('latin1', errors='ignore')
-            
-            # Find HTTPs url inside garbage
-            urls = re.findall(r'(https?://[^"\'\s<>]+)', decoded_str)
+        # Standard decode attempt (base64)
+        if "/articles/" in url:
+            base64_str = url.split('/articles/')[-1].split('?')[0]
+            base64_str += "=" * ((4 - len(base64_str) % 4) % 4)
+            decoded = base64.urlsafe_b64decode(base64_str).decode('latin1', 'ignore')
+            urls = re.findall(r'(https?://[^"\'\s<>]+)', decoded)
             for u in urls:
-                # Basic check to avoid grabbing Google internal links
-                if "google.com" not in u and "googleusercontent" not in u:
-                    if len(u) > 10:
-                        log(f"      🔓 Decoded (Method 1): {u[:50]}...")
-                        return u
-        except:
-            pass
+                if "google" not in u and "." in u:
+                    return u
 
-        # METHOD 2: Link Following (If Method 1 fails)
-        # Use cookies to verify 'consent' to prevent the redirection page block
-        cookies = {
-            'CONSENT': 'YES+cb.20210720-07-p0.en+FX+410', 
-            'SOCS': 'CAESEwgDEgk0ODE3NzA3MjQaAmVuIAEaBgiAo_PmBg' 
-        }
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
-        }
-        
-        response = requests.get(google_url, headers=headers, cookies=cookies, timeout=10, allow_redirects=True)
-        final_url = response.url
-        
-        if "news.google.com" not in final_url:
-            log(f"      🔓 Redirected (Method 2): {final_url[:50]}...")
-            return final_url
-            
-        # If still stuck on google, search page content
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Google Redirect Pages often have a link with specific class or just the first external link
-        for a in soup.find_all('a', href=True):
-            href = a['href']
-            if href.startswith("http") and "google.com" not in href:
-                log(f"      🔓 Scraped Link (Method 3): {href[:50]}...")
-                return href
-                
-        return google_url # Fail, return original
-        
-    except Exception as e:
-        log(f"      ⚠️ Resolve Error: {e}")
-        return google_url
+        # Fallback: Head Request follow
+        session = requests.Session()
+        resp = session.head(url, allow_redirects=True, timeout=10)
+        return resp.url
+    except:
+        return url
 
 def fetch_full_article(url):
     """
-    VISITS THE REAL SITE & SCRAPES TEXT
+    🔥 SUPER SCRAPER v5 (Jina Bridge) 🔥
+    Uses r.jina.ai as a free proxy to turn ANY website into LLM-clean text.
+    Bypasses JS, Captcha, and Paywalls naturally.
     """
-    # 1. RESOLVE REDIRECT
-    target_url = get_original_url(url)
+    # 1. Resolve redirect to get real link (e.g. cnn.com/...)
+    real_url = resolve_google_redirect(url)
     
-    log(f"   🕷️ Reading: {target_url[:60]}...")
+    # 2. Use Jina Reader
+    jina_url = f"https://r.jina.ai/{real_url}"
+    log(f"   🕷️ Jina Fetch: {real_url[:60]}...")
     
     try:
-        session = requests.Session()
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Referer': 'https://www.google.com/'
-        }
-        
-        response = session.get(target_url, headers=headers, timeout=20)
+        # Headers aren't strictly needed for Jina, but good practice
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(jina_url, headers=headers, timeout=40)
         
         if response.status_code != 200:
-            log(f"      ❌ HTTP {response.status_code}")
+            log(f"      ❌ Jina Error ({response.status_code})")
             return None
             
-        soup = BeautifulSoup(response.content, 'html.parser')
+        content = response.text
         
-        # Remove Noise
-        for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form', 'noscript', 'iframe', 'button', 'input']):
-            tag.decompose()
+        # Jina returns markdown title at top, remove it to get to body
+        if "Title:" in content:
+            content = content.split("Title:", 1)[-1]
             
-        # Get dense text
-        text_blocks = []
-        for p in soup.find_all('p'):
-            text = p.get_text().strip()
-            if len(text) > 60: # Filter Short captions
-                text_blocks.append(text)
-        
-        full_text = "\n\n".join(text_blocks)[:12000] # Cap size
-        
-        if len(full_text) < 600:
-            log("      ⚠️ Scrape too short (Bot protection or video page).")
+        # Valid length check
+        if len(content) < 600:
+            log("      ⚠️ Jina content too short (Empty/Failed).")
             return None
             
-        log(f"      ✅ Text Content: {len(full_text)} chars.")
-        return full_text
+        log(f"      ✅ Content Captured: {len(content)} chars.")
+        return content[:12000] # Limit for Gemini
         
     except Exception as e:
         log(f"      ⚠️ Scrape Crash: {e}")
@@ -478,7 +433,7 @@ def fetch_full_article(url):
 
 def get_real_news_rss(query_keywords, category):
     try:
-        # Selection Logic
+        # Smart Niche Selector
         if "," in query_keywords:
             topics = [t.strip() for t in query_keywords.split(',') if t.strip()]
             focused = random.choice(topics)
@@ -496,10 +451,12 @@ def get_real_news_rss(query_keywords, category):
             for entry in feed.entries[:8]:
                 pub = entry.published if 'published' in entry else "Today"
                 title_clean = entry.title.split(' - ')[0]
+                # Pass original link
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
             return items 
         else:
-            log(f"   ⚠️ RSS Empty. Using Category Fallback.")
+            # Fallback
+            log(f"   ⚠️ Focused empty. Fallback.")
             fb = f"{category} news when:1d"
             url = f"https://news.google.com/rss/search?q={urllib.parse.quote(fb)}&hl=en-US&gl=US&ceid=US:en"
             feed = feedparser.parse(url)
@@ -535,9 +492,9 @@ def publish_post(title, content, labels):
         r = requests.post(url, headers=headers, json=body)
         if r.status_code == 200:
             link = r.json().get('url')
-            log(f"✅ Blog Published: {link}")
+            log(f"✅ Published: {link}")
             return link
-        log(f"❌ Blogger Refusal: {r.text}")
+        log(f"❌ Blogger Error: {r.text}")
         return None
     except Exception as e:
         log(f"❌ Connection Fail: {e}")
@@ -546,13 +503,13 @@ def publish_post(title, content, labels):
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
     if not key: return None
-    log(f"   🎨 Image Gen (Flux)...")
-    for attempt in range(3):
+    log(f"   🎨 Flux Image Gen...")
+    for i in range(3):
         try:
             safe = urllib.parse.quote(f"{prompt_text}, abstract tech, 8k, --no text")
             txt = f"&text={urllib.parse.quote(overlay_text)}&font=roboto&fontsize=48&color=white" if overlay_text else ""
             url = f"https://image.pollinations.ai/prompt/{safe}?width=1280&height=720&model=flux&nologo=true&seed={random.randint(1,999)}{txt}"
-            r = requests.get(url, timeout=50)
+            r = requests.get(url, timeout=60)
             if r.status_code == 200:
                 res = requests.post("https://api.imgbb.com/1/upload", data={"key":key}, files={"image":r.content}, timeout=60)
                 if res.status_code == 200: return res.json()['data']['url']
@@ -567,8 +524,7 @@ def load_kg():
 
 def get_recent_titles_string(limit=50):
     kg = load_kg()
-    if not kg: return "None"
-    return ", ".join([i.get('title','') for i in kg[-limit:]])
+    return ", ".join([i.get('title','') for i in kg[-limit:]]) if kg else "None"
 
 def get_relevant_kg_for_linking(category, limit=60):
     kg = load_kg()
@@ -610,7 +566,7 @@ def generate_step(model, prompt, step):
             else: return None
 
 # ==============================================================================
-# 5. CORE PIPELINE LOGIC (REDIRECT PROOF)
+# 5. CORE PIPELINE LOGIC (JINA POWERED)
 # ==============================================================================
 
 def run_pipeline(category, config, mode="trending"):
@@ -628,65 +584,69 @@ def run_pipeline(category, config, mode="trending"):
     selected_item = None
     source_content = None
     
-    # Try multiple items if scraping fails
+    # Check top 3 for Valid Content
     for item in rss_items[:3]:
-        if item['title'][:30] in recent: continue # Dup check
+        if item['title'][:30] in recent: continue
         
+        # Scrape with Jina
         text = fetch_full_article(item['link'])
         
-        if text:
+        if text and len(text) > 600:
             selected_item = item
             source_content = text
-            break
+            break # Got good text, proceed
+        else:
+            log(f"   ⏩ Skipping '{item['title'][:15]}...': Read failed.")
     
     # Fallback to Analyst Mode
     is_analyst = False
     if not selected_item:
         if rss_items:
-            log("⚠️ CRITICAL: Scraping ALL candidates failed. Enabling ANALYST MODE (Headline).")
+            log("⚠️ CRITICAL: All scraping attempts failed. Entering ANALYST MODE (Headline).")
             selected_item = rss_items[0]
             is_analyst = True
-            source_content = "*** SCRAPING FAILED. Write ANALYTICAL OPINION piece based on HEADLINE and common knowledge. ***"
+            source_content = "SOURCE TEXT UNAVAILABLE. ANALYZE BASED ON HEADLINE/METADATA ONLY."
         else: return
 
+    # Build Context
     json_ctx = {
         "headline": selected_item['title'],
         "original_link": selected_item['link'],
         "date": selected_item['date']
     }
     
-    # Drafting
-    log(f"   🗞️ Writing: {selected_item['title']}")
+    # 2. Drafting
+    log(f"   🗞️ Writing about: {selected_item['title']}")
     
-    # Inject Text into Prompt
-    payload = f"METADATA: {json.dumps(json_ctx)}\n\n*** SOURCE TEXT START ***\n{source_content}\n*** SOURCE TEXT END ***"
+    prefix = "*** FULL SCRAPED ARTICLE TEXT ***" if not is_analyst else "*** HEADLINE ONLY CONTEXT ***"
+    payload = f"METADATA: {json.dumps(json_ctx)}\n\n{prefix}\n\n{source_content}"
     
     json_b = try_parse_json(generate_step(model, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Step B"), "B")
     if not json_b: return
-    time.sleep(3)
+    time.sleep(2)
 
-    # SEO
+    # 3. SEO
     kg_links = get_relevant_kg_for_linking(category)
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json.dumps(json_b), knowledge_graph=kg_links)
     json_c = try_parse_json(generate_step(model, prompt_c, "Step C"), "C")
     if not json_c: return
-    time.sleep(3)
+    time.sleep(2)
 
-    # Audit
+    # 4. Audit
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c))
     json_d = try_parse_json(generate_step(model, prompt_d, "Step D"), "D")
     if not json_d: return
-    time.sleep(3)
+    time.sleep(2)
 
-    # Publish
+    # 5. Publish Prep
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d))
     final = try_parse_json(generate_step(model, prompt_e, "Step E"), "E")
     if not final: final = json_d 
 
     title = final.get('finalTitle', selected_item['title'])
 
-    # Media & Hooks
-    log("   🧠 Hooks...")
+    # Media Hooks
+    log("   🧠 Generating Media Data...")
     yt_meta = try_parse_json(generate_step(model, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta")) or {"title":title, "description":"", "tags":[]}
     fb_dat = try_parse_json(generate_step(model, PROMPT_FACEBOOK_HOOK.format(title=title, category=category), "FB Hook"))
     fb_cap = fb_dat.get('facebook', title) if fb_dat else title
@@ -694,15 +654,15 @@ def run_pipeline(category, config, mode="trending"):
     # Video Gen
     vid_html, vid_main, vid_short, fb_path = "", None, None, None
     try:
-        summ = re.sub('<[^<]+?>','', final.get('finalContent',''))[:1500]
-        script = try_parse_json(generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Script"))
+        # Use excerpt/summary for script context
+        script = try_parse_json(generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=final.get('excerpt','')), "Script"))
         
         if script:
             rr = video_renderer.VideoRenderer()
             # 16:9
             pm = rr.render_video(script, title, f"main_{int(time.time())}.mp4")
             if pm:
-                desc = f"{yt_meta.get('description','')}\n\n👉 Full Link Soon.\n\n#Tech"
+                desc = f"{yt_meta.get('description','')}\n\n👉 Link in Comments.\n\n#AI"
                 vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
                 if vid_main:
                     vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
@@ -713,7 +673,7 @@ def run_pipeline(category, config, mode="trending"):
             if ps: vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
     except Exception as e: log(f"⚠️ Video: {e}")
 
-    # Final HTML
+    # Final HTML & Publish
     body = ARTICLE_STYLE
     img = generate_and_upload_image(final.get('imageGenPrompt', title), final.get('imageOverlayText', 'News'))
     if img: body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img}"><img src="{img}" alt="{final.get("seo",{}).get("imageAltText","News")}" /></a></div>'
@@ -728,13 +688,13 @@ def run_pipeline(category, config, mode="trending"):
     
     if url:
         update_kg(title, url, category)
-        upd = f"\n\n🚀 FULL LINK: {url}"
+        upd = f"\n\n🔥 READ STORY: {url}"
         if vid_main: youtube_manager.update_video_description(vid_main, upd)
         if vid_short: youtube_manager.update_video_description(vid_short, upd)
         try:
             if fb_path: 
-                social_manager.post_reel_to_facebook(fb_path, f"{fb_cap}\nLink: {url}")
-                time.sleep(15)
+                social_manager.post_reel_to_facebook(fb_path, f"{fb_cap}\nLink: {url}\n#AI")
+                time.sleep(10)
             if img:
                 social_manager.distribute_content(f"{fb_cap}\n\n👇 Read:\n{url}", url, img)
         except: pass
