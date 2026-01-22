@@ -8,7 +8,6 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
 
 class VideoRenderer:
-    # تعديل: إضافة width و height كمعاملات اختيارية
     def __init__(self, assets_dir='assets', output_dir='output', width=1920, height=1080):
         self.assets_dir = assets_dir
         self.output_dir = output_dir
@@ -27,42 +26,30 @@ class VideoRenderer:
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(assets_dir, exist_ok=True)
         
-        # تعديل حجم الخط بناءً على دقة الفيديو
-        # إذا كان فيديو طولي (Shorts)، نصغر الخط قليلاً ليتناسب مع العرض الضيق
-        base_font_size = 100 if self.w > 1500 else 70 
+        base_font_size = 90 if self.w > 1500 else 60 
         
         self.font = self._load_best_font(base_font_size)
         self.header_font = self._load_best_font(int(base_font_size * 0.6))
         self.sub_header_font = self._load_best_font(int(base_font_size * 0.4))
         self.time_font = self._load_best_font(int(base_font_size * 0.35))
 
-        # تحميل صورة البروفايل
         self.profile_pic = self._load_profile_image("https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791")
 
-        self.snd_sent = self._load_audio("send.wav")
-        self.snd_recv = self._load_audio("receive.wav")
+        # ✅ FIX: Download Audio Assets Automatically
+        self.snd_sent = self._load_or_download_audio("send.wav", "https://github.com/adephagia/whatsapp-web-sound/raw/master/src/assets/sent.mp3")
+        self.snd_recv = self._load_or_download_audio("receive.wav", "https://github.com/adephagia/whatsapp-web-sound/raw/master/src/assets/received.mp3")
 
     def _load_best_font(self, size):
-        font_candidates = [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-            os.path.join(self.assets_dir, "Roboto-Bold.ttf")
-        ]
-        for path in font_candidates:
-            if os.path.exists(path):
-                try: return ImageFont.truetype(path, size)
-                except: continue
-        
-        try:
-            font_path = os.path.join(self.assets_dir, "Roboto-Bold.ttf")
-            if not os.path.exists(font_path):
+        font_path = os.path.join(self.assets_dir, "Roboto-Bold.ttf")
+        if not os.path.exists(font_path):
+            try:
                 url = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
                 r = requests.get(url)
                 with open(font_path, 'wb') as f: f.write(r.content)
-            return ImageFont.truetype(font_path, size)
-        except:
-            return ImageFont.load_default()
+            except: pass
+        
+        try: return ImageFont.truetype(font_path, size)
+        except: return ImageFont.load_default()
 
     def _load_profile_image(self, url):
         try:
@@ -78,10 +65,20 @@ class VideoRenderer:
             return output
         except: return None
 
-    def _load_audio(self, filename):
+    # ✅ FIX: Audio Downloader
+    def _load_or_download_audio(self, filename, url):
         path = os.path.join(self.assets_dir, filename)
-        if os.path.exists(path): return AudioFileClip(path)
-        return None
+        if not os.path.exists(path):
+            print(f"   ⬇️ Downloading missing audio: {filename}...")
+            try:
+                r = requests.get(url)
+                with open(path, 'wb') as f: f.write(r.content)
+            except Exception as e:
+                print(f"   ⚠️ Could not download audio: {e}")
+                return None
+        try:
+            return AudioFileClip(path)
+        except: return None
 
     def draw_whatsapp_header(self, draw, title, base_img):
         header_h = 180
@@ -98,8 +95,7 @@ class VideoRenderer:
         draw.line([(arrow_x, arrow_y), (arrow_x+50, arrow_y)], fill="white", width=6)
 
         text_x = 270
-        # تقصير العنوان إذا كان طويلاً جداً بالنسبة للشاشة
-        max_chars = 20 if self.w < 1500 else 35
+        max_chars = 22 if self.w < 1500 else 40
         display_title = title[:max_chars] + "..." if len(title) > max_chars else title
         
         draw.text((text_x, 50), display_title, font=self.header_font, fill="white")
@@ -107,32 +103,30 @@ class VideoRenderer:
         return header_h
 
     def calculate_bubble_height(self, text):
-        # عرض الفقاعة يعتمد على عرض الفيديو
-        max_width = int(self.w * 0.8) 
+        max_width = int(self.w * 0.75) 
         padding_y = 40
-        
         try:
-            avg_char_width = self.font.getbbox("x")[2]
             line_height = self.font.getbbox("Ah")[3] + 30
+            avg_char_width = self.font.getbbox("x")[2]
         except:
-            avg_char_width = 50
-            line_height = 120
+            line_height = 100
+            avg_char_width = 40
 
         chars_per_line = int(max_width / avg_char_width)
         lines = textwrap.wrap(text, width=chars_per_line)
         return (len(lines) * line_height) + (padding_y * 2) + 40 
 
     def draw_bubble(self, draw, text, is_sender, y_pos, time_str):
-        max_width = int(self.w * 0.8)
+        max_width = int(self.w * 0.75)
         padding_x = 50
         padding_y = 40
         
         try:
-            avg_char_width = self.font.getbbox("x")[2]
             line_height = self.font.getbbox("Ah")[3] + 30
+            avg_char_width = self.font.getbbox("x")[2]
         except:
-            avg_char_width = 50
-            line_height = 120
+            line_height = 100
+            avg_char_width = 40
 
         chars_per_line = int(max_width / avg_char_width)
         lines = textwrap.wrap(text, width=chars_per_line)
@@ -146,7 +140,7 @@ class VideoRenderer:
                 max_line_w = len(line) * avg_char_width
         
         box_width = max_line_w + (padding_x * 2)
-        if box_width < 300: box_width = 300
+        if box_width < 250: box_width = 250
 
         box_height = (len(lines) * line_height) + (padding_y * 2) + 40
 
@@ -237,12 +231,19 @@ class VideoRenderer:
         
         for idx, msg in enumerate(script_json):
             text = msg['text']
-            is_sender = (msg['type'] == 'send')
+            # ✅ FIX: Robust Logic for Sender Type
+            msg_type = str(msg.get('type', '')).lower().strip()
+            is_sender = (msg_type == 'send')
+            
             msg_obj = {'text': text, 'is_sender': is_sender}
             history.append(msg_obj)
             
             frame_img = self.create_frame(history, article_title)
-            read_duration = max(3.0, len(text) * 0.13)
+            
+            # Dynamic Duration
+            base_dur = 2.5
+            char_dur = len(text) * 0.08
+            read_duration = min(max(base_dur, char_dur), 6.0) # Min 2.5s, Max 6s
             
             clip_main = ImageClip(frame_img).set_duration(read_duration)
             
@@ -255,6 +256,15 @@ class VideoRenderer:
 
         final_clip = concatenate_videoclips(clips, method="compose")
         output_path = os.path.join(self.output_dir, filename)
-        final_clip.write_videofile(output_path, fps=self.fps, codec='libx264', audio_codec='aac', logger=None)
+        
+        # Write file with fallback fps
+        final_clip.write_videofile(
+            output_path, 
+            fps=self.fps, 
+            codec='libx264', 
+            audio_codec='aac', 
+            logger=None,
+            ffmpeg_params=['-pix_fmt', 'yuv420p'] # Better compatibility
+        )
         print(f"✅ Video Rendered: {output_path}")
         return output_path
