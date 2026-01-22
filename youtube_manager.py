@@ -1,87 +1,56 @@
 import os
 import json
 import googleapiclient.discovery
-import googleapiclient.errors
 from google.oauth2.credentials import Credentials
 
 def get_authenticated_service():
     json_creds = os.getenv('YOUTUBE_CREDENTIALS_JSON')
-    if not json_creds:
-        print("❌ Error: YOUTUBE_CREDENTIALS_JSON secret is missing.")
-        return None
-
+    if not json_creds: return None
     try:
         creds_data = json.loads(json_creds)
         creds = Credentials.from_authorized_user_info(creds_data)
         return googleapiclient.discovery.build("youtube", "v3", credentials=creds)
-    except Exception as e:
-        print(f"❌ Error loading YouTube credentials: {e}")
-        return None
+    except: return None
 
-def upload_video_to_youtube(file_path, title, description, tags, category_id="28"):
+def upload_video_to_youtube(file_path, title, description, tags):
     youtube = get_authenticated_service()
     if not youtube: return None, None
     
-    print(f"📤 Uploading to YouTube: {title[:30]}...")
-    
+    print(f"📤 Uploading YT: {title[:40]}...")
     body = {
         "snippet": {
             "title": title[:100],
-            "description": description[:5000],
+            "description": description[:4500], # Leave room for link later
             "tags": tags,
-            "categoryId": category_id
+            "categoryId": "28"
         },
-        "status": {
-            "privacyStatus": "public", 
-            "selfDeclaredMadeForKids": False
-        }
+        "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
     }
-    
     try:
-        request = youtube.videos().insert(
-            part="snippet,status",
-            body=body,
-            media_body=googleapiclient.http.MediaFileUpload(file_path, chunksize=-1, resumable=True)
-        )
-        response = request.execute()
-        video_id = response.get('id')
-        print(f"✅ YouTube Upload Success! ID: {video_id}")
-        return video_id, f"https://www.youtube.com/embed/{video_id}" # Return ID specifically
+        req = youtube.videos().insert(part="snippet,status", body=body, media_body=googleapiclient.http.MediaFileUpload(file_path, chunksize=-1, resumable=True))
+        res = req.execute()
+        return res.get('id'), f"https://youtu.be/{res.get('id')}"
     except Exception as e:
-        print(f"❌ YouTube Upload Failed: {e}")
+        print(f"❌ YT Upload Error: {e}")
         return None, None
 
-def update_video_description(video_id, new_description):
-    """Updates the description of an existing video (used to add the real article URL)."""
+def update_video_description(video_id, extra_text):
+    """Appends text to description instead of replacing it."""
     youtube = get_authenticated_service()
     if not youtube or not video_id: return
     
-    print(f"🔄 Updating YouTube Description for ID: {video_id}...")
-    
     try:
-        # First, get the video snippet to preserve title and tags
-        video_response = youtube.videos().list(
-            part="snippet",
-            id=video_id
-        ).execute()
+        # 1. Fetch current details
+        res = youtube.videos().list(part="snippet", id=video_id).execute()
+        if not res.get("items"): return
         
-        if not video_response.get("items"):
-            print("❌ Video not found.")
-            return
-
-        snippet = video_response["items"][0]["snippet"]
-        snippet["description"] = new_description # Update description
+        snippet = res["items"][0]["snippet"]
+        old_desc = snippet["description"]
         
-        # Update
-        update_request = youtube.videos().update(
-            part="snippet",
-            body={
-                "id": video_id,
-                "snippet": snippet
-            }
-        )
-        update_request.execute()
-        print("✅ YouTube Description Updated with Real URL.")
+        # 2. Append, not replace
+        snippet["description"] = f"{old_desc}\n\n{extra_text}"
         
+        youtube.videos().update(part="snippet", body={"id": video_id, "snippet": snippet}).execute()
+        print("✅ YT Description Appended Successfully.")
     except Exception as e:
-        print(f"⚠️ Failed to update YouTube description: {e}")
+        print(f"⚠️ YT Update Error: {e}")
