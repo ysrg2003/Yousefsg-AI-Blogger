@@ -415,42 +415,41 @@ def decode_google_news_url(source_url: str):
         
 def fetch_full_article(url):
     """
-    🚀 SCRAPER v7: Smart Check
+    🚀 SCRAPER v8: Handles decoding failures gracefully.
     """
-    # 1. Resolve URL
+    # 1. Attempt to resolve the real URL
     real_url = decode_google_news_url(url)
     
-    # 🚨 CHECK: If decode failed, DO NOT send Google link to Jina.
-    if "news.google.com" in real_url:
-        log("      ⚠️ Decoding failed. Skipping Jina to avoid Error 451.")
+    # 2. CRITICAL CHECK: If decoding fails (returns None), abort this item.
+    if not real_url:
+        log(f"      ⚠️ Decoding failed completely. Skipping item.")
         return None
     
-    # 2. Use Jina with the REAL link
+    # 3. Proceed to Jina with the clean URL
     jina_url = f"https://r.jina.ai/{real_url}"
-    log(f"   🕷️ Jina Fetch: {real_url[:50]}...")
+    log(f"   🕷️ Jina Fetch: {real_url[:60]}...")
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(jina_url, headers=headers, timeout=30)
         
         if response.status_code != 200:
-            log(f"      ❌ Jina Error ({response.status_code})")
+            log(f"      ❌ Jina Error ({response.status_code}) for URL: {real_url}")
             return None
             
         content = response.text
-        # تنظيف بداية رد Jina
         if "Title:" in content: content = content.split("Title:", 1)[-1]
         if "URL Source:" in content: content = content.split("\n", 1)[-1]
             
         if len(content) < 500:
-            log("      ⚠️ Content too short/empty.")
+            log("      ⚠️ Content too short or irrelevant.")
             return None
             
-        log(f"      ✅ Content Parsed: {len(content)} chars.")
+        log(f"      ✅ Jina Success! {len(content)} chars fetched.")
         return content[:12000]
         
     except Exception as e:
-        log(f"      ⚠️ Request Failed: {e}")
+        log(f"      ⚠️ Jina request crashed: {e}")
         return None
 
 def get_real_news_rss(query_keywords, category):
