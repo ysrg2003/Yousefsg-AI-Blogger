@@ -369,67 +369,80 @@ def try_parse_json(text, context=""):
             log(f"      ❌ JSON Parse Error ({context})")
             return None
 
-def decode_google_news_url(source_url):
+
+
+        def decode_google_news_url(source_url):
     """
-    🚀 DECODER v6 (OFFLINE SURGEON):
-    Extracts the destination URL directly from the Base64 Protobuf payload.
-    Bypasses Google Server (prevents 400 Bad Request & 429 Rate Limits).
+    🚀 DECODER v7 (VERBOSE MODE):
+    Logic: Base64 decode -> Regex extraction.
+    Features: Debug logs to see why extraction fails.
     """
     log_prefix = "      🔓 Decoder:"
-    
-    # If not a Google News link, return as is
+    source_url = source_url.strip()
+
+    # التحقق المبدئي
     if "news.google.com" not in source_url and "/articles/" not in source_url:
         return source_url
 
     try:
-        # 1. Extract Token
+        # 1. استخراج التوكن (Token)
+        # فصل ما بعد /articles/ وما قبل علامة الاستفهام ؟
         if '/articles/' in source_url:
             token = source_url.split('/articles/')[-1].split('?')[0]
         else:
+            log(f"{log_prefix} ⚠️ Bad URL structure.")
             return source_url
 
-        # 2. Fix Padding
-        token += "=" * ((4 - len(token) % 4) % 4)
+        # 2. فك التشفير (Decoding)
+        # تجربة الحشو (Padding) بشكل مرن
+        pad = len(token) % 4
+        if pad > 0:
+            token += "=" * (4 - pad)
 
-        # 3. Decode Bytes
         try:
+            # محاولة UrlSafe (الأكثر شيوعاً لجوجل)
             decoded_bytes = base64.urlsafe_b64decode(token)
-        except Exception:
+        except:
             try:
+                # محاولة Standard (احتياطية)
                 decoded_bytes = base64.b64decode(token)
-            except:
-                log(f"{log_prefix} ⚠️ Failed to decode Base64.")
+            except Exception as e:
+                log(f"{log_prefix} ❌ Base64 Fail: {e}")
                 return source_url
 
-        # 4. Binary Regex Search
-        # Looks for http/https URLs inside the binary blob
-        found_urls = re.findall(rb'(https?://[a-zA-Z0-9_\-\./%?=&]+)', decoded_bytes)
+        # 3. البحث عن الروابط (Regex)
+        # نبحث داخل البايتات عن أي نص يبدأ بـ http/https
+        found_items = re.findall(rb'(https?://[a-zA-Z0-9_\-\./%?=&]+)', decoded_bytes)
 
-        # 5. Filter Results
+        if not found_items:
+            log(f"{log_prefix} ⚠️ Decoded bytes ok, but NO URL pattern found inside.")
+            return source_url
+
+        # 4. تنقية واختيار أفضل رابط
         best_link = None
-        max_len = 0
+        longest_len = 0
         
-        for u_bytes in found_urls:
+        for item in found_items:
             try:
-                u_str = u_bytes.decode('latin1')
-                # Filter out Google internal links
-                if "news.google.com" not in u_str and "google.com" not in u_str:
-                    # Prefer longer URLs (usually the real destination)
-                    if len(u_str) > max_len:
-                        best_link = u_str
-                        max_len = len(u_str)
+                link_str = item.decode('latin1', errors='ignore')
+                # استبعاد روابط جوجل
+                if "google.com" not in link_str and "googleusercontent" not in link_str:
+                    # نختار الرابط الأطول لأنه عادة المقالة الأصلية
+                    if len(link_str) > longest_len:
+                        best_link = link_str
+                        longest_len = len(link_str)
             except:
-                pass
+                continue
 
         if best_link:
-            log(f"{log_prefix} ✅ Extracted: {best_link[:50]}...")
+            log(f"{log_prefix} ✅ SUCCESS: {best_link[:50]}...")
             return best_link
-
-        # Fallback: Return original (Jina will likely fail, but we tried)
-        return source_url
+        else:
+            log(f"{log_prefix} ⚠️ Found links but they were all Google links.")
+            return source_url
 
     except Exception as e:
-        log(f"{log_prefix} Error: {e}")
+        log(f"{log_prefix} Crash: {e}")
         return source_url
 
 def fetch_full_article(url):
