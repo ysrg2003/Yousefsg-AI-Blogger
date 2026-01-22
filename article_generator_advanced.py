@@ -17,6 +17,15 @@ from google import genai
 from google.genai import types
 import selenium
 import webdriver_manager
+# ---- أضف هذه الاستيرادات بالقرب من أعلى الملف ----
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+# webdriver-manager سيسمح بتنزيل ChromeDriver تلقائياً
+from webdriver_manager.chrome import ChromeDriverManager
+# (قد تحتاج أيضاً هذه لو كنت تستخدم find_element وغيرها)
+from selenium.webdriver.common.by import By
+# -------------------------------------------------
 import url_resolver
 import trafilatura
 
