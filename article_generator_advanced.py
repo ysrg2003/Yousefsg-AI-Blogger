@@ -481,20 +481,37 @@ def publish_post(title, content, labels):
     token = get_blogger_token()
     if not token: return None
     
-    url = f"https://www.googleapis.com/blogger/v3/blogs/{os.getenv('BLOGGER_BLOG_ID')}/posts"
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    body = {"title": title, "content": content, "labels": labels, "status": "LIVE"}
+    blog_id = os.getenv('BLOGGER_BLOG_ID')
+    
+    # 🔴 التغيير الهام هنا:
+    # إضافة parameter "?isDraft=false" للرابط مباشرة.
+    # هذا يجبر جوجل على نشر المقال فوراً للملأ (Public/Live).
+    url = f"https://www.googleapis.com/blogger/v3/blogs/{blog_id}/posts?isDraft=false"
+    
+    headers = {
+        "Authorization": f"Bearer {token}", 
+        "Content-Type": "application/json"
+    }
+    
+    # لا نرسل published date لكي يأخذ توقيت السيرفر الحالي (الآن)
+    data = {
+        "title": title, 
+        "content": content, 
+        "labels": labels
+    }
     
     try:
-        r = requests.post(url, headers=headers, json=body)
+        r = requests.post(url, headers=headers, json=data)
         if r.status_code == 200:
-            link = r.json().get('url')
-            log(f"✅ Published: {link}")
-            return link
-        log(f"❌ Blogger Error: {r.text}")
-        return None
+            post_data = r.json()
+            real_url = post_data.get('url')
+            log(f"✅ Published INSTANTLY: {real_url}")
+            return real_url
+        else:
+            log(f"❌ Publish Error: {r.text}")
+            return None
     except Exception as e:
-        log(f"❌ Blogger Fail: {e}")
+        log(f"❌ Connection Error: {e}")
         return None
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
