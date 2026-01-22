@@ -13,7 +13,6 @@
   "settings": {
     "date_range_query": "when:1d",
     "model_name": "models/gemini-2.5-flash",
-    "publish_time": "11:00 UTC",
     "adsense_optimization": true
   }
 }
