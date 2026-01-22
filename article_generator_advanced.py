@@ -95,273 +95,202 @@ ARTICLE_STYLE = """
 # (تأكد من أن PROMPT_B يطلب استخدام Source Text)
 
 
-
-
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL, UNABRIDGED, BEAST MODE v8.0)
+# 2. PROMPTS DEFINITIONS (v10.0 - THE "CREATOR" MODE)
 # ==============================================================================
 
 # ------------------------------------------------------------------
-# PROMPT A: RESEARCH (Focus on Analyzable Trends)
+# PROMPT A: TOPIC SELECTION (Filter: "Is this clickable content?")
 # ------------------------------------------------------------------
 PROMPT_A_TRENDING = """
-A: You are a Viral Tech Trend Hunter & Analyst. I have fetched real-time headlines from RSS.
+A: You are a Viral Content Strategist for a Tech Blog.
+INPUT RSS DATA: {rss_data}
+SECTION: {section_focus}
+IGNORE: {recent_titles}
 
-INPUT RSS DATA:
-{rss_data}
+**YOUR GOAL:**
+Ignore boring corporate news (stocks, quarterly earnings, lawsuits). 
+Find the ONE story that a **YouTuber** or **TikToker** would make a video about today.
 
-SECTION FOCUS:
-{section_focus}
+**SELECTION CRITERIA (The "WIIFM" Factor - What's In It For Me?):**
+1. **Utility:** Does this solve a problem? (e.g., "New tool fixes bad wifi").
+2. **Curiosity:** Is it weird or scary? (e.g., "AI can now fake your voice").
+3. **Mass Appeal:** Does it affect phones/apps everyone uses? (WhatsApp, Instagram, iPhone, Android).
 
-ANTI-DUPLICATION RULE:
-Do NOT select these titles: {recent_titles}
-
-TASK INSTRUCTIONS:
-1. Scan the headlines for "High-Impact" stories.
-2. Select EXACTLY ONE story.
-3. **Selection Logic (The "Must-Click" Filter):**
-   - **Conflict/Drama:** (e.g., US sanctions China, OpenAI vs Google, Lawsuits).
-   - **Financial Impact:** (e.g., "This tool makes X free", "Jobs at risk").
-   - **Mass Adoption:** (e.g., New iPhone, Windows update, WhatsApp change).
-   - **REJECT:** Boring version updates (v1.2.3), dry financial reports, or niche scientific papers.
-4. **Contextual Analysis:** If the headline is vague, use your knowledge to infer *why* it matters today.
-
-Output JSON only:
+**OUTPUT JSON:**
 {{
-  "headline": "A catchy, viral-style headline (e.g. 'Why [Event] Changes Everything' or 'The End of [X]?')",
-  "original_rss_link": "The URL Link from RSS",
-  "original_rss_title": "The exact title...",
-  "topic_focus": "The core implication/story",
-  "why_selected": "High viral potential / Impact on regular users",
+  "headline": "Create a 'How-to' or 'Explainer' style headline. (NOT a news headline). Ex: 'The New [Feature] is Here: How to Use It'",
+  "original_rss_link": "URL",
+  "original_rss_title": "Original Title",
+  "topic_focus": "Practical application for the user",
+  "why_selected": "High practical value for beginners",
   "date_context": "{today_date}"
 }}
 """
 
-# Backup Prompt (Keep as is)
-PROMPT_A_EVERGREEN = """
-A: Expert Technical Educator. 
-Task: Outline a comprehensive guide about {section}.
-Anti-Duplication: Avoid {recent_titles}.
-
-Output JSON ONLY:
-{{
-  "headline": "The Definitive Guide: [Topic] in 2026",
-  "original_rss_link": "https://en.wikipedia.org/wiki/Technology",
-  "topic_focus": "Educational Guide",
-  "date_context": "Evergreen"
-}}
-"""
-
 # ------------------------------------------------------------------
-# PROMPT B: WRITER (Analyst + Fact Adherence + STRICT HTML)
+# PROMPT B: CONTENT CREATOR (The "Friendly Expert")
 # ------------------------------------------------------------------
 PROMPT_B_TEMPLATE = """
-B: You are an Opinionated Tech Analyst and Editor-in-Chief of 'LatestAI'. 
-**CRITICAL CONTEXT:** I have scraped the FULL content from the source URL. 
-Use the provided `SOURCE CONTENT` below as your PRIMARY source of facts.
+B: You are 'LatestAI', a popular Tech Blogger and Creator.
+**CONTEXT:** You are NOT a journalist. You are a guide. 
+Use the `SOURCE CONTENT` facts, but rewrite them as a helpful blog post.
 
-INPUT DATA: {json_input}
-STRICT FORBIDDEN PHRASES: {forbidden_phrases}
+INPUT: {json_input}
+FORBIDDEN WORDS: {forbidden_phrases} (Plus: "Reportedly", "According to sources", "Allegedly").
 
-**TASK:**
-Write a **Long-Form, Deep-Dive Blog Post** (1500+ words equivalent). 
-Do NOT summarize. EXPAND and ANALYZE.
+**STRATEGY:**
+- **Tone:** Enthusiastic, Personal, Clear. Use "I", "We", "You".
+- **Goal:** Take complex news and turn it into actionable advice.
 
-**STRICT HTML FORMATTING RULES (DO NOT IGNORE):**
-1. **NO Markdown:** Do not use **bold** or # headers. Use HTML tags ONLY.
-2. **Tags:** Use `<h2>` for main sections, `<h3>` for subsections, `<p>` for paragraphs.
-3. **Lists:** Use `<ul>` and `<li>` for bullet points.
-4. **Paragraphs:** Keep `<p>` blocks short (3-4 lines max) for readability.
-5. **Bold:** Use `<strong>` for key stats and names.
+**STRICT HTML STRUCTURE:**
+1. **The Hook (Intro):** Start with a relatable problem. "Don't you hate it when...?" Then introduce the news as the solution.
+2. **What Actually Happened:** `<h2>` Title. Simple explanation of the news (No jargon).
+3. **The "Cheat Sheet":** 
+   - `<h2>` titled "**Quick Summary**".
+   - Under it: `<ul>` with 5 bullet points (Emojis allowed here).
+4. **Navigation:** Insert: `[[TOC_PLACEHOLDER]]`.
+5. **Why This Matters to YOU:** `<h2>` Title. 
+   - Explain the *benefit*. Will it save time? Save money?
+6. **The Tutorial / How-To (Crucial):** `<h2>` Title (e.g., "**How to Try It**" or "**What to Expect**").
+   - Even if the feature isn't out, explain the steps to get ready.
+7. **The Verdict:** `<h2>` titled "**My Opinion**". Is it hype or real?
+8. **Comparison Table:** HTML `<table>` comparing "Old Way" vs "New Way".
 
-**ARTICLE ARCHITECTURE:**
-1. **Headline:** (As provided).
-2. **Introduction:** Hook the reader. What is the problem? What is the news? Why now?
-3. **The Bottom Line:** An `<h2>` titled "**Quick Summary**". Under it, a `<ul>` list of 5 key takeaways.
-4. **Navigation:** Insert exact string: `[[TOC_PLACEHOLDER]]`.
-5. **Deep Dive (Section 1):** `<h2>` Title. Explain the technology/news in depth using Source Content facts.
-6. **The Analysis (Section 2):** `<h2>` titled "**The Good, The Bad, and The Scary**". 
-   - Use `<h3>` for "The Good".
-   - Use `<h3>` for "The Risks".
-   - Be critical. Don't just praise it.
-7. **Future Outlook:** `<h2>` Title. Prediction for the next 12 months.
-8. **Comparison Table:** An HTML `<table>` comparing "Before vs After" or "This vs Competitor".
-   - Use `<thead>`, `<tr>`, `<th>`, `<tbody>`, `td`.
-
-**TONE & STYLE:**
-- **Authoritative:** "We believe", "The data suggests".
-- **Simple:** ELI15 (Explain Like I'm 15).
-- **Fact-Based:** If source says "50%", write "50%". Do not hallucinate numbers.
+**WRITING RULES:**
+- **Short & Punchy:** Paragraphs = 2-3 lines max.
+- **Visuals:** Use `<strong>` to highlight cool features.
+- **Explain:** If you say "latency", write "(aka lag)".
 
 Output JSON ONLY:
 {{
-  "draftTitle": "Final Headline",
-  "draftContent": "<html>... Full Structured HTML Content ...</html>",
-  "excerpt": "A short, punchy summary (150 chars) for SEO.",
-  "sources_used": ["Entities found in Source Content"]
+  "draftTitle": "A Title That Sounds Like a YouTube Video (e.g. 'Stop Doing This...')",
+  "draftContent": "<html>...Content...</html>",
+  "excerpt": "Compelling summary for social media.",
+  "sources_used": ["List"]
 }}
 """
 
 # ------------------------------------------------------------------
-# PROMPT C: SEO (Structure & Schema & Visuals)
+# PROMPT C: VISUALS & SEO (The "Magazine Editor")
 # ------------------------------------------------------------------
 PROMPT_C_TEMPLATE = """
-C: You are the Strategic Editor & SEO Consultant.
-INPUT DRAFT: {json_input}
-KNOWLEDGE GRAPH LINKS: {knowledge_graph}
+C: Polish the content for a high-end blog.
+INPUT: {json_input}
+KG LINKS: {knowledge_graph}
 
-YOUR TASKS (EXECUTE ALL):
+**TASKS:**
 
-1. **TOC Injection:** 
-   - Locate `[[TOC_PLACEHOLDER]]`.
-   - Replace it with `<div class="toc-box"><h3>Navigate this Guide</h3><ul>...</ul></div>`.
-   - **CRITICAL:** You MUST add unique `id="section-name"` attributes to EVERY `<h2>` in the `finalContent` so the anchors work (e.g. `<a href="#section-name">`).
+1. **Format Injection:**
+   - Replace `[[TOC_PLACEHOLDER]]` with `<div class="toc-box"><h3>Table of Contents</h3><ul>...</ul></div>`.
+   - Add `id="sec-X"` to all H2 headers.
 
-2. **FAQ Rich Snippets:** 
-   - Extract 3 logical user questions.
-   - Append a section at the bottom: `<div class="faq-section"><div class="faq-title">Frequently Asked Questions</div>...</div>`.
-   - Use classes: `faq-q` for questions, `faq-a` for answers.
+2. **Styling Wrappers (Match CSS):**
+   - Wrap "Quick Summary" list in: `<div class="takeaways-box">...</div>`.
+   - Wrap Table in: `<div class="table-wrapper">...</div>`.
+   - **NEW:** Find the "My Opinion" or "Verdict" section and wrap it in: `<blockquote>...</blockquote>` to make it stand out.
 
-3. **Styling Wrappers:** 
-   - Wrap the "Quick Summary" `<ul>` in `<div class="takeaways-box">...</div>`.
-   - Wrap the `<table>` in `<div class="table-wrapper">...</div>`.
-   - Wrap any quotes in `<blockquote>...</blockquote>`.
+3. **FAQ for Beginners:**
+   - Add `<div class="faq-section">` at the end.
+   - Questions must be basic: "Is it free?", "Is it safe?", "When can I get it?".
 
 4. **Internal Linking:** 
-   - Scan text for keywords matching `KNOWLEDGE GRAPH LINKS`.
-   - Hyperlink them naturally (Max 3 links).
+   - Link to other topics naturally.
 
-5. **Schema Generation:** 
-   Generate valid JSON-LD:
-   - `NewsArticle`: Headline, date, author="LatestAI".
-   - `FAQPage`: The 3 extracted Q&A.
+5. **Schema:** 
+   - Use `Article` or `TechArticle` schema (better than NewsArticle for evergreen content).
 
 Output JSON ONLY:
 {{
   "finalTitle": "...",
-  "finalContent": "<html>...Modified HTML with IDs, TOC, Links, Visual FAQ...</html>",
-  "imageGenPrompt": "Detailed English prompt for Flux (cinematic, hyper-realistic, 8k, tech focused, no text, 16:9)",
-  "imageOverlayText": "2-3 word Overlay Text (e.g. 'AI REVOLUTION')",
+  "finalContent": "<html>...</html>",
+  "imageGenPrompt": "Minimalist 3D render of [Subject], abstract technology, soft studio lighting, pastel colors, high quality, --no text, --no faces",
+  "imageOverlayText": "Simple Label (e.g. 'NEW UPDATE')",
   "seo": {{
-      "metaTitle": "SEO Title (60 chars) - Keyword Optimized",
-      "metaDescription": "SEO Description (150 chars) - Click-worthy",
-      "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
-      "imageAltText": "Descriptive Alt Text"
+      "metaTitle": "Clicky Title (60 chars)",
+      "metaDescription": "Benefit-driven description (150 chars).",
+      "tags": ["tag1", "tag2", "tag3"],
+      "imageAltText": "Abstract representation of [Topic]"
   }},
-  "schemaMarkup": {{ "@context": "https://schema.org", "@graph": [...] }}
+  "schemaMarkup": {{ ... }}
 }}
 """
 
 # ------------------------------------------------------------------
-# PROMPT D: AUDIT (Final Safety & Humanization)
+# PROMPT D: HUMANIZER (The "Vibe Check")
 # ------------------------------------------------------------------
 PROMPT_D_TEMPLATE = """
-PROMPT D — Quality Assurance & Logic Check
+PROMPT D — Final Polish
 Input: {json_input}
 
-MISSION: Purge robotic patterns and verify HTML integrity.
+**MISSION:** Kill the "Robot". Make it "Human".
 
-CHECKLIST:
-1. **Robotic Word Purge:** 
-   - Replace: "Delve", "Realm", "Tapestry", "Game-changer", "Paramount", "Underscore", "Unveil".
-   - Use simple words: "Explore", "World", "Mix", "Big deal", "Important", "Show".
-2. **HTML Logic:** 
-   - Verify `id="..."` tags exist on H2 headers.
-   - Verify `toc-box` class exists.
-   - Verify `faq-section` exists.
-3. **Safety:** 
-   - Ensure specific product names are real. Generalize if unsure.
+**RULES:**
+1. **Sentence Length:** If a sentence is too long (20+ words), split it.
+2. **Vocabulary:** 
+   - Change "Utilize" -> "Use".
+   - Change "Facilitate" -> "Help".
+   - Change "Furthermore" -> "Also".
+   - Change "In conclusion" -> "The Bottom Line".
+3. **Formatting:** Ensure the `takeaways-box` and `toc-box` classes are present.
 
-Output JSON ONLY (Preserve all fields):
+Output JSON ONLY (Keep structure):
 {{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "excerpt":"..."}}
 """
 
 # ------------------------------------------------------------------
-# PROMPT E: PUBLISHER (JSON Hygiene)
+# PROMPT E: CLEANER
 # ------------------------------------------------------------------
 PROMPT_E_TEMPLATE = """
-E: The Publisher Role.
-Task: Clean and Finalize JSON for deployment.
-
-CRITICAL: Return raw valid JSON string only. No markdown fences. No preamble.
-
-Input data: {json_input}
-
-Output Structure:
-{{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "authorBio": {{...}}}}
+E: Return valid raw JSON string only. No markdown.
+Input: {json_input}
 """
 
 # ------------------------------------------------------------------
-# VIDEO PROMPTS (Viral Scripts - Fixed Logic)
+# SOCIAL: ENGAGEMENT FOCUSED
 # ------------------------------------------------------------------
+
 PROMPT_VIDEO_SCRIPT = """
-Role: Viral Tech TikTok Screenwriter.
+Role: Scriptwriter for Short-Form Tech Content.
 Input: "{title}" & "{text_summary}"
 
-Task: Create a "WhatsApp" style dialogue script.
-Characters:
-- "Alex" (Hype Tech Bro, Sender).
-- "Sam" (Skeptical Beginner, Receiver).
+**Format:** "Explain Like I'm 5" (ELI5) Dialogue.
+**Characters:** 
+- **User:** "Why is my phone acting weird?" / "What is this new app?"
+- **Pro:** "It's the new update! Check this out..."
 
-**STRICT JSON RULES:**
-1. Use `type: "send"` for Alex (Right side).
-2. Use `type: "receive"` for Sam (Left side).
-3. **Format:** Lowercase "send" / "receive" ONLY.
+**Flow:**
+1. User expresses a common pain point.
+2. Pro introduces the news as the fix.
+3. Pro gives one specific example of how to use it.
+4. Call to Action: "Link in bio for the full guide."
 
-**SCRIPT STRUCTURE:**
-1. **Alex:** Drops the news bombshell (Emoji included).
-2. **Sam:** Ask a skeptical question ("Is it actually good?" or "Is it free?").
-3. **Alex:** Explains the core benefit simply.
-4. **Sam:** Asks about the risk or downside.
-5. **Alex:** Mentions the risk but ends on a high note.
-6. **Alex:** CTA ("Link in bio!").
-
-Output JSON ONLY array:
-[ 
-  {{"speaker": "Alex", "type": "send", "text": "Did you see this?? 🤯 [Headline]"}}, 
-  {{"speaker": "Sam", "type": "receive", "text": "Wait, what happened??"}},
-  ...
-]
+Output JSON Array (Standard format).
 """
 
-# ------------------------------------------------------------------
-# SOCIAL PROMPTS (CTR & Hashtag Enforcement)
-# ------------------------------------------------------------------
 PROMPT_YOUTUBE_METADATA = """
-Role: YouTube Growth Expert.
+Role: YouTube Strategist.
 Input: {draft_title}
 
-Task: Generate Metadata.
+**Strategy:** 
+- Title must trigger "FOMO" (Fear Of Missing Out).
+- Tags must be broad (e.g., "Technology", "iPhone") + specific.
 
-**MANDATORY REQUIREMENTS:**
-1. **Title:** UPPERCASE key words. Clickbait but true.
-2. **Description:** 
-   - 2-3 sentence hook. 
-   - **MUST END WITH:** A list of 5 hashtags (e.g. #AI #Tech #Nvidia).
-3. **Tags:** List of 15 high-volume search terms.
-
-Output JSON ONLY:
-{{
-  "title": "SHOCKING: [Title] - What You Missed!",
-  "description": "This news changes everything about [Topic]. Here is why you need to pay attention.\\n\\n#Tag1 #Tag2 #Tag3 #TechNews #AI",
-  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tech news", "ai tools", "future"]
-}}
+Output JSON.
 """
 
 PROMPT_FACEBOOK_HOOK = """
-Role: Facebook Viral Post Creator.
+Role: Community Manager.
 Input: {title}
 
-Task: Write a short, engaging caption.
+**Strategy:** 
+- Start with a question.
+- "Tag a friend who needs this".
+- Keep it under 280 chars.
 
-**RULES:**
-1. **Hook:** Start with a question or "Stop scrolling! 🛑".
-2. **Body:** 1 sentence summary of why it matters.
-3. **Hashtags:** **MUST include 3 hashtags** at the very end.
-
-Output JSON ONLY:
-{{"facebook": "Did you know...? 😲\\n\\nThis is a massive update for [Topic].\\n\\n#AI #TechUpdate #Innovation"}}
+Output JSON.
 """
+
 
 # ==============================================================================
 # 3. HELPER UTILITIES
