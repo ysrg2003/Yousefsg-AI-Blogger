@@ -16,7 +16,7 @@ import youtube_manager
 from google import genai
 from google.genai import types
 import selenium
-import webdriver-manager
+import webdriver_manager
 import url_resolver
 import trafilatura
 
