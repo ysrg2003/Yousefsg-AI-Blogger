@@ -15,3 +15,4 @@ PyGithub
 feedparser
 selenium
 webdriver-manager
+trafilatura
