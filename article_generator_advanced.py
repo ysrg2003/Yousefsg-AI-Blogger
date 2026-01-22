@@ -89,231 +89,20 @@ ARTICLE_STYLE = """
 # ==============================================================================
 
 # 🛑 الصق البرومبتات التفصيلية "Beast Mode" هنا 🛑
-# IMPORTANT: In 'PROMPT_B_TEMPLATE', ensure it accepts source text context.
+# هام: في Prompt_B تأكد من كتابة: "I have read the full article for you..."
+
+PROMPT_A_TRENDING = """ """ 
+PROMPT_A_EVERGREEN = """ """ 
+PROMPT_B_TEMPLATE = """ """ 
+PROMPT_C_TEMPLATE = """ """ 
+PROMPT_D_TEMPLATE = """ """ 
+PROMPT_E_TEMPLATE = """ """ 
+PROMPT_VIDEO_SCRIPT = """ """ 
+PROMPT_YOUTUBE_METADATA = """ """ 
+PROMPT_FACEBOOK_HOOK = """ """ 
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL, UNABRIDGED, BEAST MODE v7.0)
-# ==============================================================================
-
-# ------------------------------------------------------------------
-# PROMPT A: RESEARCH (Focus on Analyzable Trends)
-# ------------------------------------------------------------------
-PROMPT_A_TRENDING = """
-A: You are a Viral Tech Trend Hunter & Analyst. I have fetched real-time headlines from RSS.
-
-INPUT RSS DATA:
-{rss_data}
-
-SECTION FOCUS:
-{section_focus}
-
-ANTI-DUPLICATION RULE:
-Do NOT select: {recent_titles}
-
-TASK INSTRUCTIONS:
-1. Scan the headlines.
-2. Select EXACTLY ONE story that appeals to **General Public and Enthusiasts** (not just scientists).
-3. **Selection Logic:**
-   - Look for "Conflict" (US vs China).
-   - Look for "Daily Life Impact" (Jobs, Privacy, Costs).
-   - Look for "Big Releases" (ChatGPT, iPhone, Windows).
-   - **AVOID:** Dry academic papers, obscure version updates (e.g. LibTorch 1.1), or minute stock fluctuations.
-4. If a headline suggests a specific "Release", assume the role of explaining *if it's worth it* or *what it changes*.
-
-Output JSON only:
-{{
-  "headline": "A catchy, viral-style headline (e.g. 'Why [Event] Changes Everything')",
-  "original_rss_link": "The URL Link from RSS",
-  "original_rss_title": "The exact title...",
-  "topic_focus": "The core implication/story",
-  "why_selected": "High viral potential / Impact on regular users",
-  "date_context": "{today_date}"
-}}
-"""
-
-# Backup Prompt (Keep as is)
-PROMPT_A_EVERGREEN = """
-A: Expert Technical Educator. 
-Task: Outline a comprehensive guide about {section}.
-Anti-Duplication: Avoid {recent_titles}.
-
-Output JSON ONLY:
-{{
-  "headline": "Definitive Guide: [Topic] in 2026",
-  "original_rss_link": "https://en.wikipedia.org/wiki/Technology",
-  "topic_focus": "Educational Guide",
-  "date_context": "Evergreen"
-}}
-"""
-
-# ------------------------------------------------------------------
-# PROMPT B: WRITER (Analyst + Fact Adherence)
-# ------------------------------------------------------------------
-PROMPT_B_TEMPLATE = """
-B: You are an Opinionated Tech Analyst and Editor-in-Chief of 'LatestAI'. 
-**CRITICAL CONTEXT:** I have visited the source URL and scraped the content for you. 
-Use the provided `SOURCE CONTENT` below as your PRIMARY source of facts.
-
-INPUT DATA: {json_input}
-STRICT FORBIDDEN PHRASES: {forbidden_phrases}
-
-**RULES OF ENGAGEMENT (Safety First):**
-1. **Fact Fidelity:** If the `SOURCE CONTENT` says "4.8 million", write "4.8 million". If it implies a number but doesn't state it, write "Millions of..." or "A significant number". **DO NOT HALLUCINATE NUMBERS.**
-2. **Name Safety:** Only name people explicit in the Source text. Otherwise, use "Officials", "Company Reps", or "Industry Insiders".
-3. **The Audience:** Write for the "Smart Beginner". Explain complex terms simply (ELI15). Use analogies.
-
-I. ARCHITECTURE FOR VALUE (The Article Structure):
-1. **Headline:** Use the provided headline.
-2. **Introduction (The Hook):** Start with the context/problem, then drop the news. End the intro with a bridge: "Here is why this matters to you."
-3. **The Bottom Line (Snippet Trap):** An H2 titled "**Quick Summary**". Under it, write a 50-word **Bold** summary of the impact.
-4. **Table of Contents:** Insert exact string: `[[TOC_PLACEHOLDER]]`.
-5. **Section 1: The Core Story:** Explain WHAT happened using facts from Source Content.
-6. **Section 2: The Critical Analysis:** An H2 titled "**The Good, The Bad, and The Scary**". Discuss risks/benefits critically. Don't just hype it up.
-7. **Section 3: Future Outlook:** How does this affect the next 6 months?
-8. **Comparison Table:** Compare "Old Way vs New Way" or "This Tech vs Competitor".
-
-II. TONE:
-- **Analytic:** "We believe...", "This suggests...".
-- **Engaging:** Use short paragraphs. Use Bullet points often.
-
-Output JSON ONLY:
-{{
-  "draftTitle": "Final Headline",
-  "draftContent": "<html>... Full Content ...</html>",
-  "excerpt": "A short, punchy summary for SEO.",
-  "sources_used": ["Entities found in Source Content"]
-}}
-"""
-
-# ------------------------------------------------------------------
-# PROMPT C: SEO (Structure & Schema)
-# ------------------------------------------------------------------
-PROMPT_C_TEMPLATE = """
-C: You are the Strategic Editor & SEO Consultant.
-INPUT DRAFT: {json_input}
-KNOWLEDGE GRAPH LINKS: {knowledge_graph}
-
-YOUR TASKS (EXECUTE ALL):
-
-1. **TOC Injection:** Replace `[[TOC_PLACEHOLDER]]` with a styled HTML div (class="toc-box") containing a title "Quick Navigation" and a `<ul>` of anchor links to all H2s. **IMPORTANT:** You MUST add unique `id` attributes to all H2 tags in the content so the links work.
-
-2. **FAQ Rich Snippets:** Extract 3 questions a *User* would ask about this topic. Create a VISUAL HTML section at the bottom (class="faq-section", `faq-title`, `faq-q`, `faq-a`).
-
-3. **Styling Wrappers:** 
-   - Wrap "Quick Summary/Takeaways" bullets in `class="takeaways-box"`. 
-   - Wrap tables in `class="table-wrapper"`.
-   - Wrap quotes in `blockquote`.
-
-4. **Internal Linking:** Scan for keywords from `KNOWLEDGE GRAPH LINKS`. Link naturally (Max 3 links).
-
-5. **Schema Generation (Graph):** 
-   Generate a valid JSON-LD graph:
-   - Node 1: `NewsArticle` (headline, date, author="LatestAI").
-   - Node 2: `FAQPage` (the 3 extracted Q&A).
-
-Output JSON ONLY:
-{{
-  "finalTitle": "...",
-  "finalContent": "<html>...Modified HTML with IDs, TOC, Links, Visual FAQ...</html>",
-  "imageGenPrompt": "Detailed English prompt for Flux (abstract, futuristic, 3d, cinematic, 8k, no text)",
-  "imageOverlayText": "2-3 word Overlay Text",
-  "seo": {{
-      "metaTitle": "SEO Title (60 chars)",
-      "metaDescription": "SEO Description (150 chars)",
-      "tags": ["tag1", "tag2", "tag3"],
-      "imageAltText": "Alt Text"
-  }},
-  "schemaMarkup": {{ "@context": "https://schema.org", "@graph": [...] }}
-}}
-"""
-
-# ------------------------------------------------------------------
-# PROMPT D: AUDIT (Final Safety Check)
-# ------------------------------------------------------------------
-PROMPT_D_TEMPLATE = """
-PROMPT D — Humanization & Safety Audit
-Input: {json_input}
-
-MISSION: Purge robotic patterns and verify logic.
-
-CHECKLIST:
-1. **Robotic Word Purge:** Replace "Delve", "Realm", "Tapestry", "Game-changer", "Paramount", "Underscore" with simple human words.
-2. **Formatting Logic:** Verify `id` tags exist on H2s for TOC. Verify FAQ section exists.
-3. **Safety:** Ensure product names look real based on context (no "Spot Cam 3D" unless source confirms). Generalize if unsure ("New Camera").
-
-Output JSON ONLY (Preserve all fields from Input C):
-{{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "excerpt":"..."}}
-"""
-
-# ------------------------------------------------------------------
-# PROMPT E: PUBLISHER (JSON Hygiene)
-# ------------------------------------------------------------------
-PROMPT_E_TEMPLATE = """
-E: The Publisher Role.
-Task: Clean and Finalize JSON for deployment.
-
-CRITICAL: Return raw valid JSON string only. No markdown fences. No preamble.
-
-Input data: {json_input}
-
-Output Structure:
-{{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "authorBio": {{...}}}}
-"""
-
-# ------------------------------------------------------------------
-# VIDEO PROMPTS (Viral Scripts)
-# ------------------------------------------------------------------
-PROMPT_VIDEO_SCRIPT = """
-Role: Viral Tech TikTok Screenwriter.
-Input: "{title}" & "{text_summary}"
-
-Task: Create a "WhatsApp" style dialogue script.
-Characters:
-- "Alex" (Hype Tech Bro, uses emojis 🚀).
-- "Sam" (Normal person/Beginner).
-
-Rules:
-1. **Opening:** Alex drops a bombshell headline.
-2. **Simplicity:** Alex explains the news using a real-world analogy.
-3. **Reaction:** Sam asks "Is it free?" or "When?" (Common questions).
-4. **CTA:** Alex: "Full details in the link below!".
-5. **Length:** 25-30 short bubbles.
-
-Output JSON ONLY array:
-[ {{"speaker": "Alex", "type": "send", "text": "..."}}, ... ]
-"""
-
-# ------------------------------------------------------------------
-# SOCIAL PROMPTS (CTR Optimization)
-# ------------------------------------------------------------------
-PROMPT_YOUTUBE_METADATA = """
-Role: YouTube Clickbait Expert (But Ethical).
-Input: {draft_title}
-
-Task: Generate High-CTR metadata.
-Output JSON ONLY:
-{{
-  "title": "Shocking/Viral Title (Max 60 chars) - Use ALL CAPS for keywords",
-  "description": "2-line spicy hook teasing the implications. #Hashtags",
-  "tags": ["tech", "ai", "news", "trend"]
-}}
-"""
-
-PROMPT_FACEBOOK_HOOK = """
-Role: FB Growth Hacker.
-Input: {title}
-
-Rules:
-1. Don't start with "Here is". Start with "Did you know?" or "This is scary...".
-2. Keep it under 2 lines.
-3. Use 2 specific emojis.
-
-Output JSON ONLY:
-{{"facebook": "Caption text here"}}
-"""
-
-# ==============================================================================
-# 3. HELPER UTILITIES
+# 3. HELPER FUNCTIONS & CLASSES
 # ==============================================================================
 
 class KeyManager:
@@ -337,7 +126,7 @@ class KeyManager:
             self.current_index += 1
             log(f"🔄 Switching Key #{self.current_index + 1}...")
             return True
-        log("❌ ALL KEYS EXHAUSTED.")
+        log("❌ FATAL: All API Keys exhausted.")
         return False
 
 key_manager = KeyManager()
@@ -365,49 +154,65 @@ def try_parse_json(text, context=""):
             fixed = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
             return json.loads(fixed)
         except:
-            log(f"      ❌ JSON Parse Error ({context}). Snippet: {text[:50]}...")
+            log(f"      ❌ JSON Parse Error ({context})")
             return None
 
-def resolve_google_redirect(url):
+def decode_google_news_url(source_url):
     """
-    Follows the Google News redirect to get the REAL publisher URL.
-    This fixes the scraping issue by feeding the real URL to the scraper.
+    💎 THE DECODER: Unlocks the real URL from Google's redirect mess.
     """
     try:
-        # Standard decode attempt (base64)
-        if "/articles/" in url:
-            base64_str = url.split('/articles/')[-1].split('?')[0]
-            base64_str += "=" * ((4 - len(base64_str) % 4) % 4)
-            decoded = base64.urlsafe_b64decode(base64_str).decode('latin1', 'ignore')
-            urls = re.findall(r'(https?://[^"\'\s<>]+)', decoded)
-            for u in urls:
-                if "google" not in u and "." in u:
-                    return u
+        # Method 1: Base64 Decoding (The Cleanest Way)
+        # Google URLs look like: .../articles/CBMi<Base64>...
+        if '/articles/' in source_url:
+            base64_part = source_url.split('/articles/')[-1].split('?')[0]
+            # Fix padding
+            base64_part += "=" * ((4 - len(base64_part) % 4) % 4)
+            
+            try:
+                decoded_bytes = base64.urlsafe_b64decode(base64_part)
+                decoded_str = decoded_bytes.decode('latin1', errors='ignore')
+                
+                # Search for the hidden URL inside the binary soup
+                # We look for http/https followed by domain characters
+                urls = re.findall(r'(https?://[a-zA-Z0-9./\-_%]+)', decoded_str)
+                
+                for u in urls:
+                    # Exclude Google's own domains
+                    if "google.com" not in u and "googleusercontent" not in u:
+                        log(f"      🔓 Decoded Real URL: {u}")
+                        return u
+            except:
+                pass # If decoding fails, try method 2
 
-        # Fallback: Head Request follow
+        # Method 2: HTTP Follow (The Hard Way)
+        # If base64 fails, we ask the server nicely.
         session = requests.Session()
-        resp = session.head(url, allow_redirects=True, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        resp = session.head(source_url, allow_redirects=True, timeout=10)
         return resp.url
-    except:
-        return url
+        
+    except Exception as e:
+        log(f"      ⚠️ Decode Fail: {e}")
+        return source_url
 
 def fetch_full_article(url):
     """
-    🔥 SUPER SCRAPER v5 (Jina Bridge) 🔥
-    Uses r.jina.ai as a free proxy to turn ANY website into LLM-clean text.
-    Bypasses JS, Captcha, and Paywalls naturally.
+    🚀 ULTIMATE SCRAPER: Decoder + Jina
+    1. Decode Google URL -> Real URL
+    2. Feed Real URL -> Jina Reader
     """
-    # 1. Resolve redirect to get real link (e.g. cnn.com/...)
-    real_url = resolve_google_redirect(url)
+    # 1. Get the REAL link (e.g. nytimes.com/...)
+    real_url = decode_google_news_url(url)
     
-    # 2. Use Jina Reader
+    # 2. Use Jina with the REAL link
     jina_url = f"https://r.jina.ai/{real_url}"
     log(f"   🕷️ Jina Fetch: {real_url[:60]}...")
     
     try:
-        # Headers aren't strictly needed for Jina, but good practice
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(jina_url, headers=headers, timeout=40)
+        response = requests.get(jina_url, timeout=40)
         
         if response.status_code != 200:
             log(f"      ❌ Jina Error ({response.status_code})")
@@ -415,17 +220,16 @@ def fetch_full_article(url):
             
         content = response.text
         
-        # Jina returns markdown title at top, remove it to get to body
+        # Jina specific cleanup
         if "Title:" in content:
             content = content.split("Title:", 1)[-1]
             
-        # Valid length check
         if len(content) < 600:
-            log("      ⚠️ Jina content too short (Empty/Failed).")
+            log("      ⚠️ Content too short (Failed).")
             return None
             
-        log(f"      ✅ Content Captured: {len(content)} chars.")
-        return content[:12000] # Limit for Gemini
+        log(f"      ✅ Success! Captured {len(content)} chars.")
+        return content[:12000]
         
     except Exception as e:
         log(f"      ⚠️ Scrape Crash: {e}")
@@ -433,7 +237,7 @@ def fetch_full_article(url):
 
 def get_real_news_rss(query_keywords, category):
     try:
-        # Smart Niche Selector
+        # Split & Pick
         if "," in query_keywords:
             topics = [t.strip() for t in query_keywords.split(',') if t.strip()]
             focused = random.choice(topics)
@@ -451,7 +255,6 @@ def get_real_news_rss(query_keywords, category):
             for entry in feed.entries[:8]:
                 pub = entry.published if 'published' in entry else "Today"
                 title_clean = entry.title.split(' - ')[0]
-                # Pass original link
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
             return items 
         else:
@@ -492,7 +295,7 @@ def publish_post(title, content, labels):
         r = requests.post(url, headers=headers, json=body)
         if r.status_code == 200:
             link = r.json().get('url')
-            log(f"✅ Published: {link}")
+            log(f"✅ Published LIVE: {link}")
             return link
         log(f"❌ Blogger Error: {r.text}")
         return None
@@ -503,7 +306,7 @@ def publish_post(title, content, labels):
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
     if not key: return None
-    log(f"   🎨 Flux Image Gen...")
+    log(f"   🎨 Generating Image...")
     for i in range(3):
         try:
             safe = urllib.parse.quote(f"{prompt_text}, abstract tech, 8k, --no text")
@@ -566,7 +369,7 @@ def generate_step(model, prompt, step):
             else: return None
 
 # ==============================================================================
-# 5. CORE PIPELINE LOGIC (JINA POWERED)
+# 5. CORE PIPELINE LOGIC (DECODER + JINA + 5 STEPS)
 # ==============================================================================
 
 def run_pipeline(category, config, mode="trending"):
@@ -584,31 +387,28 @@ def run_pipeline(category, config, mode="trending"):
     selected_item = None
     source_content = None
     
-    # Check top 3 for Valid Content
-    for item in rss_items[:3]:
+    for item in rss_items[:3]: # Try 3
         if item['title'][:30] in recent: continue
         
-        # Scrape with Jina
+        # Scrape with Decoder
         text = fetch_full_article(item['link'])
         
-        if text and len(text) > 600:
+        if text:
             selected_item = item
             source_content = text
-            break # Got good text, proceed
-        else:
-            log(f"   ⏩ Skipping '{item['title'][:15]}...': Read failed.")
+            break
     
     # Fallback to Analyst Mode
     is_analyst = False
     if not selected_item:
         if rss_items:
-            log("⚠️ CRITICAL: All scraping attempts failed. Entering ANALYST MODE (Headline).")
+            log("⚠️ CRITICAL: Scraping failed. Entering ANALYST MODE (Headline).")
             selected_item = rss_items[0]
             is_analyst = True
-            source_content = "SOURCE TEXT UNAVAILABLE. ANALYZE BASED ON HEADLINE/METADATA ONLY."
+            source_content = "SOURCE TEXT UNAVAILABLE. ANALYZE BASED ON HEADLINE ONLY."
         else: return
 
-    # Build Context
+    # Data Construction
     json_ctx = {
         "headline": selected_item['title'],
         "original_link": selected_item['link'],
@@ -616,9 +416,9 @@ def run_pipeline(category, config, mode="trending"):
     }
     
     # 2. Drafting
-    log(f"   🗞️ Writing about: {selected_item['title']}")
+    log(f"   🗞️ Writing: {selected_item['title']}")
     
-    prefix = "*** FULL SCRAPED ARTICLE TEXT ***" if not is_analyst else "*** HEADLINE ONLY CONTEXT ***"
+    prefix = "*** FULL SOURCE TEXT ***" if not is_analyst else "*** HEADLINE ONLY ***"
     payload = f"METADATA: {json.dumps(json_ctx)}\n\n{prefix}\n\n{source_content}"
     
     json_b = try_parse_json(generate_step(model, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Step B"), "B")
@@ -638,7 +438,7 @@ def run_pipeline(category, config, mode="trending"):
     if not json_d: return
     time.sleep(2)
 
-    # 5. Publish Prep
+    # 5. Publish
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d))
     final = try_parse_json(generate_step(model, prompt_e, "Step E"), "E")
     if not final: final = json_d 
@@ -646,7 +446,7 @@ def run_pipeline(category, config, mode="trending"):
     title = final.get('finalTitle', selected_item['title'])
 
     # Media Hooks
-    log("   🧠 Generating Media Data...")
+    log("   🧠 Socials...")
     yt_meta = try_parse_json(generate_step(model, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta")) or {"title":title, "description":"", "tags":[]}
     fb_dat = try_parse_json(generate_step(model, PROMPT_FACEBOOK_HOOK.format(title=title, category=category), "FB Hook"))
     fb_cap = fb_dat.get('facebook', title) if fb_dat else title
@@ -654,26 +454,25 @@ def run_pipeline(category, config, mode="trending"):
     # Video Gen
     vid_html, vid_main, vid_short, fb_path = "", None, None, None
     try:
-        # Use excerpt/summary for script context
-        script = try_parse_json(generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=final.get('excerpt','')), "Script"))
+        summ = re.sub('<[^<]+?>','', final.get('finalContent',''))[:1500]
+        script = try_parse_json(generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Script"))
         
         if script:
             rr = video_renderer.VideoRenderer()
-            # 16:9
             pm = rr.render_video(script, title, f"main_{int(time.time())}.mp4")
             if pm:
-                desc = f"{yt_meta.get('description','')}\n\n👉 Link in Comments.\n\n#AI"
+                desc = f"{yt_meta.get('description','')}\n\n👉 Full Link Soon.\n\n#AI"
                 vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
                 if vid_main:
                     vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
-            # 9:16
+            
             rs = video_renderer.VideoRenderer(width=1080, height=1920)
             ps = rs.render_video(script, title, f"short_{int(time.time())}.mp4")
             fb_path = ps
             if ps: vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
     except Exception as e: log(f"⚠️ Video: {e}")
 
-    # Final HTML & Publish
+    # Publish
     body = ARTICLE_STYLE
     img = generate_and_upload_image(final.get('imageGenPrompt', title), final.get('imageOverlayText', 'News'))
     if img: body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img}"><img src="{img}" alt="{final.get("seo",{}).get("imageAltText","News")}" /></a></div>'
@@ -693,8 +492,8 @@ def run_pipeline(category, config, mode="trending"):
         if vid_short: youtube_manager.update_video_description(vid_short, upd)
         try:
             if fb_path: 
-                social_manager.post_reel_to_facebook(fb_path, f"{fb_cap}\nLink: {url}\n#AI")
-                time.sleep(10)
+                social_manager.post_reel_to_facebook(fb_path, f"{fb_cap}\nLink: {url}")
+                time.sleep(15)
             if img:
                 social_manager.distribute_content(f"{fb_cap}\n\n👇 Read:\n{url}", url, img)
         except: pass
