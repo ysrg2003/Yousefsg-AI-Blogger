@@ -8,7 +8,7 @@ import sys
 import datetime
 import urllib.parse
 import feedparser
-from bs4 import BeautifulSoup  # New requirement: BeautifulSoup for scraping
+from bs4 import BeautifulSoup
 import social_manager
 import video_renderer
 import youtube_manager
@@ -19,7 +19,6 @@ from google.genai import types
 # 0. CONFIG & LOGGING
 # ==============================================================================
 
-# Words that indicate AI patterns (Stricter list)
 FORBIDDEN_PHRASES = [
     "In today's digital age",
     "The world of AI is ever-evolving",
@@ -49,58 +48,46 @@ def log(msg):
     print(f"[{timestamp}] {msg}", flush=True)
 
 # ==============================================================================
-# 1. CSS STYLING (Complete)
+# 1. CSS STYLING
 # ==============================================================================
 ARTICLE_STYLE = """
 <style>
-    /* Global Typography */
     .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.85; color: #2c3e50; font-size: 19px; }
-    h2 { color: #111; font-weight: 800; margin-top: 50px; margin-bottom: 20px; border-bottom: 4px solid #f1c40f; padding-bottom: 5px; display: inline-block; font-size: 28px; }
-    h3 { color: #2980b9; font-weight: 700; margin-top: 35px; font-size: 24px; }
-    
-    /* Table of Contents */
-    .toc-box { background: #fdfdfd; border: 1px solid #e1e4e8; padding: 25px; margin: 30px 0; border-radius: 12px; display: inline-block; min-width: 60%; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-    .toc-box h3 { margin-top: 0; font-size: 20px; border-bottom: 2px solid #3498db; padding-bottom: 8px; display: inline-block; margin-bottom: 15px; color: #222; }
+    h2 { color: #111; font-weight: 800; margin-top: 55px; margin-bottom: 25px; border-bottom: 4px solid #f1c40f; padding-bottom: 8px; display: inline-block; font-size: 28px; }
+    h3 { color: #2980b9; font-weight: 700; margin-top: 40px; font-size: 24px; }
+    .toc-box { background: #ffffff; border: 1px solid #e1e4e8; padding: 30px; margin: 40px 0; border-radius: 12px; display: inline-block; min-width: 60%; box-shadow: 0 8px 16px rgba(0,0,0,0.05); }
+    .toc-box h3 { margin-top: 0; font-size: 22px; border-bottom: 2px solid #3498db; padding-bottom: 8px; display: inline-block; margin-bottom: 15px; color: #222; }
     .toc-box ul { list-style: none; padding: 0; margin: 0; }
-    .toc-box li { margin-bottom: 10px; border-bottom: 1px dashed #eee; padding-bottom: 5px; padding-left: 20px; position: relative; }
-    .toc-box li:before { content: "►"; color: #3498db; position: absolute; left: 0; font-size: 12px; top: 4px; }
-    .toc-box a { color: #444; font-weight: 600; font-size: 17px; text-decoration: none; transition: 0.2s; }
-    .toc-box a:hover { color: #3498db; padding-left: 5px; }
-
-    /* Tables */
-    .table-wrapper { overflow-x: auto; margin: 35px 0; border-radius: 12px; box-shadow: 0 0 15px rgba(0,0,0,0.1); border: 1px solid #eee; }
-    table { width: 100%; border-collapse: collapse; background: #fff; min-width: 600px; }
-    th { background: #2c3e50; color: #fff; padding: 15px; text-align: left; }
-    td { padding: 14px 16px; border-bottom: 1px solid #eee; color: #34495e; }
+    .toc-box li { margin-bottom: 12px; border-bottom: 1px dashed #f0f0f0; padding-bottom: 8px; padding-left: 20px; position: relative; }
+    .toc-box li:before { content: "►"; color: #3498db; position: absolute; left: 0; font-size: 14px; top: 4px; }
+    .toc-box a { color: #444; font-weight: 600; font-size: 18px; text-decoration: none; transition: 0.2s; }
+    .toc-box a:hover { color: #3498db; padding-left: 8px; }
+    .table-wrapper { overflow-x: auto; margin: 45px 0; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); border: 1px solid #eee; }
+    table { width: 100%; border-collapse: collapse; background: #fff; min-width: 600px; font-size: 18px; }
+    th { background: #2c3e50; color: #fff; padding: 18px; text-align: left; text-transform: uppercase; font-size: 16px; letter-spacing: 1px; }
+    td { padding: 16px 18px; border-bottom: 1px solid #eee; color: #34495e; }
     tr:nth-child(even) { background-color: #f8f9fa; }
-
-    /* Key Takeaways */
-    .takeaways-box { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-left: 6px solid #2c3e50; padding: 25px; margin: 35px 0; border-radius: 8px; }
-    .takeaways-box h3 { margin-top: 0; color: #222; font-size: 22px; margin-bottom: 15px; }
-    .takeaways-box ul { margin: 0; padding-left: 20px; }
-    .takeaways-box li { margin-bottom: 10px; font-weight: 500; font-size: 18px; }
-
-    /* FAQ */
-    .faq-section { margin-top: 60px; border-top: 2px solid #ecf0f1; padding-top: 40px; background: #fffbf2; padding: 30px; border-radius: 10px; }
-    .faq-title { font-size: 26px; font-weight: 800; color: #2c3e50; margin-bottom: 25px; text-align: center; }
-    .faq-q { font-weight: 700; font-size: 20px; color: #d35400; margin-bottom: 8px; display: block; }
-    .faq-a { font-size: 18px; color: #555; line-height: 1.8; }
-
-    /* Other */
-    .separator img { border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); max-width: 100%; height: auto; display: block; }
-    blockquote { background: #fff; border-left: 5px solid #ffb703; margin: 35px 0; padding: 20px 35px; font-style: italic; color: #555; font-size: 1.2em; line-height: 1.6; }
-    a { color: #2980b9; text-decoration: none; font-weight: 500; border-bottom: 2px dotted #2980b9; transition: 0.3s; }
-    a:hover { color: #e67e22; border-bottom: 1px solid #e67e22; }
+    tr:hover { background-color: #e9ecef; transition: 0.3s; }
+    .takeaways-box { background: linear-gradient(135deg, #fdfbf7 0%, #fff 100%); border-left: 6px solid #e67e22; padding: 30px; margin: 40px 0; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
+    .takeaways-box h3 { margin-top: 0; color: #d35400; font-size: 22px; margin-bottom: 20px; display: flex; align-items: center; }
+    .takeaways-box ul { margin: 0; padding-left: 25px; }
+    .takeaways-box li { margin-bottom: 10px; font-weight: 600; font-size: 18px; color: #222; }
+    .faq-section { margin-top: 70px; border-top: 3px solid #f1f1f1; padding-top: 50px; background: #fffcf5; padding: 40px; border-radius: 20px; }
+    .faq-title { font-size: 30px; font-weight: 900; color: #222; margin-bottom: 35px; text-align: center; letter-spacing: -1px; }
+    .faq-item { margin-bottom: 25px; border-bottom: 1px solid #f0e6cc; padding-bottom: 20px; }
+    .faq-item:last-child { border-bottom: none; }
+    .faq-q { font-weight: 700; font-size: 22px; color: #d35400; margin-bottom: 10px; display: block; }
+    .faq-a { font-size: 19px; color: #555; line-height: 1.8; }
+    .separator img { border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.12); max-width: 100%; height: auto; display: block; }
+    blockquote { background: #ffffff; border-left: 5px solid #f1c40f; margin: 40px 0; padding: 25px 35px; font-style: italic; color: #555; font-size: 1.3em; line-height: 1.6; box-shadow: 0 3px 10px rgba(0,0,0,0.05); }
+    a { color: #2980b9; text-decoration: none; font-weight: 600; border-bottom: 2px dotted #2980b9; transition: all 0.3s; }
+    a:hover { color: #e67e22; border-bottom: 2px solid #e67e22; background-color: #fff8e1; }
 </style>
 """
 
 # ==============================================================================
-# 2. PROMPTS DEFINITIONS
+# 2. PROMPTS (PASTE HERE)
 # ==============================================================================
-
-# 🛑🛑🛑 [AREA FOR MANUAL PROMPTS] 🛑🛑🛑
-# Paste your DETAILED Beast Mode Prompts here.
-# NOTE: Update 'PROMPT_B' to acknowledge it will receive 'FULL SOURCE TEXT'.
 
 # ==============================================================================
 # 2. PROMPTS DEFINITIONS (FULL, UNABRIDGED, BEAST MODE v7.0)
@@ -324,11 +311,10 @@ Output JSON ONLY:
 """
 
 # ==============================================================================
-# 3. HELPER FUNCTIONS & CLASSES
+# 3. HELPER UTILITIES
 # ==============================================================================
 
 class KeyManager:
-    """Round-robin Gemini API Keys."""
     def __init__(self):
         self.keys = []
         for i in range(1, 11):
@@ -347,16 +333,14 @@ class KeyManager:
     def switch_key(self):
         if self.current_index < len(self.keys) - 1:
             self.current_index += 1
-            log(f"🔄 Quota limit. Switching to Key #{self.current_index + 1}...")
+            log(f"🔄 Switching Key #{self.current_index + 1}...")
             return True
-        else:
-            log("❌ FATAL: All API Keys exhausted.")
-            return False
+        log("❌ FATAL: All API Keys exhausted.")
+        return False
 
 key_manager = KeyManager()
 
 def clean_json(text):
-    """Robust JSON cleaner (Nuclear option)."""
     text = text.strip()
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
     if match: text = match.group(1)
@@ -365,11 +349,9 @@ def clean_json(text):
         if match: text = match.group(1)
     
     if text.startswith("[") or (text.find("[") != -1 and text.find("[") < text.find("{")):
-        start = text.find('[')
-        end = text.rfind(']')
+        start, end = text.find('['), text.rfind(']')
     else:
-        start = text.find('{')
-        end = text.rfind('}')
+        start, end = text.find('{'), text.rfind('}')
     
     if start != -1 and end != -1: return text[start:end+1].strip()
     return text.strip()
@@ -386,51 +368,57 @@ def try_parse_json(text, context=""):
 
 def fetch_full_article(url):
     """
-    🌟 NEW: SCRAPER ENGINE 🌟
-    Visits the real URL, grabs the body text to provide factual data to AI.
+    ADVANCED SCRAPER: Handles Google News Redirects & Basic scraping.
     """
-    log(f"   🕷️ Scraping Article Source: {url}")
+    log(f"   🕷️ Scraping: {url}")
     try:
-        # User-Agent to mimic real Chrome browser (bypass some blocks)
+        session = requests.Session()
+        
+        # 1. Advanced Headers to look real
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Referer': 'https://www.google.com/'
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://news.google.com/'
         }
         
-        response = requests.get(url, headers=headers, timeout=15)
+        # 2. Follow Redirects explicitly to get out of "google.com/news" loop
+        response = session.get(url, headers=headers, timeout=15, allow_redirects=True)
+        final_url = response.url
         
-        # If scraper fails (403/404), return None to fallback
+        # If we are still on google news, scraping likely failed or blocked
+        if "news.google.com" in final_url and len(response.content) < 5000:
+             log("      ⚠️ Stuck on Google Redirect. Trying method 2...")
+             # (Simple logic: Proceed, hopefully bs4 finds something, otherwise Skip loop handles it)
+
         if response.status_code != 200:
-            log(f"      ⚠️ Scrape blocked ({response.status_code}). Using RSS summary.")
+            log(f"      ⚠️ Failed ({response.status_code})")
             return None
             
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Cleanup DOM
-        for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form', 'ads', 'iframe']):
+        # Remove junk
+        for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form', 'noscript', 'iframe']):
             tag.decompose()
             
-        # Extract meaningful text (Paragraphs)
-        # Filters out short nav links or empty lines
-        paragraphs = [p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 25]
+        # Get Paragraphs with substantial text
+        paragraphs = [p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 40]
         
-        # Combine text (Limit to first 12,000 chars to respect Token Limits)
-        full_text = "\n\n".join(paragraphs)[:12000]
+        full_text = "\n\n".join(paragraphs)[:15000]
         
-        if len(full_text) < 200:
-            log("      ⚠️ Scraped content too short. Using RSS summary.")
+        # QUALITY CONTROL: If text is too short, it's trash.
+        if len(full_text) < 500:
+            log(f"      ⚠️ Content too short ({len(full_text)} chars). Probably captcha/blocked.")
             return None
             
         return full_text
         
     except Exception as e:
-        log(f"      ⚠️ Scrape Exception: {e}")
+        log(f"      ⚠️ Scrape Error: {e}")
         return None
 
 def get_real_news_rss(query_keywords, category):
     try:
-        # Smart Niche Selector
         if "," in query_keywords:
             topics = [t.strip() for t in query_keywords.split(',') if t.strip()]
             focused = random.choice(topics)
@@ -445,21 +433,20 @@ def get_real_news_rss(query_keywords, category):
         feed = feedparser.parse(url)
         items = []
         if feed.entries:
-            for entry in feed.entries[:7]:
+            for entry in feed.entries[:8]: # Grab 8 candidates
                 pub = entry.published if 'published' in entry else "Today"
                 title_clean = entry.title.split(' - ')[0]
-                # Note: 'link' here is passed to scraper later
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
             return items 
         else:
-            # Fallback Logic
-            log(f"   ⚠️ RSS Empty. Fallback to category.")
+            log(f"   ⚠️ RSS Empty. Switching to Fallback.")
+            # Fallback
             fallback_q = f"{category} news when:1d"
             url = f"https://news.google.com/rss/search?q={urllib.parse.quote(fallback_q)}&hl=en-US&gl=US&ceid=US:en"
             feed = feedparser.parse(url)
             for entry in feed.entries[:4]:
                 items.append({"title": entry.title, "link": entry.link, "date": "Today"})
-            return items 
+            return items
             
     except Exception as e:
         log(f"❌ RSS Error: {e}")
@@ -481,35 +468,19 @@ def publish_post(title, content, labels):
     token = get_blogger_token()
     if not token: return None
     
-    blog_id = os.getenv('BLOGGER_BLOG_ID')
-    
-    # 🔴 التغيير الهام هنا:
-    # إضافة parameter "?isDraft=false" للرابط مباشرة.
-    # هذا يجبر جوجل على نشر المقال فوراً للملأ (Public/Live).
-    url = f"https://www.googleapis.com/blogger/v3/blogs/{blog_id}/posts?isDraft=false"
-    
-    headers = {
-        "Authorization": f"Bearer {token}", 
-        "Content-Type": "application/json"
-    }
-    
-    # لا نرسل published date لكي يأخذ توقيت السيرفر الحالي (الآن)
-    data = {
-        "title": title, 
-        "content": content, 
-        "labels": labels
-    }
+    # Live Publish (?isDraft=false)
+    url = f"https://www.googleapis.com/blogger/v3/blogs/{os.getenv('BLOGGER_BLOG_ID')}/posts?isDraft=false"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    body = {"title": title, "content": content, "labels": labels}
     
     try:
-        r = requests.post(url, headers=headers, json=data)
+        r = requests.post(url, headers=headers, json=body)
         if r.status_code == 200:
-            post_data = r.json()
-            real_url = post_data.get('url')
-            log(f"✅ Published INSTANTLY: {real_url}")
-            return real_url
-        else:
-            log(f"❌ Publish Error: {r.text}")
-            return None
+            link = r.json().get('url')
+            log(f"✅ Blog Published: {link}")
+            return link
+        log(f"❌ Blogger Error: {r.text}")
+        return None
     except Exception as e:
         log(f"❌ Connection Error: {e}")
         return None
@@ -517,7 +488,7 @@ def publish_post(title, content, labels):
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
     if not key: return None
-    log(f"   🎨 Generating Image (Flux)...")
+    log(f"   🎨 Generating Flux Image...")
     for attempt in range(3):
         try:
             safe = urllib.parse.quote(f"{prompt_text}, abstract tech, 8k, --no text")
@@ -526,10 +497,7 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
             r = requests.get(url, timeout=50)
             if r.status_code == 200:
                 res = requests.post("https://api.imgbb.com/1/upload", data={"key":key}, files={"image":r.content}, timeout=60)
-                if res.status_code == 200:
-                    link = res.json()['data']['url']
-                    log(f"   ✅ Image URL: {link}")
-                    return link
+                if res.status_code == 200: return res.json()['data']['url']
         except: time.sleep(3)
     return None
 
@@ -541,12 +509,11 @@ def load_kg():
 
 def get_recent_titles_string(limit=50):
     kg = load_kg()
-    if not kg: return "None"
-    return ", ".join([i.get('title','') for i in kg[-limit:]])
+    return ", ".join([i.get('title','') for i in kg[-limit:]]) if kg else "None"
 
-def get_relevant_kg_for_linking(current_category, limit=60):
+def get_relevant_kg_for_linking(category, limit=60):
     kg = load_kg()
-    links = [{"title":i['title'],"url":i['url']} for i in kg if i.get('section')==current_category][:limit]
+    links = [{"title":i['title'],"url":i['url']} for i in kg if i.get('section')==category][:limit]
     return json.dumps(links)
 
 def update_kg(title, url, section):
@@ -580,134 +547,159 @@ def generate_step(model, prompt, step):
             return clean_json(r.text)
         except Exception as e:
             if "429" in str(e) or "quota" in str(e).lower():
-                log(f"      ⚠️ Key Quota. Switching...")
+                log(f"      ⚠️ Key switch...")
                 if not key_manager.switch_key(): return None
             else:
                 log(f"      ❌ AI Error: {e}")
                 return None
 
 # ==============================================================================
-# 5. CORE PIPELINE LOGIC (RSS + SCRAPING + 5 STEPS)
+# 5. CORE PIPELINE LOGIC (THE SMART LOOP)
 # ==============================================================================
 
 def run_pipeline(category, config, mode="trending"):
     model = config['settings'].get('model_name')
     cat_conf = config['categories'][category]
     
-    log(f"\n🚀 INIT PIPELINE: {category} ({mode})")
+    log(f"\n🚀 INIT PIPELINE: {category}")
     recent = get_recent_titles_string()
 
     # 1. RSS
     rss_items = get_real_news_rss(cat_conf.get('trending_focus',''), category)
-    if not rss_items: return # Stop if empty
+    if not rss_items: return
 
-    # Flatten RSS for prompt
-    rss_prompt_data = "\n".join([f"- Title: {i['title']}\n  Link: {i['link']}\n  Date: {i['date']}" for i in rss_items])
-
-    # 2. Step A: Research Selection
-    prompt_a = PROMPT_A_TRENDING.format(rss_data=rss_prompt_data, section=category, section_focus=cat_conf['trending_focus'], recent_titles=recent, today_date=str(datetime.date.today()))
-    json_a = try_parse_json(generate_step(model, prompt_a, "Step A (Research)"), "A")
-    if not json_a: return
+    # --- INTELLIGENT SELECTION LOOP ---
+    # We will try up to 3 news items from RSS.
+    # If the first one fails scraping/content check, we try the next.
     
-    # 2.5: SCRAPING ENGINE (The Fact Checker)
-    target_link = json_a.get('original_rss_link')
-    log(f"   🗞️ Topic: {json_a.get('headline')} \n   🔗 Fetching source: {target_link}")
+    chosen_news = None
+    scraped_text = None
     
-    full_source_text = fetch_full_article(target_link)
+    for item in rss_items:
+        log(f"   🔎 Checking Candidate: {item['title']}")
+        
+        # A. Quick Pre-Filter by title duplicate check
+        if item['title'][:20] in recent:
+            log("      Skip: Duplicate.")
+            continue
+            
+        # B. Try Scrape
+        content = fetch_full_article(item['link'])
+        
+        if content and len(content) > 500:
+            log("      ✅ Valid Content Found!")
+            chosen_news = item
+            scraped_text = content
+            break
+        else:
+            log("      ⚠️ Skip: Content too short/blocked.")
     
-    if full_source_text:
-        log("   ✅ Source Content Acquired. Using Factual Mode.")
-        input_payload = f"*** REAL SOURCE CONTENT (USE THIS FACTS): ***\n\n{full_source_text}\n\n*** END SOURCE ***\n\n(Context: {json.dumps(json_a)})"
-    else:
-        log("   ⚠️ Source Blocked. Falling back to Analytical Mode.")
-        input_payload = f"*** SOURCE UNAVAILABLE ***\n(Analyze the headline implications: {json.dumps(json_a)})"
+    # If Loop finishes without ANY valid content
+    if not chosen_news:
+        log("❌ No valid scraped content found in any RSS items. Aborting to save quality.")
+        return
 
-    time.sleep(3)
+    # -----------------------------------------------
+    # START GENERATION (Now we have Guaranteed Data)
+    # -----------------------------------------------
+    
+    # Context payload for AI
+    json_context = {
+        "headline": chosen_news['title'],
+        "original_link": chosen_news['link'],
+        "date": chosen_news['date']
+    }
+    
+    payload = f"METADATA: {json.dumps(json_context)}\n\n*** SOURCE TEXT (USE THIS FACTS): ***\n{scraped_text}"
 
-    # 3. Step B: Drafting (Uses Scraped Input)
-    prompt_b = PROMPT_B_TEMPLATE.format(json_input=input_payload, forbidden_phrases=str(FORBIDDEN_PHRASES))
-    json_b = try_parse_json(generate_step(model, prompt_b, "Step B (Drafting)"), "B")
+    # Step B: Drafting (Skipped A, merging Research into Drafting directly with Source)
+    prompt_b = PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES))
+    json_b = try_parse_json(generate_step(model, prompt_b, "Step B (Writer)"), "B")
     if not json_b: return
     time.sleep(3)
 
-    # 4. Step C: Format & SEO
+    # Step C: SEO
     kg_links = get_relevant_kg_for_linking(category)
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json.dumps(json_b), knowledge_graph=kg_links)
     json_c = try_parse_json(generate_step(model, prompt_c, "Step C (SEO)"), "C")
     if not json_c: return
     time.sleep(3)
 
-    # 5. Step D: Audit
+    # Step D: Audit
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c))
     json_d = try_parse_json(generate_step(model, prompt_d, "Step D (Audit)"), "D")
     if not json_d: return
     time.sleep(3)
 
-    # 6. Step E: Publish
+    # Step E: Publish
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d))
     final_data = try_parse_json(generate_step(model, prompt_e, "Step E"), "E")
     
-    # Failover if E returns text not json
-    if not final_data: final_data = json_d 
+    # Output Repair (Crash Prevention)
+    if not final_data: 
+        final_data = json_d
+        # Repair potentially missing excerpt key if Audio needs it
+        if 'excerpt' not in final_data: final_data['excerpt'] = "Tech news update."
 
-    title = final_data.get('finalTitle', f"{category} News")
+    title = final_data.get('finalTitle', chosen_news['title'])
 
     # ========================================================
     # 🎥 MEDIA & SOCIAL
     # ========================================================
-    log("   🧠 Generating Hooks...")
-    yt_meta = try_parse_json(generate_step(model, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta")) or {"title":title, "description":"", "tags":[]}
+    log("   🧠 Hooks...")
+    yt_meta = try_parse_json(generate_step(model, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta")) or {"title":title, "description":"News.", "tags":[]}
     fb_data = try_parse_json(generate_step(model, PROMPT_FACEBOOK_HOOK.format(title=title, category=category), "FB Hook"))
-    fb_cap = fb_data.get('facebook', title) if fb_data else title
+    fb_caption = fb_data.get('facebook', title) if fb_data else title
 
-    video_html, vid_main, vid_short, vid_path_fb = "", None, None, None
+    vid_html, vid_main, vid_short, vid_path_fb = "", None, None, None
     try:
-        # Pass scraped text summary for script accuracy
-        script = try_parse_json(generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=final_data['excerpt']), "Script"))
+        script = try_parse_json(generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=final_data.get('excerpt','')), "Script"))
         
         if script:
             rr = video_renderer.VideoRenderer()
-            # 16:9
+            # Landscape
             pm = rr.render_video(script, title, f"main_{int(time.time())}.mp4")
             if pm:
-                desc = f"{yt_meta['description']}\n\n👉 Full Story Link Soon.\n\n#AI #Tech"
+                desc = f"{yt_meta.get('description','')}\n\n👉 Article Link Soon.\n\n#Tech"
                 vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
-                if vid_main:
-                    video_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
-            # 9:16
+                if vid_id_main:
+                    vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_id_main}" frameborder="0" allowfullscreen></iframe></div>'
+            # Short
             rs = video_renderer.VideoRenderer(width=1080, height=1920)
             ps = rs.render_video(script, title, f"short_{int(time.time())}.mp4")
             vid_path_fb = ps
-            if ps: vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
-    except Exception as e: log(f"⚠️ Video: {e}")
+            if ps: vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", "Sub!", yt_meta.get('tags',[])+['shorts'])
+    except Exception as e: log(f"⚠️ Video Warning: {e}")
 
     # ========================================================
     # 📝 PUBLISH
     # ========================================================
-    html_body = ARTICLE_STYLE
+    html = ARTICLE_STYLE
     img = generate_and_upload_image(final_data.get('imageGenPrompt', title), final_data.get('imageOverlayText', 'News'))
-    if img: html_body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img}"><img src="{img}" alt="{final_data["seo"]["imageAltText"]}" /></a></div>'
     
-    if video_html: html_body += video_html
-    html_body += final_data.get('finalContent', '')
+    if img: html += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img}"><img src="{img}" alt="{final_data["seo"]["imageAltText"]}" /></a></div>'
+    if vid_html: html += vid_html
+    html += final_data.get('finalContent', '')
     
     if 'schemaMarkup' in final_data:
-        try: html_body += f'\n<script type="application/ld+json">\n{json.dumps(final_data["schemaMarkup"])}\n</script>'
+        try: html += f'\n<script type="application/ld+json">\n{json.dumps(final_data["schemaMarkup"])}\n</script>'
         except: pass
     
-    url = publish_post(title, html_body, [category])
+    url = publish_post(title, html, [category])
     
     # Social Update
     if url:
         update_kg(title, url, category)
-        upd = f"\n\n🚀 FULL LINK: {url}"
+        upd = f"\n\n🔥 READ STORY: {url}"
         if vid_main: youtube_manager.update_video_description(vid_main, upd)
         if vid_short: youtube_manager.update_video_description(vid_short, upd)
         
         try:
-            if vid_path_fb: social_manager.post_reel_to_facebook(vid_path_fb, f"{fb_cap}\n\nRead: {url} #Tech")
-            time.sleep(10)
-            if img: social_manager.distribute_content(f"{fb_cap}\n\n👇 BREAKDOWN:\n{url}", url, img)
+            if vid_path_fb: 
+                social_manager.post_reel_to_facebook(vid_path_fb, f"{fb_caption}\n\nLink: {url}")
+                time.sleep(15)
+            if img:
+                social_manager.distribute_content(f"{fb_caption}\n\n👇 FULL INFO:\n{url}", url, img)
         except: pass
 
 # ==============================================================================
