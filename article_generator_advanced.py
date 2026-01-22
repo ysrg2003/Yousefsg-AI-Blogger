@@ -477,15 +477,36 @@ def try_parse_json(text, context=""):
 
 def get_real_news_rss(query_keywords, category):
     """
-    Fetches news via RSS with 24-hour filter. 
-    Improved logic for 'No specific RSS found' warning.
+    Fetches news via RSS with intelligent parsing.
+    Fixes the 'Empty RSS' issue by splitting long keyword lists into specific search queries.
     """
     try:
-        # Use full keyword list, force "when:1d"
-        encoded = urllib.parse.quote(f"{query_keywords} when:1d")
+        # -----------------------------------------------------------
+        # SMART FIX: Handle comma-separated lists from Config
+        # Problem: Google searches "A, B, C" as "A AND B AND C" -> 0 Results.
+        # Solution: Split them and pick ONE specific focus per run.
+        # -----------------------------------------------------------
+        if "," in query_keywords:
+            # Split string into a list: ['NVIDIA', 'Crypto', 'Funding']
+            topics_list = [t.strip() for t in query_keywords.split(',') if t.strip()]
+            
+            # Smart Selection: Pick one focused topic to search deep
+            focused_topic = random.choice(topics_list)
+            
+            # log message to see what happened
+            log(f"   🎯 Niche Strategy: Selected sub-topic '{focused_topic}' from category list.")
+            
+            # Build the query
+            full_query = f"{focused_topic} when:1d"
+        else:
+            # If it's just one phrase, use it as is
+            full_query = f"{query_keywords} when:1d"
+
+        # Encode URL
+        encoded = urllib.parse.quote(full_query)
         url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
         
-        log(f"   📡 Searching RSS: {query_keywords[:50]}...")
+        log(f"   📡 Searching RSS: {full_query}")
         feed = feedparser.parse(url)
         
         items = []
@@ -497,11 +518,13 @@ def get_real_news_rss(query_keywords, category):
                 items.append(f"- Headline: {clean_title}\n  Link: {entry.link}\n  Date: {pub}")
             return "\n".join(items)
         else:
-            log("   ⚠️ RSS Empty. Switching to Fallback: 'Technology' Category search.")
-            # Fallback: Less strict search
+            log(f"   ⚠️ Focused RSS '{focused_topic if ',' in query_keywords else query_keywords}' was empty. Trying fallback.")
+            
+            # Fallback 1: Try Broad Category Search
             fallback_query = f"{category} news when:1d"
             url = f"https://news.google.com/rss/search?q={urllib.parse.quote(fallback_query)}&hl=en-US&gl=US&ceid=US:en"
             feed = feedparser.parse(url)
+            
             for entry in feed.entries[:4]:
                 items.append(f"- Headline: {entry.title}\n  Link: {entry.link}")
             
@@ -510,7 +533,8 @@ def get_real_news_rss(query_keywords, category):
     except Exception as e:
         log(f"❌ RSS System Error: {e}")
         return "RSS Error."
-
+    
+    
 def get_blogger_token():
     payload = {
         'client_id': os.getenv('BLOGGER_CLIENT_ID'),
