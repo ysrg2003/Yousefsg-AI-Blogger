@@ -786,9 +786,7 @@ def run_pipeline(category, config, mode="trending"):
 # ==============================================================================
 
 def main():
-    wait = random.randint(10, 15) # Anti-bot 1-30 min
-    log(f"⏰ Anti-Bot: Waiting {wait} seconds...")
-    time.sleep(wait)
+    
     
     try:
         with open('config_advanced.json','r') as f: cfg = json.load(f)
