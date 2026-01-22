@@ -13,3 +13,5 @@ decorator
 tqdm
 PyGithub
 feedparser
+selenium
+webdriver-manager
