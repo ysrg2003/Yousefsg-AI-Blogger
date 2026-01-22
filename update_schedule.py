@@ -6,8 +6,8 @@ def update_workflow_schedule():
     workflow_file = '.github/workflows/daily-publish.yml'
     
     # 1. توليد وقت عشوائي جديد للغد
-    # الساعات: نختار عشوائياً بين 6 صباحاً و 8 مساءً (توقيت عالمي UTC)
-    random_hour = random.randint(6, 20)
+    # الساعات: نختار عشوائياً بين 8 صباحاً و 10 مساءً (توقيت عالمي UTC)
+    random_hour = random.randint(11, 22)
     # الدقائق: أي دقيقة عشوائية
     random_minute = random.randint(0, 59)
     
