@@ -195,37 +195,38 @@ Output JSON ONLY:
 # ------------------------------------------------------------------
 # PROMPT B: WRITER PHASE (Architectural & SEO Drafting)
 # ------------------------------------------------------------------
+
+# PROMPT B: Writer Phase (FACTUAL & STRICT)
 PROMPT_B_TEMPLATE = """
-B: You are the Editor-in-Chief of 'LatestAI'. Your task is to write a polished, high-authority news article (approx. 1800-2000 words) based on the research provided.
+B: You are the Editor-in-Chief of 'LatestAI'. Write a high-authority news article (approx. 1800 words) based STRICTLY on the facts provided in the Input Data.
 
 INPUT DATA: {json_input}
-STRICT FORBIDDEN PHRASES (Instant Failure if any of these are found in your output): 
-{forbidden_phrases}
+STRICT FORBIDDEN PHRASES: {forbidden_phrases}
 
-I. ARCHITECTURE FOR SEO DOMINANCE (You MUST follow this structure step-by-step):
-1. **Headline (H1):** Use the provided headline (or improve it slightly for Click-Through Rate, but keep it factual).
-2. **Introduction:** Hook the reader immediately (in media res). State the "News Event" clearly in the first paragraph.
-3. **The "Direct Answer" Paragraph (FEATURED SNIPPET TRAP):** Immediately after the Introduction, create an H2 titled "The Bottom Line". Under it, write a concise, bolded, 50-word summary of WHAT happened and WHY it matters. This specifically helps us rank for Google's featured snippets (Zero Position).
-4. **Table of Contents Placeholder:** Insert EXACTLY this string here: `[[TOC_PLACEHOLDER]]`. Do not generate the TOC yourself; just place this marker. We will inject the code programmatically later.
-5. **Deep Dive Sections (The Meat):** Write 4 to 6 H2 sections covering Technical Details, Market Impact, and Performance Benchmarks. You MUST use H3 subsections liberally to break up long text blocks.
-6. **The Skeptical Take (Critical Authority - Mandatory):** Create an H2 titled "The Challenges" or "Critical Analysis". You MUST criticize the news slightly or highlight potential risks (e.g., high costs, data privacy concerns, technical limitations, or hype vs. reality). This builds trust with the reader (E-E-A-T factors).
-7. **Comparison Data:** Include a textual data representation or Markdown table comparing this new development to its predecessor or main competitor (e.g. Model A vs Model B).
+I. ANTI-HALLUCINATION RULES (CRITICAL):
+1. **NO FAKE PERSONAS:** Do NOT invent names, doctors, or researchers (e.g. Do not invent 'Dr. Lena Petrova').
+2. **Attribution:** If the RSS data does not have a specific quote, attribute statements to "The Company", "Official Documentation", or "Industry Analysts". DO NOT make up quotes.
+3. **Product Accuracy:** Use ONLY the product names found in the Input Data. Do not guess version numbers (e.g. don't write 'Spot Cam 3D' unless it is explicitly in the input). Use general terms like "Updated Camera" or "New Sensor" if unsure.
 
-II. STYLE & TONE GUIDELINES:
-- **Tone:** Professional yet accessible (Grade 10 reading level). Be objective but slightly cynical (avoid over-hyping everything like a press release).
-- **Perspective:** Use collective pronouns like "We believe", "Our analysis suggests", or "In our view" to simulate an expert editorial team.
-- **Formatting:** Use **Bold** for key stats, numbers, prices, and entity names. Use bullet points or numbered lists in almost every section to ensure readability (Skimmability).
+II. ARCHITECTURE FOR SEO DOMINANCE:
+1. **Headline (H1):** Use the provided headline.
+2. **Introduction:** Hook the reader immediately. State the facts clearly.
+3. **The "Direct Answer" (Featured Snippet):** Immediately after the Intro, create an H2 titled "The Bottom Line". Write a 50-word bolded summary of the facts.
+4. **Table of Contents:** Insert `[[TOC_PLACEHOLDER]]`.
+5. **Deep Dive Sections:** 4-6 H2 sections covering the updates. Use H3 subsections.
+6. **Critical Analysis (The Skeptical Take):** Create an H2 titled "Critical Analysis". Discuss potential downsides (price, compatibility, complexity) objectively.
+7. **Comparison:** Include a textual data representation comparing this update to the previous version.
 
-III. CITATION & SOURCING:
-- Quote a source provided in the context or a simulated public statement from the company spokesperson to add weight.
-- Refer to "Recent reports" or "Official documentation".
+III. TONE:
+- Professional, Objective, Factual.
+- Avoid over-hyping ("Revolutionary", "Miracle"). Use "Significant update", "Major release".
 
-Output JSON ONLY in this exact format (ensure JSON string encoding is valid):
+Output JSON ONLY in this exact format:
 {{
   "draftTitle": "The Final Headline",
-  "draftContent": "<html>... Full HTML Article Content (with H2, H3, p, ul, strong, table tags) ...</html>",
-  "excerpt": "A powerful 2-sentence meta summary (approx 150 chars).",
-  "sources_used": ["List of entities or companies mentioned"]
+  "draftContent": "<html>... Full HTML Article Content ...</html>",
+  "excerpt": "A powerful 2-sentence meta summary.",
+  "sources_used": ["List actual companies mentioned"]
 }}
 """
 
@@ -287,35 +288,23 @@ Output JSON ONLY:
 
 # ------------------------------------------------------------------
 # PROMPT D: AUDIT (Quality Assurance & Safety)
-# ------------------------------------------------------------------
+# -----------------------------------------------------------------
+# PROMPT D: AUDIT (Safety & Fact Check)
 PROMPT_D_TEMPLATE = """
-PROMPT D — Final Humanization & Safety Audit
+PROMPT D — Fact Checker & Auditor
 Input: {json_input}
 
-YOUR MISSION is to act as the Quality Control Officer. Do not change the meaning of the content, but you MUST fix the style.
+YOUR MISSION: Purge robotic language and hallucinations.
 
 MANDATORY CHECKLIST:
-1. **Robotic Word Purge (Strict):** Scan the `finalContent` HTML. If you find any of these specific words (which AI overuse), replace them with simpler, grittier English synonyms: 
-   - Replace "Delve" with "Explore" or "Look into".
-   - Replace "Realm" with "Field" or "Area".
-   - Replace "Tapestry" with "System" or "Complex mix".
-   - Replace "Game-changer" with "Significant update" or "Big deal".
-   - Replace "Poised to" with "Set to" or "Ready to".
-   - Remove "In conclusion" or "To sum up" entirely.
+1. **Hallucination Scan:** Check the content for names of people. If a name sounds generic or invented (like 'Dr. Smith', 'Lena Petrova') and is NOT a famous CEO (like Sam Altman, Musk, Sundar Pichai), **REMOVE THE NAME**. Replace with "A spokesperson" or "The developers".
+2. **Robotic Word Purge:** Replace words: "Delve", "Tapestry", "Beacon", "Paramount". Use simpler English.
+3. **Product Name Safety:** If a specific model number (v3, 5.1) is used, ensure it was present in the context of the article title. If unsure, generalize it.
+4. **Formatting Check:** Ensure `id` attributes are in H2 tags for the TOC.
 
-2. **Formatting Logic Check:** 
-   - Verify that H2 tags have `id` attributes assigned. 
-   - Verify that the `toc-box` div exists.
-   - Verify that the `faq-section` div exists at the bottom.
-
-3. **Schema Integrity:** Verify that `schemaMarkup` is valid JSON structure and matches the article content.
-
-4. **Author Bio Check:** If the content is missing an author sign-off, append a small paragraph `<p><em>Reporting by LatestAI Staff.</em></p>` at the very end of the HTML.
-
-Output JSON ONLY (Structure must match Input C EXACTLY, preserving all fields like seo, tags, prompts, etc. Do not lose any data):
+Output JSON ONLY (Structure must match Input C EXACTLY):
 {{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "excerpt":"..."}}
 """
-
 # ------------------------------------------------------------------
 # PROMPT E: PUBLISHER (Safety Wrapper)
 # ------------------------------------------------------------------
@@ -333,7 +322,8 @@ Just return the raw JSON object string to prevent pipeline crashes.
 Input data to finalize: {json_input}
 
 Output JSON Structure (Strict):
-{{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "authorBio": {{...}}}}
+{{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...
+                                                                                                      }}, "schemaMarkup":{{...}}, "sources":[...], "authorBio": {{...}}}}
 """
 
 # ------------------------------------------------------------------
