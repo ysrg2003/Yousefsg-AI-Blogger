@@ -371,80 +371,48 @@ def try_parse_json(text, context=""):
 
 
 
-def decode_google_news_url(source_url):
+def decode_google_news_url(source_url: str):
     """
-    🚀 DECODER v7 (VERBOSE MODE):
-    Logic: Base64 decode -> Regex extraction.
-    Features: Debug logs to see why extraction fails.
+    🚀 DECODER v8 (MULTI-STRATEGY): Tries multiple patterns to extract the URL.
+    This function is designed to work OFFLINE and avoid Google Blocks.
     """
     log_prefix = "      🔓 Decoder:"
     source_url = source_url.strip()
 
-    # التحقق المبدئي
-    if "news.google.com" not in source_url and "/articles/" not in source_url:
+    if "news.google.com" not in source_url:
         return source_url
 
     try:
-        # 1. استخراج التوكن (Token)
-        # فصل ما بعد /articles/ وما قبل علامة الاستفهام ؟
-        if '/articles/' in source_url:
-            token = source_url.split('/articles/')[-1].split('?')[0]
-        else:
-            log(f"{log_prefix} ⚠️ Bad URL structure.")
-            return source_url
+        # --- 1. Extraction & Decoding ---
+        token = source_url.split('/articles/')[-1].split('?')[0]
+        token += "=" * ((4 - len(token) % 4) % 4)
+        decoded_bytes = base64.urlsafe_b64decode(token)
 
-        # 2. فك التشفير (Decoding)
-        # تجربة الحشو (Padding) بشكل مرن
-        pad = len(token) % 4
-        if pad > 0:
-            token += "=" * (4 - pad)
+        # --- 2. Multi-Strategy URL Finding ---
 
-        try:
-            # محاولة UrlSafe (الأكثر شيوعاً لجوجل)
-            decoded_bytes = base64.urlsafe_b64decode(token)
-        except:
-            try:
-                # محاولة Standard (احتياطية)
-                decoded_bytes = base64.b64decode(token)
-            except Exception as e:
-                log(f"{log_prefix} ❌ Base64 Fail: {e}")
-                return source_url
+        # Strategy A: Find the full 'https://...' URL (Best case)
+        matches = re.findall(rb'https?://[a-zA-Z0-9\./\-_%?=&]+', decoded_bytes)
+        clean_links = [m.decode('latin1', 'ignore') for m in matches if b'google.com' not in m]
+        if clean_links:
+            log(f"{log_prefix} ✅ SUCCESS (Strategy A: Full URL)")
+            return max(clean_links, key=len)
 
-        # 3. البحث عن الروابط (Regex)
-        # نبحث داخل البايتات عن أي نص يبدأ بـ http/https
-        found_items = re.findall(rb'(https?://[a-zA-Z0-9_\-\./%?=&]+)', decoded_bytes)
+        # Strategy B: Find 'www.domain.tld/path' and add 'https://'
+        tlds = b'(com|org|net|io|ai|gov|edu|tech|news|co\.uk|ac\.id)'
+        pattern_b = rb'([a-zA-Z0-9-]+\.)+[a-zA-Z0-9-]{2,}\.' + tlds + rb'(/[a-zA-Z0-9\./\-_%?=&]*)?'
+        matches = re.search(pattern_b, decoded_bytes)
+        if matches:
+            reconstructed_url = 'https://' + matches.group(0).decode('latin1', 'ignore')
+            log(f"{log_prefix} ✅ SUCCESS (Strategy B: Reconstructed URL)")
+            return reconstructed_url
 
-        if not found_items:
-            log(f"{log_prefix} ⚠️ Decoded bytes ok, but NO URL pattern found inside.")
-            return source_url
+        log(f"{log_prefix} ⚠️ All strategies failed. No usable URL found.")
+        return None  # Explicitly return None on failure
 
-        # 4. تنقية واختيار أفضل رابط
-        best_link = None
-        longest_len = 0
+    except Exception:
+        log(f"{log_prefix} ❌ CRASH")
+        return None
         
-        for item in found_items:
-            try:
-                link_str = item.decode('latin1', errors='ignore')
-                # استبعاد روابط جوجل
-                if "google.com" not in link_str and "googleusercontent" not in link_str:
-                    # نختار الرابط الأطول لأنه عادة المقالة الأصلية
-                    if len(link_str) > longest_len:
-                        best_link = link_str
-                        longest_len = len(link_str)
-            except:
-                continue
-
-        if best_link:
-            log(f"{log_prefix} ✅ SUCCESS: {best_link[:50]}...")
-            return best_link
-        else:
-            log(f"{log_prefix} ⚠️ Found links but they were all Google links.")
-            return source_url
-
-    except Exception as e:
-        log(f"{log_prefix} Crash: {e}")
-        return source_url
-
 def fetch_full_article(url):
     """
     🚀 SCRAPER v7: Smart Check
