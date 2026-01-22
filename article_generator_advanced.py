@@ -15,6 +15,7 @@ import video_renderer
 import youtube_manager
 from google import genai
 from google.genai import types
+import url_resolver
 
 # ==============================================================================
 # 0. CONFIG & LOGGING
@@ -371,61 +372,21 @@ def try_parse_json(text, context=""):
 
 
 
-def decode_google_news_url(source_url: str):
-    """
-    🚀 DECODER v8 (MULTI-STRATEGY): Tries multiple patterns to extract the URL.
-    This function is designed to work OFFLINE and avoid Google Blocks.
-    """
-    log_prefix = "      🔓 Decoder:"
-    source_url = source_url.strip()
 
-    if "news.google.com" not in source_url:
-        return source_url
-
-    try:
-        # --- 1. Extraction & Decoding ---
-        token = source_url.split('/articles/')[-1].split('?')[0]
-        token += "=" * ((4 - len(token) % 4) % 4)
-        decoded_bytes = base64.urlsafe_b64decode(token)
-
-        # --- 2. Multi-Strategy URL Finding ---
-
-        # Strategy A: Find the full 'https://...' URL (Best case)
-        matches = re.findall(rb'https?://[a-zA-Z0-9\./\-_%?=&]+', decoded_bytes)
-        clean_links = [m.decode('latin1', 'ignore') for m in matches if b'google.com' not in m]
-        if clean_links:
-            log(f"{log_prefix} ✅ SUCCESS (Strategy A: Full URL)")
-            return max(clean_links, key=len)
-
-        # Strategy B: Find 'www.domain.tld/path' and add 'https://'
-        tlds = b'(com|org|net|io|ai|gov|edu|tech|news|co\.uk|ac\.id)'
-        pattern_b = rb'([a-zA-Z0-9-]+\.)+[a-zA-Z0-9-]{2,}\.' + tlds + rb'(/[a-zA-Z0-9\./\-_%?=&]*)?'
-        matches = re.search(pattern_b, decoded_bytes)
-        if matches:
-            reconstructed_url = 'https://' + matches.group(0).decode('latin1', 'ignore')
-            log(f"{log_prefix} ✅ SUCCESS (Strategy B: Reconstructed URL)")
-            return reconstructed_url
-
-        log(f"{log_prefix} ⚠️ All strategies failed. No usable URL found.")
-        return None  # Explicitly return None on failure
-
-    except Exception:
-        log(f"{log_prefix} ❌ CRASH")
-        return None
-        
 def fetch_full_article(url):
     """
-    🚀 SCRAPER v8: Handles decoding failures gracefully.
+    🚀 SCRAPER v9: Uses external Selenium resolver.
     """
-    # 1. Attempt to resolve the real URL
-    real_url = decode_google_news_url(url)
+    # 1. استخدام الملف المنفصل لجلب الرابط الحقيقي
+    # سيقوم بفتح المتصفح وانتظار التحويل
+    real_url = url_resolver.get_final_url(url)
     
-    # 2. CRITICAL CHECK: If decoding fails (returns None), abort this item.
+    # 2. إذا فشل Selenium في جلب الرابط، نتخطى هذا الخبر
     if not real_url:
         log(f"      ⚠️ Decoding failed completely. Skipping item.")
         return None
     
-    # 3. Proceed to Jina with the clean URL
+    # 3. المتابعة مع Jina كما هو في الكود الأصلي
     jina_url = f"https://r.jina.ai/{real_url}"
     log(f"   🕷️ Jina Fetch: {real_url[:60]}...")
     
