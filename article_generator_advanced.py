@@ -89,227 +89,17 @@ ARTICLE_STYLE = """
 # ==============================================================================
 
 # 🛑 الصق البرومبتات التفصيلية "Beast Mode" هنا 🛑
+# هام: في Prompt_B تأكد من كتابة: "I have read the full article for you..."
 
-# ==============================================================================
-# 2. PROMPTS DEFINITIONS (FULL, UNABRIDGED, BEAST MODE v7.0)
-# ==============================================================================
-
-# ------------------------------------------------------------------
-# PROMPT A: RESEARCH (Focus on Analyzable Trends)
-# ------------------------------------------------------------------
-PROMPT_A_TRENDING = """
-A: You are a Viral Tech Trend Hunter & Analyst. I have fetched real-time headlines from RSS.
-
-INPUT RSS DATA:
-{rss_data}
-
-SECTION FOCUS:
-{section_focus}
-
-ANTI-DUPLICATION RULE:
-Do NOT select: {recent_titles}
-
-TASK INSTRUCTIONS:
-1. Scan the headlines.
-2. Select EXACTLY ONE story that appeals to **General Public and Enthusiasts** (not just scientists).
-3. **Selection Logic:**
-   - Look for "Conflict" (US vs China).
-   - Look for "Daily Life Impact" (Jobs, Privacy, Costs).
-   - Look for "Big Releases" (ChatGPT, iPhone, Windows).
-   - **AVOID:** Dry academic papers, obscure version updates (e.g. LibTorch 1.1), or minute stock fluctuations.
-4. If a headline suggests a specific "Release", assume the role of explaining *if it's worth it* or *what it changes*.
-
-Output JSON only:
-{{
-  "headline": "A catchy, viral-style headline (e.g. 'Why [Event] Changes Everything')",
-  "original_rss_link": "The URL Link from RSS",
-  "original_rss_title": "The exact title...",
-  "topic_focus": "The core implication/story",
-  "why_selected": "High viral potential / Impact on regular users",
-  "date_context": "{today_date}"
-}}
-"""
-
-# Backup Prompt (Keep as is)
-PROMPT_A_EVERGREEN = """
-A: Expert Technical Educator. 
-Task: Outline a comprehensive guide about {section}.
-Anti-Duplication: Avoid {recent_titles}.
-
-Output JSON ONLY:
-{{
-  "headline": "Definitive Guide: [Topic] in 2026",
-  "original_rss_link": "https://en.wikipedia.org/wiki/Technology",
-  "topic_focus": "Educational Guide",
-  "date_context": "Evergreen"
-}}
-"""
-
-# ------------------------------------------------------------------
-# PROMPT B: WRITER (Analyst + Fact Adherence)
-# ------------------------------------------------------------------
-PROMPT_B_TEMPLATE = """
-B: You are an Opinionated Tech Analyst and Editor-in-Chief of 'LatestAI'. 
-**CRITICAL CONTEXT:** I have visited the source URL and scraped the content for you. 
-Use the provided `SOURCE CONTENT` below as your PRIMARY source of facts.
-
-INPUT DATA: {json_input}
-STRICT FORBIDDEN PHRASES: {forbidden_phrases}
-
-**RULES OF ENGAGEMENT (Safety First):**
-1. **Fact Fidelity:** If the `SOURCE CONTENT` says "4.8 million", write "4.8 million". If it implies a number but doesn't state it, write "Millions of..." or "A significant number". **DO NOT HALLUCINATE NUMBERS.**
-2. **Name Safety:** Only name people explicit in the Source text. Otherwise, use "Officials", "Company Reps", or "Industry Insiders".
-3. **The Audience:** Write for the "Smart Beginner". Explain complex terms simply (ELI15). Use analogies.
-
-I. ARCHITECTURE FOR VALUE (The Article Structure):
-1. **Headline:** Use the provided headline.
-2. **Introduction (The Hook):** Start with the context/problem, then drop the news. End the intro with a bridge: "Here is why this matters to you."
-3. **The Bottom Line (Snippet Trap):** An H2 titled "**Quick Summary**". Under it, write a 50-word **Bold** summary of the impact.
-4. **Table of Contents:** Insert exact string: `[[TOC_PLACEHOLDER]]`.
-5. **Section 1: The Core Story:** Explain WHAT happened using facts from Source Content.
-6. **Section 2: The Critical Analysis:** An H2 titled "**The Good, The Bad, and The Scary**". Discuss risks/benefits critically. Don't just hype it up.
-7. **Section 3: Future Outlook:** How does this affect the next 6 months?
-8. **Comparison Table:** Compare "Old Way vs New Way" or "This Tech vs Competitor".
-
-II. TONE:
-- **Analytic:** "We believe...", "This suggests...".
-- **Engaging:** Use short paragraphs. Use Bullet points often.
-
-Output JSON ONLY:
-{{
-  "draftTitle": "Final Headline",
-  "draftContent": "<html>... Full Content ...</html>",
-  "excerpt": "A short, punchy summary for SEO.",
-  "sources_used": ["Entities found in Source Content"]
-}}
-"""
-
-# ------------------------------------------------------------------
-# PROMPT C: SEO (Structure & Schema)
-# ------------------------------------------------------------------
-PROMPT_C_TEMPLATE = """
-C: You are the Strategic Editor & SEO Consultant.
-INPUT DRAFT: {json_input}
-KNOWLEDGE GRAPH LINKS: {knowledge_graph}
-
-YOUR TASKS (EXECUTE ALL):
-
-1. **TOC Injection:** Replace `[[TOC_PLACEHOLDER]]` with a styled HTML div (class="toc-box") containing a title "Quick Navigation" and a `<ul>` of anchor links to all H2s. **IMPORTANT:** You MUST add unique `id` attributes to all H2 tags in the content so the links work.
-
-2. **FAQ Rich Snippets:** Extract 3 questions a *User* would ask about this topic. Create a VISUAL HTML section at the bottom (class="faq-section", `faq-title`, `faq-q`, `faq-a`).
-
-3. **Styling Wrappers:** 
-   - Wrap "Quick Summary/Takeaways" bullets in `class="takeaways-box"`. 
-   - Wrap tables in `class="table-wrapper"`.
-   - Wrap quotes in `blockquote`.
-
-4. **Internal Linking:** Scan for keywords from `KNOWLEDGE GRAPH LINKS`. Link naturally (Max 3 links).
-
-5. **Schema Generation (Graph):** 
-   Generate a valid JSON-LD graph:
-   - Node 1: `NewsArticle` (headline, date, author="LatestAI").
-   - Node 2: `FAQPage` (the 3 extracted Q&A).
-
-Output JSON ONLY:
-{{
-  "finalTitle": "...",
-  "finalContent": "<html>...Modified HTML with IDs, TOC, Links, Visual FAQ...</html>",
-  "imageGenPrompt": "Detailed English prompt for Flux (abstract, futuristic, 3d, cinematic, 8k, no text)",
-  "imageOverlayText": "2-3 word Overlay Text",
-  "seo": {{
-      "metaTitle": "SEO Title (60 chars)",
-      "metaDescription": "SEO Description (150 chars)",
-      "tags": ["tag1", "tag2", "tag3"],
-      "imageAltText": "Alt Text"
-  }},
-  "schemaMarkup": {{ "@context": "https://schema.org", "@graph": [...] }}
-}}
-"""
-
-# ------------------------------------------------------------------
-# PROMPT D: AUDIT (Final Safety Check)
-# ------------------------------------------------------------------
-PROMPT_D_TEMPLATE = """
-PROMPT D — Humanization & Safety Audit
-Input: {json_input}
-
-MISSION: Purge robotic patterns and verify logic.
-
-CHECKLIST:
-1. **Robotic Word Purge:** Replace "Delve", "Realm", "Tapestry", "Game-changer", "Paramount", "Underscore" with simple human words.
-2. **Formatting Logic:** Verify `id` tags exist on H2s for TOC. Verify FAQ section exists.
-3. **Safety:** Ensure product names look real based on context (no "Spot Cam 3D" unless source confirms). Generalize if unsure ("New Camera").
-
-Output JSON ONLY (Preserve all fields from Input C):
-{{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "excerpt":"..."}}
-"""
-
-# ------------------------------------------------------------------
-# PROMPT E: PUBLISHER (JSON Hygiene)
-# ------------------------------------------------------------------
-PROMPT_E_TEMPLATE = """
-E: The Publisher Role.
-Task: Clean and Finalize JSON for deployment.
-
-CRITICAL: Return raw valid JSON string only. No markdown fences. No preamble.
-
-Input data: {json_input}
-
-Output Structure:
-{{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "authorBio": {{...}}}}
-"""
-
-# ------------------------------------------------------------------
-# VIDEO PROMPTS (Viral Scripts)
-# ------------------------------------------------------------------
-PROMPT_VIDEO_SCRIPT = """
-Role: Viral Tech TikTok Screenwriter.
-Input: "{title}" & "{text_summary}"
-
-Task: Create a "WhatsApp" style dialogue script.
-Characters:
-- "Alex" (Hype Tech Bro, uses emojis 🚀).
-- "Sam" (Normal person/Beginner).
-
-Rules:
-1. **Opening:** Alex drops a bombshell headline.
-2. **Simplicity:** Alex explains the news using a real-world analogy.
-3. **Reaction:** Sam asks "Is it free?" or "When?" (Common questions).
-4. **CTA:** Alex: "Full details in the link below!".
-5. **Length:** 25-30 short bubbles.
-
-Output JSON ONLY array:
-[ {{"speaker": "Alex", "type": "send", "text": "..."}}, ... ]
-"""
-
-# ------------------------------------------------------------------
-# SOCIAL PROMPTS (CTR Optimization)
-# ------------------------------------------------------------------
-PROMPT_YOUTUBE_METADATA = """
-Role: YouTube Clickbait Expert (But Ethical).
-Input: {draft_title}
-
-Task: Generate High-CTR metadata.
-Output JSON ONLY:
-{{
-  "title": "Shocking/Viral Title (Max 60 chars) - Use ALL CAPS for keywords",
-  "description": "2-line spicy hook teasing the implications. #Hashtags",
-  "tags": ["tech", "ai", "news", "trend"]
-}}
-"""
-
-PROMPT_FACEBOOK_HOOK = """
-Role: FB Growth Hacker.
-Input: {title}
-
-Rules:
-1. Don't start with "Here is". Start with "Did you know?" or "This is scary...".
-2. Keep it under 2 lines.
-3. Use 2 specific emojis.
-
-Output JSON ONLY:
-{{"facebook": "Caption text here"}}
-"""
+PROMPT_A_TRENDING = """ """ 
+PROMPT_A_EVERGREEN = """ """ 
+PROMPT_B_TEMPLATE = """ """ 
+PROMPT_C_TEMPLATE = """ """ 
+PROMPT_D_TEMPLATE = """ """ 
+PROMPT_E_TEMPLATE = """ """ 
+PROMPT_VIDEO_SCRIPT = """ """ 
+PROMPT_YOUTUBE_METADATA = """ """ 
+PROMPT_FACEBOOK_HOOK = """ """ 
 
 # ==============================================================================
 # 3. HELPER UTILITIES
@@ -369,73 +159,84 @@ def try_parse_json(text, context=""):
 
 def decode_google_news_url(source_url):
     """
-    🚀 DECODER v3: Advanced decoding for 2025/2026 Google News Links.
-    Extracts the real Publisher URL to avoid Jina 451 Errors.
+    🚀 DECODER v4 (Final Fix): Handles Google 'Intermediate Page' Redirects.
+    Forces extraction of the real URL from the Google HTML body.
     """
     log_prefix = "      🔓 Decoder:"
-    try:
-        # الطريقة 1: محاولة فك التشفير من Base64 مباشرة (الأسرع)
-        if '/articles/' in source_url:
-            base64_part = source_url.split('/articles/')[-1].split('?')[0]
-            base64_part += "=" * ((4 - len(base64_part) % 4) % 4)
-            
-            try:
-                decoded_bytes = base64.urlsafe_b64decode(base64_part)
-                # استخدام Regex ثنائي (binary) للبحث عن الروابط بدقة
-                urls = re.findall(rb'(https?://[a-zA-Z0-9./\-_%?=&]+)', decoded_bytes)
-                
-                best_url = None
-                longest_len = 0
-                
-                for u in urls:
-                    u_str = u.decode('latin1', errors='ignore')
-                    # تصفية روابط جوجل الداخلية
-                    if "google.com" not in u_str and "googleusercontent" not in u_str:
-                        if len(u_str) > longest_len:
-                            best_url = u_str
-                            longest_len = len(u_str)
-                
-                if best_url:
-                    log(f"{log_prefix} Found by Binary Search: {best_url[:60]}...")
-                    return best_url
-            except Exception as e:
-                pass # الانتقال للطريقة الثانية في حال الفشل
+    
+    # 1. Basic Clean: Remove tracking params
+    source_url = source_url.split('?')[0]
 
-        # الطريقة 2: تتبع الرابط عبر الشبكة (Fallback)
+    try:
+        # Step A: Try Base64 decoding (Fastest/Silent)
+        # Often works for 'CBM' links if formatted strictly
+        if '/articles/' in source_url:
+            try:
+                base64_part = source_url.split('/articles/')[-1]
+                base64_part += "=" * ((4 - len(base64_part) % 4) % 4)
+                decoded_bytes = base64.urlsafe_b64decode(base64_part)
+                decoded_str = decoded_bytes.decode('latin1', errors='ignore')
+                
+                # Search for hidden URL inside the decoded binary garbage
+                urls = re.findall(r'(https?://(?!news\.google\.com)[a-zA-Z0-9./\-_%]+)', decoded_str)
+                if urls:
+                    # Pick the longest URL found (usually the real article)
+                    best = max(urls, key=len)
+                    log(f"{log_prefix} Binary extraction success: {best[:50]}...")
+                    return best
+            except:
+                pass
+
+        # Step B: Network Scraping (The Heavy Lifter)
+        # We visit the Google link pretending to be a browser
         session = requests.Session()
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
             'Referer': 'https://news.google.com/'
         }
         
-        resp = session.get(source_url, headers=headers, timeout=10, allow_redirects=True)
+        # Request the Google URL
+        response = session.get(source_url, headers=headers, timeout=10, allow_redirects=True)
         
-        if "news.google.com" not in resp.url and "google.com/consent" not in resp.url:
-            log(f"{log_prefix} Resolved via Redirect: {resp.url[:60]}...")
-            return resp.url
+        # Case 1: We were redirected cleanly to the site
+        if "news.google.com" not in response.url and "google.com" not in response.url:
+            log(f"{log_prefix} Redirect followed: {response.url[:50]}...")
+            return response.url
+
+        # Case 2: We are stuck on a Google "Opening..." page
+        # This is the most common cause of Error 451 for scripts
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        # الطريقة 3: البحث داخل HTML إذا علقنا
-        soup = BeautifulSoup(resp.text, 'html.parser')
+        # Look for the main link in the redirection page
+        # Google usually puts the target link in the first 'a' tag or one with specific class
         links = soup.find_all('a', href=True)
+        
         for link in links:
             href = link['href']
-            if href.startswith('http') and "google.com" not in href:
-                log(f"{log_prefix} Found in HTML: {href[:60]}...")
+            # Filter out internal Google links
+            if href.startswith('http') and "google.com" not in href and "googleusercontent" not in href:
+                log(f"{log_prefix} Found in HTML: {href[:50]}...")
                 return href
-
-        return source_url 
         
+        # If all else fails, look for URL inside JavaScript code in the page
+        match = re.search(r'window\.location\s*=\s*["\'](http[^"\']+)["\']', response.text)
+        if match:
+            log(f"{log_prefix} Found in JS: {match.group(1)[:50]}...")
+            return match.group(1)
+
+        log(f"{log_prefix} ⚠️ Failed to resolve. Returning original.")
+        return source_url
+
     except Exception as e:
-        log(f"{log_prefix} Error {e}")
+        log(f"{log_prefix} Error: {e}")
         return source_url
 
 def fetch_full_article(url):
     """
-    🚀 ULTIMATE SCRAPER v4: Decoder v3 + Jina
+    🚀 ULTIMATE SCRAPER v5: Decoder v4 + Jina
     """
-    # 1. Resolve URL FIRST
+    # 1. Resolve URL FIRST (This is the critical fix)
     real_url = decode_google_news_url(url)
     
     # 2. Use Jina with the REAL link
@@ -451,6 +252,7 @@ def fetch_full_article(url):
             return None
             
         content = response.text
+        
         if "Title:" in content:
             content = content.split("Title:", 1)[-1]
             
@@ -481,7 +283,7 @@ def get_real_news_rss(query_keywords, category):
         feed = feedparser.parse(url)
         items = []
         if feed.entries:
-            for entry in feed.entries[:8]:
+            for entry in feed.entries[:10]:
                 pub = entry.published if 'published' in entry else "Today"
                 title_clean = entry.title.split(' - ')[0]
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
@@ -534,7 +336,7 @@ def publish_post(title, content, labels):
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
     if not key: return None
-    log(f"   🎨 Flux Image Gen...")
+    log(f"   🎨 Generating Image...")
     for i in range(3):
         try:
             safe = urllib.parse.quote(f"{prompt_text}, abstract tech, 8k, --no text")
@@ -555,7 +357,8 @@ def load_kg():
 
 def get_recent_titles_string(limit=50):
     kg = load_kg()
-    return ", ".join([i.get('title','') for i in kg[-limit:]]) if kg else "None"
+    if not kg: return "None"
+    return ", ".join([i.get('title','') for i in kg[-limit:]])
 
 def get_relevant_kg_for_linking(category, limit=60):
     kg = load_kg()
@@ -618,7 +421,7 @@ def run_pipeline(category, config, mode="trending"):
     for item in rss_items[:3]: 
         if item['title'][:30] in recent: continue
         
-        # Scrape with Decoder v3
+        # Scrape with Decoder v4
         text = fetch_full_article(item['link'])
         
         if text and len(text) > 600:
