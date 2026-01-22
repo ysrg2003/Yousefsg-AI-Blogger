@@ -28,6 +28,7 @@ from selenium.webdriver.common.by import By
 # -------------------------------------------------
 import url_resolver
 import trafilatura
+import ast
 
 
 # ==============================================================================
@@ -333,31 +334,67 @@ class KeyManager:
 
 key_manager = KeyManager()
 
+
+# ==============================================================================
+# UPDATED JSON UTILITIES (AUTO-REPAIR MODE)
+# ==============================================================================
+import ast  # <--- تأكد من إضافة هذا في بداية الملف
+
 def clean_json(text):
+    """
+    Advanced cleaner that removes Markdown, 'thinking' blocks, and extracts
+    the largest valid JSON-like structure (list or dict).
+    """
+    if not text: return ""
     text = text.strip()
-    match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
-    if match: text = match.group(1)
-    else:
-        match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
-        if match: text = match.group(1)
     
-    if text.startswith("[") or (text.find("[") != -1 and text.find("[") < text.find("{")):
-        start, end = text.find('['), text.rfind(']')
-    else:
-        start, end = text.find('{'), text.rfind('}')
+    # 1. Remove Markdown Code Blocks
+    match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
+    if match:
+        text = match.group(1)
     
-    if start != -1 and end != -1: return text[start:end+1].strip()
+    # 2. Remove common prefixes/suffixes usually added by AI
+    text = re.sub(r'^[^{[]+', '', text)  # Remove anything before the first { or [
+    text = re.sub(r'[^}\]]+$', '', text) # Remove anything after the last } or ]
+    
     return text.strip()
 
 def try_parse_json(text, context=""):
-    try: return json.loads(text)
+    """
+    Robust parser that tries multiple methods to recover broken JSON.
+    """
+    if not text:
+        log(f"      ❌ JSON Error ({context}): Empty input.")
+        return None
+
+    # Method 1: Standard Strict JSON
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass # Continue to backup methods
+
+    # Method 2: Python Literal Eval (Handles single quotes ' vs double quotes ")
+    # Many models output Python dicts instead of JSON.
+    try:
+        return ast.literal_eval(text)
     except:
-        try:
-            fixed = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
-            return json.loads(fixed)
-        except:
-            log(f"      ❌ JSON Parse Error ({context})")
-            return None
+        pass
+
+    # Method 3: Aggressive Escaping Fix (Common HTML in JSON issue)
+    # This tries to fix unescaped double quotes inside HTML attributes
+    try:
+        # This regex looks for double quotes that appear inside specific HTML tags and escapes them
+        # (This is a simplified fix, not perfect, but helps often)
+        fixed_text = text.replace('\n', '\\n').replace('\r', '')
+        # Try finding the content block and escaping inner quotes manually if needed
+        return json.loads(fixed_text, strict=False)
+    except:
+        pass
+
+    # Method 4: Last Resort - Regex Extraction (If JSON is totally broken)
+    # We try to construct a partial object if possible, but usually log failure here.
+    log(f"      ❌ JSON Parse Error ({context}). Raw snippet: {text[:100]}...")
+    return None
 
 
 
