@@ -607,113 +607,259 @@ def generate_step(model, prompt, step):
             if "429" in str(e) or "quota" in str(e).lower():
                 if not key_manager.switch_key(): return None
             else: return None
+# ==============================================================================
+# 4. ADVANCED SCRAPING (UPDATED FOR HIGH QUALITY & LOGGING)
+# ==============================================================================
+def resolve_and_scrape(google_url):
+    """
+    Open Google URL -> Resolve -> Get Page Source -> Extract Text.
+    Returns: (final_url, page_title, text_content)
+    """
+    log(f"      🕵️‍♂️ Selenium: Opening & Resolving: {google_url[:60]}...")
+    
+    # خيارات المتصفح
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    # انتحال شخصية متصفح حقيقي لتجنب الحظر
+    chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    chrome_options.add_argument("--mute-audio") # كتم الصوت لتسريع التحميل
+
+    driver = None
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.set_page_load_timeout(25) # مهلة تحميل 25 ثانية
+        
+        driver.get(google_url)
+        
+        # حلقة انتظار للخروج من جوجل
+        start_wait = time.time()
+        final_url = google_url
+        
+        while time.time() - start_wait < 15: # انتظار 15 ثانية كحد أقصى للتحويل
+            current = driver.current_url
+            if "news.google.com" not in current and "google.com" not in current:
+                final_url = current
+                break
+            time.sleep(1) # فحص كل ثانية
+        
+        # التقاط العنوان الحقيقي للصفحة
+        final_title = driver.title
+        page_source = driver.page_source
+        
+        # التحقق من الروابط غير المرغوبة (فيديو، معارض صور)
+        # هذا يمنع مشكلة "Washington Post Video" التي واجهتها
+        bad_segments = ["/video/", "/watch", "/gallery/", "/photos/", "youtube.com"]
+        if any(seg in final_url.lower() for seg in bad_segments):
+            log(f"      ⚠️ Skipped Video/Gallery URL: {final_url}")
+            return None, None, None
+
+        log(f"      🔗 Resolved URL: {final_url[:70]}...")
+        log(f"      🏷️ Real Page Title: {final_title[:70]}...")
+
+        # استخراج النص باستخدام Trafilatura
+        extracted_text = trafilatura.extract(
+            page_source, 
+            include_comments=False, 
+            include_tables=True,
+            favor_precision=True
+        )
+        
+        if extracted_text and len(extracted_text) > 1000:
+            return final_url, final_title, extracted_text
+
+        # Fallback (BS4) إذا فشل Trafilatura
+        soup = BeautifulSoup(page_source, 'html.parser')
+        for script in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
+            script.extract()
+        fallback_text = soup.get_text(" ", strip=True)
+        
+        return final_url, final_title, fallback_text
+
+    except Exception as e:
+        log(f"      ❌ Selenium Error: {e}")
+        return None, None, None
+    finally:
+        if driver:
+            driver.quit()
+
 
 # ==============================================================================
 # 5. CORE PIPELINE LOGIC (OFFLINE DECODER + JINA)
 # ==============================================================================
 
+
 def run_pipeline(category, config, mode="trending"):
     model = config['settings'].get('model_name')
     cat_conf = config['categories'][category]
     
-    log(f"\n🚀 INIT PIPELINE: {category}")
-    recent = get_recent_titles_string()
-
-    # 1. RSS
-    rss_items = get_real_news_rss(cat_conf.get('trending_focus',''), category)
-    if not rss_items: return
-
-    # Candidate Loop
+    log(f"\n🚀 INIT PIPELINE: {category} (High Quality Mode)")
+    
+    # تحميل قاعدة المعرفة لتجنب التكرار
+    recent_titles = get_recent_titles_string(limit=60)
+    
+    # إعداد محاولات البحث (لتغيير الكلمة المفتاحية اذا لم نجد مقالات)
+    max_global_retries = 6 
+    article_found = False
+    
     selected_item = None
     source_content = None
+    final_resolved_url = None
     
-    for item in rss_items[:3]: 
-        if item['title'][:30] in recent: continue
+    # 🔄 الحلقة الكبرى: تدور وتغير الكلمات المفتاحية حتى تجد مقالاً مناسباً
+    for attempt in range(max_global_retries):
+        if article_found: break
         
-        # Scrape with Offline Decoder
-        text = fetch_full_article(item['link'])
+        log(f"\n🔎 Attempt #{attempt+1} of {max_global_retries}")
         
-        if text and len(text) > 600:
-            selected_item = item
-            source_content = text
-            break
-    
-    # Fallback
-    is_analyst = False
-    if not selected_item:
-        if rss_items:
-            log("⚠️ CRITICAL: Scraping failed. Entering ANALYST MODE.")
-            selected_item = rss_items[0]
-            is_analyst = True
-            source_content = "SOURCE TEXT UNAVAILABLE. ANALYZE BASED ON HEADLINE ONLY."
-        else: return
+        # 1. اختيار موضوع عشوائي (Keyword Rotation)
+        query_keywords = cat_conf.get('trending_focus', category)
+        current_topic = category # Default
+        
+        if "," in query_keywords:
+            topics = [t.strip() for t in query_keywords.split(',') if t.strip()]
+            # اختيار عشوائي لضمان التنوع في كل محاولة
+            current_topic = random.choice(topics)
+            log(f"   🎯 Targeted Search: '{current_topic}'")
+            # نضيف 'when:1d' لأخبار اليوم، أو 'when:3d' إذا أردت نطاق أوسع
+            rss_query = f"{current_topic} when:2d" 
+        else:
+            rss_query = f"{query_keywords} when:2d"
 
+        # 2. جلب RSS
+        rss_items = get_real_news_rss(rss_query.replace("when:2d","").strip(), category)
+        
+        if not rss_items:
+            log("   ⚠️ No RSS items found for this keyword. Retrying next...")
+            continue
+            
+        # 3. حلقة فحص المقالات داخل RSS
+        for item in rss_items:
+            # فلترة التكرار
+            if item['title'][:20] in recent_titles: 
+                log(f"   ⏭️ Skipped duplicate: {item['title'][:30]}")
+                continue
+            
+            log(f"   📌 Checking RSS Item: {item['title'][:50]}...")
+            
+            # محاولة الفك والجلب
+            r_url, r_title, text = resolve_and_scrape(item['link'])
+            
+            # --- شرط الجودة (The Quality Check) ---
+            # 1. يجب أن يوجد نص
+            # 2. يجب أن يكون النص أطول من 1500 حرف (لضمان أنه مقال كامل وليس فيديو أو خبر قصير)
+            if text and len(text) >= 1500:
+                log(f"      ✅ High Quality Content Found! ({len(text)} chars)")
+                log(f"      ⚖️  Match Check:\n          RSS: {item['title']}\n          Pg : {r_title}")
+                
+                selected_item = item
+                selected_item['link'] = r_url # تحديث الرابط بالرابط الحقيقي
+                selected_item['real_title'] = r_title # حفظ العنوان الحقيقي للمقارنة لاحقاً
+                source_content = text
+                article_found = True
+                break # نخرج من حلقة المقالات
+            else:
+                current_len = len(text) if text else 0
+                log(f"      ⚠️ Content too short ({current_len} chars) or failed. Looking for better article...")
+                time.sleep(2) # راحة قصيرة
+        
+        if not article_found:
+            log("   ⚠️ None of the RSS items met the quality standards. Switching topic...")
+            time.sleep(3)
+
+    # 4. إذا انتهت كل المحاولات ولم نجد شيئاً
+    if not selected_item or not source_content:
+        log("❌ FATAL: Could not find ANY high-quality article after multiple attempts.")
+        log("❌ Skipping this run to preserve quality.")
+        return
+
+    # =======================================================
+    # B. DRAFTING PHASE (Now we are sure we have good content)
+    # =======================================================
+    log(f"\n✍️ Starting Writing Process for: {selected_item['title']}")
+    
+    # تحضير الـ Payload
     json_ctx = {
-        "headline": selected_item['title'],
+        "rss_headline": selected_item['title'],
+        "resolved_headline": selected_item.get('real_title', ''),
         "original_link": selected_item['link'],
         "date": selected_item['date']
     }
     
-    # 2. Drafting
-    log(f"   🗞️ Writing: {selected_item['title']}")
-    prefix = "*** FULL SOURCE TEXT ***" if not is_analyst else "*** HEADLINE ONLY ***"
+    # دمج العنوانين للموديل ليفهم السياق أفضل
+    prefix = "*** FULL SOURCE TEXT (High Quality Scrape) ***"
     payload = f"METADATA: {json.dumps(json_ctx)}\n\n{prefix}\n\n{source_content}"
     
+    # Step B
     json_b = try_parse_json(generate_step(model, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Step B"), "B")
     if not json_b: return
-    time.sleep(2)
 
-    # 3. SEO
+    # Step C (SEO)
     kg_links = get_relevant_kg_for_linking(category)
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json.dumps(json_b), knowledge_graph=kg_links)
     json_c = try_parse_json(generate_step(model, prompt_c, "Step C"), "C")
     if not json_c: return
-    time.sleep(2)
 
-    # 4. Audit
+    # Step D (Audit)
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c))
     json_d = try_parse_json(generate_step(model, prompt_d, "Step D"), "D")
     if not json_d: return
-    time.sleep(2)
 
-    # 5. Publish
+    # Step E (Publish)
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d))
     final = try_parse_json(generate_step(model, prompt_e, "Step E"), "E")
     if not final: final = json_d 
 
     title = final.get('finalTitle', selected_item['title'])
-
-    # Media Hooks
+    
+    # =======================================================
+    # SOCIALS & VIDEO
+    # =======================================================
     log("   🧠 Socials...")
-    yt_meta = try_parse_json(generate_step(model, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta")) or {"title":title, "description":"", "tags":[]}
+    yt_meta = try_parse_json(generate_step(model, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta"))
+    # تأمين البيانات الافتراضية
+    if not yt_meta: yt_meta = {"title": title, "description": f"Read full story: {selected_item['link']}", "tags": []}
+    
     fb_dat = try_parse_json(generate_step(model, PROMPT_FACEBOOK_HOOK.format(title=title, category=category), "FB Hook"))
     fb_cap = fb_dat.get('facebook', title) if fb_dat else title
 
     # Video Gen
     vid_html, vid_main, vid_short, fb_path = "", None, None, None
     try:
-        summ = re.sub('<[^<]+?>','', final.get('finalContent',''))[:1500]
+        # استخراج ملخص نصي نظيف للسكربت
+        summ = re.sub('<[^<]+?>','', final.get('finalContent',''))[:2000]
+        
+        # التأكد من تمرير النص الكامل لتوليد سكريبت جيد
         script = try_parse_json(generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Script"))
         
         if script:
+            os.makedirs("output", exist_ok=True)
             rr = video_renderer.VideoRenderer()
-            pm = rr.render_video(script, title, f"main_{int(time.time())}.mp4")
+            # فيديو عرضي لليوتيوب
+            pm = rr.render_video(script, title, f"output/main_{int(time.time())}.mp4")
             if pm:
-                desc = f"{yt_meta.get('description','')}\n\n👉 Full Link Soon.\n\n#AI"
+                desc = f"{yt_meta.get('description','')}\n\n🚀 Article Link Coming Soon.\n\n#{category.replace(' ','')} #AI"
                 vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
                 if vid_main:
                     vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
             
+            # فيديو طولي (Reels/Shorts)
             rs = video_renderer.VideoRenderer(width=1080, height=1920)
-            ps = rs.render_video(script, title, f"short_{int(time.time())}.mp4")
-            fb_path = ps
-            if ps: vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
-    except Exception as e: log(f"⚠️ Video: {e}")
+            ps = rs.render_video(script, title, f"output/short_{int(time.time())}.mp4")
+            if ps:
+                fb_path = ps
+                vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
+    except Exception as e: log(f"⚠️ Video Error: {e}")
 
-    # Publish
+    # =======================================================
+    # PUBLISHING
+    # =======================================================
     body = ARTICLE_STYLE
     img = generate_and_upload_image(final.get('imageGenPrompt', title), final.get('imageOverlayText', 'News'))
     if img: body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img}"><img src="{img}" alt="{final.get("seo",{}).get("imageAltText","News")}" /></a></div>'
+    
     if vid_html: body += vid_html
     body += final.get('finalContent', '')
     
@@ -725,16 +871,20 @@ def run_pipeline(category, config, mode="trending"):
     
     if url:
         update_kg(title, url, category)
-        upd = f"\n\n🚀 FULL LINK: {url}"
-        if vid_main: youtube_manager.update_video_description(vid_main, upd)
-        if vid_short: youtube_manager.update_video_description(vid_short, upd)
+        # تحديث الوصف بالرابط
+        upd_desc = f"{yt_meta.get('description','')}\n\n👇 FULL STORY:\n{url}\n\n#AI #TechNews"
+        if vid_main: youtube_manager.update_video_description(vid_main, upd_desc)
+        if vid_short: youtube_manager.update_video_description(vid_short, upd_desc)
+        
         try:
             if fb_path: 
-                social_manager.post_reel_to_facebook(fb_path, f"{fb_cap}\nLink: {url}")
+                # نشر الريلز مع الهاشتاغات والرابط
+                fb_full_text = f"{fb_cap}\n\nRead more: {url}\n\n#AI #Technology #{category.replace(' ','')}"
+                social_manager.post_reel_to_facebook(fb_path, fb_full_text)
                 time.sleep(15)
-            if img:
-                social_manager.distribute_content(f"{fb_cap}\n\n👇 Read:\n{url}", url, img)
-        except: pass
+            elif img:
+                social_manager.distribute_content(f"{fb_cap}\n\n👇 Read Article:\n{url}", url, img)
+        except Exception as e: log(f"Social Post Error: {e}")
 
 # ==============================================================================
 # 7. MAIN
