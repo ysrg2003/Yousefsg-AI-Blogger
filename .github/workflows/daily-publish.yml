@@ -2,9 +2,8 @@ name: Daily Article Publishing
 
 on:
   schedule:
-    # هذا الرقم سيتغير تلقائياً كل يوم بفضل السكريبت الجديد
-    - cron: '0 11 * * *'
-  # للسماح بالتشغيل اليدوي
+    # سيتم تحديث هذا السطر تلقائياً يومياً
+    - cron: '0 9 * * *'
   workflow_dispatch:
 
 permissions:
@@ -17,8 +16,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          # نستخدم التوكن الافتراضي لجيت هب للسماح بالكتابة
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # استخدام التوكن الشخصي الخاص بك للسماح بتعديل ملفات الـ Workflow
+          token: ${{ secrets.MY_GITHUB_TOKEN }}
+          fetch-depth: 0 # ضروري لعمليات الـ Git المتكررة
       
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -31,8 +31,8 @@ jobs:
           sudo apt-get install -y ffmpeg
           pip install -r requirements.txt
       
-      # 1. تشغيل مولد المقالات الرئيسي (بدون انتظار طويل)
-      - name: Run article generator
+      # 1. تشغيل المولد الرئيسي
+      - name: Run Article Generator
         env:
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
@@ -50,33 +50,38 @@ jobs:
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
-          GITHUB_REPO_NAME: ${{ github.repository }}
           YOUTUBE_CREDENTIALS_JSON: ${{ secrets.YOUTUBE_CREDENTIALS_JSON }}
         run: python -u article_generator_advanced.py
 
-      # 2. خطوة تغيير التوقيت لليوم التالي (Randomizer)
-      - name: Randomize Next Schedule
+      # 2. تغيير التوقيت عشوائياً للغد
+      - name: Randomize Schedule
         run: python update_schedule.py
 
-      # 3. حفظ كافة التغييرات (بما فيها التوقيت الجديد وملف البيانات)
-      - name: Commit Changes (KG + Schedule)
-        if: always() # يعمل دائماً
+      # 3. حفظ التغييرات ورفعها (الطريقة الصحيحة لتجنب الأخطاء)
+      - name: Push Changes
+        if: always()
         run: |
           git config --global user.name 'Scheduler Bot'
           git config --global user.email 'scheduler@bot.com'
           
-          # سحب أي تغييرات لتجنب التضارب
-          git pull origin main --rebase || echo "No conflicts"
-          
-          # إضافة ملف المعرفة
+          # 1. إضافة الملفات المعدلة إلى الـ Staging Area
           git add knowledge_graph.json
-          
-          # إضافة ملف الـ workflow (المحتوي على التوقيت الجديد)
           git add .github/workflows/daily-publish.yml
           
           if [ -d "archive" ]; then
             git add archive/
           fi
           
-          # تنفيذ الكوميت والرفع
-          git diff --staged --quiet || (git commit -m "📅 Auto-Update: Schedule & Knowledge Graph" && git push origin main)
+          # 2. التحقق من وجود تغييرات ثم عمل Commit
+          # نقوم بالكوميت "قبل" الـ Pull لتجنب مشكلة Unstaged changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "📅 Auto-Update: Schedule & Content Data"
+            
+            # 3. سحب التحديثات من السيرفر ودمجها مع الكوميت المحلي
+            git pull origin main --rebase
+            
+            # 4. الرفع النهائي
+            git push origin main
+          fi
