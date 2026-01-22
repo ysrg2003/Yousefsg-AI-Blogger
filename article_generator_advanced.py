@@ -89,7 +89,7 @@ ARTICLE_STYLE = """
 # ==============================================================================
 
 # 🛑 الصق البرومبتات التفصيلية "Beast Mode" هنا 🛑
-# هام: في Prompt_B تأكد من كتابة: "I have read the full article for you..."
+
 
 # ==============================================================================
 # 2. PROMPTS DEFINITIONS (FULL, UNABRIDGED, BEAST MODE v7.0)
@@ -343,25 +343,46 @@ class KeyManager:
 key_manager = KeyManager()
 
 def clean_json(text):
+    """
+    NUCLEAR LEVEL CLEANER (v2): Handles trailing text and prefixes aggressively.
+    """
     text = text.strip()
+    
+    # 1. Regex to find the MAIN JSON block
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
-    if match: text = match.group(1)
+    if match: 
+        text = match.group(1)
     else:
         match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
         if match: text = match.group(1)
     
-    if text.startswith("[") or (text.find("[") != -1 and text.find("[") < text.find("{")):
-        start, end = text.find('['), text.rfind(']')
-    else:
-        start, end = text.find('{'), text.rfind('}')
+    # 2. Locate boundaries
+    # Find the first '{' or '['
+    first_curly = text.find('{')
+    first_square = text.find('[')
     
-    if start != -1 and end != -1: return text[start:end+1].strip()
+    start_index = -1
+    end_char = ''
+    
+    if first_curly != -1 and (first_square == -1 or first_curly < first_square):
+        start_index = first_curly
+        end_char = '}'
+    elif first_square != -1:
+        start_index = first_square
+        end_char = ']'
+        
+    if start_index != -1:
+        end_index = text.rfind(end_char)
+        if end_index != -1:
+            text = text[start_index : end_index+1]
+    
     return text.strip()
 
 def try_parse_json(text, context=""):
     try: return json.loads(text)
     except:
         try:
+            # Last ditch attempt: Replace newlines in values
             fixed = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', text)
             return json.loads(fixed)
         except:
@@ -370,73 +391,59 @@ def try_parse_json(text, context=""):
 
 def decode_google_news_url(source_url):
     """
-    🚀 DECODER v4 (Final Fix): Handles Google 'Intermediate Page' Redirects.
-    Forces extraction of the real URL from the Google HTML body.
+    🚀 DECODER v5 (OFFLINE FORCE):
+    Does NOT connect to Google. Decodes Base64 signatures directly to avoid 400/429 Errors.
     """
     log_prefix = "      🔓 Decoder:"
     
-    # 1. Basic Clean: Remove tracking params
-    source_url = source_url.split('?')[0]
+    # Clean input
+    source_url = source_url.strip()
+    
+    # If not a Google redirect, return as is
+    if "news.google.com" not in source_url and "/articles/" not in source_url:
+        return source_url
 
     try:
-        # Step A: Try Base64 decoding (Fastest/Silent)
-        # Often works for 'CBM' links if formatted strictly
-        if '/articles/' in source_url:
+        # Extract the Base64 payload (CBM...)
+        match = re.search(r'/articles/([a-zA-Z0-9_\-]+)', source_url)
+        if not match:
+            # Sometimes the URL itself is just the ID if passed raw
+            if len(source_url) > 20 and "/" not in source_url:
+                base64_str = source_url
+            else:
+                return source_url
+        else:
+            base64_str = match.group(1)
+
+        # Fix Padding
+        base64_str += "=" * ((4 - len(base64_str) % 4) % 4)
+
+        # Decode (Standard & URL-Safe)
+        try:
+            decoded_bytes = base64.urlsafe_b64decode(base64_str)
+        except:
+            decoded_bytes = base64.b64decode(base64_str)
+
+        # Binary Regex Search for URLs (http/https)
+        # We look for standard URL patterns inside the binary blob
+        found_urls = re.findall(rb'(https?://[a-zA-Z0-9./\-_%?=&]+)', decoded_bytes)
+
+        best_url = None
+        for item in found_urls:
             try:
-                base64_part = source_url.split('/articles/')[-1]
-                base64_part += "=" * ((4 - len(base64_part) % 4) % 4)
-                decoded_bytes = base64.urlsafe_b64decode(base64_part)
-                decoded_str = decoded_bytes.decode('latin1', errors='ignore')
-                
-                # Search for hidden URL inside the decoded binary garbage
-                urls = re.findall(r'(https?://(?!news\.google\.com)[a-zA-Z0-9./\-_%]+)', decoded_str)
-                if urls:
-                    # Pick the longest URL found (usually the real article)
-                    best = max(urls, key=len)
-                    log(f"{log_prefix} Binary extraction success: {best[:50]}...")
-                    return best
+                u = item.decode('latin1') # Decode bytes to string
+                # Filter out Google's internal domains
+                if "google.com" not in u and "googleusercontent" not in u:
+                    best_url = u
+                    break # Found the first external link
             except:
-                pass
+                continue
 
-        # Step B: Network Scraping (The Heavy Lifter)
-        # We visit the Google link pretending to be a browser
-        session = requests.Session()
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
-            'Referer': 'https://news.google.com/'
-        }
+        if best_url:
+            log(f"{log_prefix} ✅ Extracted Offline: {best_url[:60]}...")
+            return best_url
         
-        # Request the Google URL
-        response = session.get(source_url, headers=headers, timeout=10, allow_redirects=True)
-        
-        # Case 1: We were redirected cleanly to the site
-        if "news.google.com" not in response.url and "google.com" not in response.url:
-            log(f"{log_prefix} Redirect followed: {response.url[:50]}...")
-            return response.url
-
-        # Case 2: We are stuck on a Google "Opening..." page
-        # This is the most common cause of Error 451 for scripts
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Look for the main link in the redirection page
-        # Google usually puts the target link in the first 'a' tag or one with specific class
-        links = soup.find_all('a', href=True)
-        
-        for link in links:
-            href = link['href']
-            # Filter out internal Google links
-            if href.startswith('http') and "google.com" not in href and "googleusercontent" not in href:
-                log(f"{log_prefix} Found in HTML: {href[:50]}...")
-                return href
-        
-        # If all else fails, look for URL inside JavaScript code in the page
-        match = re.search(r'window\.location\s*=\s*["\'](http[^"\']+)["\']', response.text)
-        if match:
-            log(f"{log_prefix} Found in JS: {match.group(1)[:50]}...")
-            return match.group(1)
-
-        log(f"{log_prefix} ⚠️ Failed to resolve. Returning original.")
+        log(f"{log_prefix} ⚠️ No external link found in blob.")
         return source_url
 
     except Exception as e:
@@ -445,9 +452,9 @@ def decode_google_news_url(source_url):
 
 def fetch_full_article(url):
     """
-    🚀 ULTIMATE SCRAPER v5: Decoder v4 + Jina
+    🚀 ULTIMATE SCRAPER v6: Offline Decoder + Jina
     """
-    # 1. Resolve URL FIRST (This is the critical fix)
+    # 1. Resolve URL (Offline)
     real_url = decode_google_news_url(url)
     
     # 2. Use Jina with the REAL link
@@ -489,12 +496,13 @@ def get_real_news_rss(query_keywords, category):
             full_query = f"{query_keywords} when:1d"
 
         encoded = urllib.parse.quote(full_query)
+        # Using correct ceid parameters to ensure English US results
         url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
         
         feed = feedparser.parse(url)
         items = []
         if feed.entries:
-            for entry in feed.entries[:10]:
+            for entry in feed.entries[:8]:
                 pub = entry.published if 'published' in entry else "Today"
                 title_clean = entry.title.split(' - ')[0]
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
@@ -632,7 +640,7 @@ def run_pipeline(category, config, mode="trending"):
     for item in rss_items[:3]: 
         if item['title'][:30] in recent: continue
         
-        # Scrape with Decoder v4
+        # Scrape with Offline Decoder
         text = fetch_full_article(item['link'])
         
         if text and len(text) > 600:
@@ -701,7 +709,7 @@ def run_pipeline(category, config, mode="trending"):
             rr = video_renderer.VideoRenderer()
             pm = rr.render_video(script, title, f"main_{int(time.time())}.mp4")
             if pm:
-                desc = f"{yt_meta.get('description','')}\n\n👉 Full Link Soon.\n\n#AI"
+                desc = f"{yt_meta.get('description','')}\n\n👉 Link in Comments.\n\n#AI"
                 vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
                 if vid_main:
                     vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
