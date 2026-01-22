@@ -16,6 +16,8 @@ import youtube_manager
 from google import genai
 from google.genai import types
 import url_resolver
+import trafilatura
+
 
 # ==============================================================================
 # 0. CONFIG & LOGGING
@@ -372,46 +374,60 @@ def try_parse_json(text, context=""):
 
 
 
-
 def fetch_full_article(url):
     """
-    🚀 SCRAPER v9: Uses external Selenium resolver.
+    🚀 SCRAPER v11: 100% Local (Selenium + Trafilatura).
+    No 3rd party APIs like Jina. High success rate.
     """
-    # 1. استخدام الملف المنفصل لجلب الرابط الحقيقي
-    # سيقوم بفتح المتصفح وانتظار التحويل
-    real_url = url_resolver.get_final_url(url)
+    # 1. جلب الـ HTML والرابط الحقيقي باستخدام Selenium
+    data = url_resolver.get_page_html(url)
     
-    # 2. إذا فشل Selenium في جلب الرابط، نتخطى هذا الخبر
-    if not real_url:
-        log(f"      ⚠️ Decoding failed completely. Skipping item.")
+    if not data or not data.get('html'):
+        log(f"      ⚠️ Selenium failed to get page source.")
         return None
+        
+    real_url = data['url']
+    html_content = data['html']
     
-    # 3. المتابعة مع Jina كما هو في الكود الأصلي
-    jina_url = f"https://r.jina.ai/{real_url}"
-    log(f"   🕷️ Jina Fetch: {real_url[:60]}...")
+    log(f"      🧩 Extracting content locally from: {real_url[:50]}...")
     
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(jina_url, headers=headers, timeout=30)
+        # 2. استخدام Trafilatura لاستخراج نص المقالة من الـ HTML
+        # include_comments=False: لإزالة التعليقات
+        # include_tables=True: للاحتفاظ بالجداول المهمة
+        extracted_text = trafilatura.extract(
+            html_content, 
+            include_comments=False, 
+            include_tables=True,
+            favor_precision=True # التركيز على دقة النص وليس كثرته
+        )
         
-        if response.status_code != 200:
-            log(f"      ❌ Jina Error ({response.status_code}) for URL: {real_url}")
-            return None
+        if extracted_text and len(extracted_text) > 500:
+            log(f"      ✅ Extraction Success! {len(extracted_text)} chars found.")
+            return extracted_text[:12000]
+        else:
+            log("      ⚠️ Trafilatura found very little text. Trying fallback...")
             
-        content = response.text
-        if "Title:" in content: content = content.split("Title:", 1)[-1]
-        if "URL Source:" in content: content = content.split("\n", 1)[-1]
+            # Fallback: محاولة بسيطة في حال فشل المكتبة المتخصصة
+            soup = BeautifulSoup(html_content, 'html.parser')
+            # حذف العناصر المزعجة يدوياً
+            for script in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                script.extract()
+            text = soup.get_text(separator='\n')
             
-        if len(content) < 500:
-            log("      ⚠️ Content too short or irrelevant.")
-            return None
+            # تنظيف الفراغات
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            clean_text = '\n'.join(lines)
             
-        log(f"      ✅ Jina Success! {len(content)} chars fetched.")
-        return content[:12000]
-        
+            if len(clean_text) > 500:
+                log(f"      ✅ Fallback Success (BS4): {len(clean_text)} chars.")
+                return clean_text[:12000]
+
     except Exception as e:
-        log(f"      ⚠️ Jina request crashed: {e}")
-        return None
+        log(f"      ❌ Extraction Error: {e}")
+        
+    return None
+
 
 def get_real_news_rss(query_keywords, category):
     try:
