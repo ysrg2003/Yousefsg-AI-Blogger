@@ -126,15 +126,262 @@ ARTICLE_STYLE = """
 # Paste the Full, Detailed "Beast Mode" Prompts in the specific variables below.
 # Do NOT skip this step.
 
-PROMPT_A_TRENDING = """ """ 
-PROMPT_A_EVERGREEN = """ """ 
-PROMPT_B_TEMPLATE = """ """ 
-PROMPT_C_TEMPLATE = """ """ 
-PROMPT_D_TEMPLATE = """ """ 
-PROMPT_E_TEMPLATE = """ """ 
-PROMPT_VIDEO_SCRIPT = """ """ 
-PROMPT_YOUTUBE_METADATA = """ """ 
-PROMPT_FACEBOOK_HOOK = """ """ 
+# ==============================================================================
+# 2. PROMPTS DEFINITIONS (FULL, UNABRIDGED, PRODUCTION-GRADE)
+# ==============================================================================
+
+# ------------------------------------------------------------------
+# PROMPT A: RESEARCH PHASE (Selecting REAL News from RSS)
+# ------------------------------------------------------------------
+PROMPT_A_TRENDING = """
+A: You are a Lead Investigative Tech Reporter for a top-tier technology publication (similar to The Verge, TechCrunch). 
+I have fetched the LATEST REAL-TIME headlines from the Google News RSS Feed for the category: "{section}".
+
+INPUT RSS DATA (These are real headlines collected from the last 24 hours):
+{rss_data}
+
+SECTION FOCUS KEYWORDS (Use these to strictly filter for relevance):
+{section_focus}
+
+**CRITICAL ANTI-DUPLICATION RULE:**
+The following topics have ALREADY been covered recently on our blog. DO NOT select them again. You MUST find a completely DIFFERENT, FRESH story from the provided RSS data:
+{recent_titles}
+
+YOUR MISSION (Follow Exactly):
+1. **Analyze:** Read through the RSS headlines provided in the input.
+2. **Select:** Pick EXACTLY ONE high-impact story.
+   - **Priority 1:** Official Product Launches / Version Updates / Hardware Releases.
+   - **Priority 2:** Significant Funding Rounds (>$20M) or Acquisitions.
+   - **Priority 3:** Legal/Ethical Rulings, Lawsuits, or Government Regulations.
+   - **Priority 4:** Breakthrough Engineering Papers (SOTA Benchmarks).
+   - **IGNORE:** Generic listicles (e.g., "Top 10 AI tools"), weak opinion pieces, speculation, or "What is AI?" introductory articles. Only HARD NEWS.
+3. **Synthesize:** Extract the core event, the main entity involved (Company/Researcher), and the date context.
+
+Output JSON only, EXACTLY in this format:
+{{
+  "headline": "A professional, click-worthy, journalist-style headline based on the chosen RSS item (Do not use colon ':')",
+  "original_rss_link": "The specific URL link found in the chosen RSS item for verification",
+  "original_rss_title": "The exact title from RSS data",
+  "topic_focus": "The specific subject (e.g. Google Gemini 1.5 Pro Release)",
+  "why_selected": "Brief reason why this is the most important story in the feed today",
+  "date_context": "{today_date}"
+}}
+"""
+
+# Backup Prompt (Used mainly if RSS fails or manual switch)
+PROMPT_A_EVERGREEN = """
+A: Expert Technical Educator. 
+Task: Outline a comprehensive, authoritative guide about {section}.
+Anti-Duplication: Avoid {recent_titles}.
+
+Output JSON ONLY:
+{{
+  "headline": "Definitive Guide: [Topic] in 2026",
+  "original_rss_link": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+  "topic_focus": "Educational Guide",
+  "date_context": "Evergreen"
+}}
+"""
+
+# ------------------------------------------------------------------
+# PROMPT B: WRITER PHASE (Architectural & SEO Drafting)
+# ------------------------------------------------------------------
+# PROMPT B: Writer Phase (FACTUAL & STRICT)
+PROMPT_B_TEMPLATE = """
+B: You are the Editor-in-Chief of 'LatestAI'. Write a high-authority news article (approx. 1800 words) based STRICTLY on the facts provided in the Input Data.
+
+INPUT DATA: {json_input}
+STRICT FORBIDDEN PHRASES: {forbidden_phrases}
+
+I. ANTI-HALLUCINATION RULES (CRITICAL):
+1. **NO FAKE PERSONAS:** Do NOT invent names, doctors, or researchers (e.g. Do not invent 'Dr. Lena Petrova').
+2. **Attribution:** If the RSS data does not have a specific quote, attribute statements to "The Company", "Official Documentation", or "Industry Analysts". DO NOT make up quotes.
+3. **Product Accuracy:** Use ONLY the product names found in the Input Data. Do not guess version numbers (e.g. don't write 'Spot Cam 3D' unless it is explicitly in the input). Use general terms like "Updated Camera" or "New Sensor" if unsure.
+
+II. ARCHITECTURE FOR SEO DOMINANCE:
+1. **Headline (H1):** Use the provided headline.
+2. **Introduction:** Hook the reader immediately. State the facts clearly.
+3. **The "Direct Answer" (Featured Snippet):** Immediately after the Intro, create an H2 titled "The Bottom Line". Write a 50-word bolded summary of the facts.
+4. **Table of Contents:** Insert `[[TOC_PLACEHOLDER]]`.
+5. **Deep Dive Sections:** 4-6 H2 sections covering the updates. Use H3 subsections.
+6. **Critical Analysis (The Skeptical Take):** Create an H2 titled "Critical Analysis". Discuss potential downsides (price, compatibility, complexity) objectively.
+7. **Comparison:** Include a textual data representation comparing this update to the previous version.
+
+III. TONE:
+- Professional, Objective, Factual.
+- Avoid over-hyping ("Revolutionary", "Miracle"). Use "Significant update", "Major release".
+
+Output JSON ONLY in this exact format:
+{{
+  "draftTitle": "The Final Headline",
+  "draftContent": "<html>... Full HTML Article Content ...</html>",
+  "excerpt": "A powerful 2-sentence meta summary.",
+  "sources_used": ["List actual companies mentioned"]
+}}
+"""
+
+
+# ------------------------------------------------------------------
+# PROMPT C: SEO SPECIALIST (Formatting, Schema, Visuals)
+# ------------------------------------------------------------------
+PROMPT_C_TEMPLATE = """
+C: You are the Strategic Editor & SEO Consultant.
+INPUT DRAFT: {json_input}
+KNOWLEDGE GRAPH LINKS (Internal Links Candidates): {knowledge_graph}
+
+YOUR TASKS (EXECUTE ALL 5 STEPS WITH PRECISION):
+
+1. **TOC Injection & Linking (The Navigator):** 
+   - Replace the `[[TOC_PLACEHOLDER]]` marker with a styled HTML div (class="toc-box") containing a title "Quick Navigation" and an unordered list `<ul>` of anchor links to all H2 headings in the article. 
+   - **CRITICAL STEP:** You MUST add unique `id` attributes to all the corresponding H2 tags within the `finalContent` so that the TOC links actually work (e.g., convert `<h2>Title</h2>` to `<h2 id="title-id">Title</h2>`).
+
+2. **FAQ Rich Snippets (Visual & Code):** 
+   - Extract 3 relevant "User Intent" questions about this news topic. 
+   - Create a VISUAL HTML section at the very bottom of the article body (class="faq-section"), formatted nicely with `faq-title`, `faq-q`, and `faq-a` classes.
+
+3. **Styling & Wrappers (The CSS Hooks):** 
+   - Wrap the "Key Takeaways" bullet points list in a div with `class="takeaways-box"`. 
+   - Wrap any markdown tables converted to HTML in a div with `class="table-wrapper"`.
+   - Ensure all Quotes are wrapped in `blockquote` tags.
+
+4. **Internal Linking Strategy:** 
+   - Scan the article text for keywords that match the `title` or `topic` in the provided `KNOWLEDGE GRAPH LINKS`. 
+   - If a high-confidence match is found, turn that keyword into a hyperlink (`<a href='url'>keyword</a>`). 
+   - Strict Limit: Maximum 3 internal links per article to avoid over-optimization (Penalty prevention).
+
+5. **Advanced Schema Generation (The "Graph" Method):** 
+   Generate a sophisticated, VALID JSON-LD object containing a graph with TWO distinct nodes:
+   - Node 1: `NewsArticle` (including headline, datePublished, author="LatestAI Staff", headline, and image list placeholder).
+   - Node 2: `FAQPage` (containing the 3 extracted Questions and Answers from Step 2, using standard Schema.org vocabulary: `mainEntity` -> `Question` -> `acceptedAnswer` -> `Answer`).
+   - Ensure the JSON is syntactically perfect and escaped correctly.
+
+Output JSON ONLY:
+{{
+  "finalTitle": "The refined headline",
+  "finalContent": "<html>...The Modified HTML with IDs, Classes, Links, and the Visual FAQ Section appended at the end...</html>",
+  "imageGenPrompt": "A highly detailed English prompt for Flux AI image generation (keywords: abstract, tech, 3d render, cinematic lighting, 8k, volumetric, no text)",
+  "imageOverlayText": "A very short (2-3 words) catchy text overlay for the thumbnail (e.g. 'GEMINI UPDATED')",
+  "seo": {{
+      "metaTitle": "SEO Title (Max 60 chars) - Focus on CTR",
+      "metaDescription": "SEO Description (Max 155 chars) - Include focus keyword",
+      "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
+      "imageAltText": "SEO friendly image alt text description"
+  }},
+  "schemaMarkup": {{ 
+      "@context": "https://schema.org", 
+      "@graph": [
+          {{ "@type": "NewsArticle", "headline": "...", "datePublished": "...", "author": {{ "@type": "Organization", "name": "LatestAI" }} }},
+          {{ "@type": "FAQPage", "mainEntity": [ {{ "@type": "Question", "name": "...", "acceptedAnswer": {{ "@type": "Answer", "text": "..." }} }}, ... ] }} 
+      ]
+  }}
+}}
+"""
+
+# ------------------------------------------------------------------
+# PROMPT D: AUDIT (Quality Assurance & Safety)
+# ------------------------------------------------------------------
+
+# PROMPT D: AUDIT (Safety & Fact Check)
+PROMPT_D_TEMPLATE = """
+PROMPT D — Fact Checker & Auditor
+Input: {json_input}
+
+YOUR MISSION: Purge robotic language and hallucinations.
+
+MANDATORY CHECKLIST:
+1. **Hallucination Scan:** Check the content for names of people. If a name sounds generic or invented (like 'Dr. Smith', 'Lena Petrova') and is NOT a famous CEO (like Sam Altman, Musk, Sundar Pichai), **REMOVE THE NAME**. Replace with "A spokesperson" or "The developers".
+2. **Robotic Word Purge:** Replace words: "Delve", "Tapestry", "Beacon", "Paramount". Use simpler English.
+3. **Product Name Safety:** If a specific model number (v3, 5.1) is used, ensure it was present in the context of the article title. If unsure, generalize it.
+4. **Formatting Check:** Ensure `id` attributes are in H2 tags for the TOC.
+
+Output JSON ONLY (Structure must match Input C EXACTLY):
+{{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "excerpt":"..."}}
+"""
+
+
+
+# ------------------------------------------------------------------
+# PROMPT E: PUBLISHER (Safety Wrapper)
+# ------------------------------------------------------------------
+PROMPT_E_TEMPLATE = """
+E: The Publisher Role.
+Your job is to prepare the final JSON payload for the Python publishing script.
+
+CRITICAL INSTRUCTION:
+Return VALID JSON only. 
+- Do NOT add markdown code blocks (like ```json ... ```). 
+- Do NOT add introductory text (like "Here is the JSON"). 
+- Do NOT add explanations or footnotes.
+Just return the raw JSON object string to prevent pipeline crashes.
+
+Input data to finalize: {json_input}
+
+Output JSON Structure (Strict):
+{{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "authorBio": {{...}}}}
+"""
+
+# ------------------------------------------------------------------
+# VIDEO PROMPTS (Viral & Short Form Scripting)
+# ------------------------------------------------------------------
+PROMPT_VIDEO_SCRIPT = """
+You are a Screenwriter for a viral Tech Channel (TikTok/Reels/Shorts).
+Input Title: "{title}"
+Input Summary: "{text_summary}"
+
+TASK: Create a dialogue script for a "WhatsApp" style video between 2 characters:
+- "Alex" (The Insider/Tech Geek - Uses emoji 🚨).
+- "Sam" (The Curious Friend/Skeptic - Uses emoji 🤔).
+
+SCRIPTING RULES:
+1. **The Hook (0-3 seconds):** Alex must start with high energy urgency (e.g., "YOO!", "STOP SCROLLING", "DID YOU SEE THIS?").
+2. **The Reveal:** Alex explains the main news in simple terms (Explain Like I'm 15).
+3. **The Impact:** Sam asks "So what?" or "Is that good?". Alex explains one major benefit or danger.
+4. **The CTA (Call to Action):** Alex must end the conversation by saying specifically: "I linked the full breakdown in the description!" or "Link in bio for the full story!".
+5. **Length Constraints:** Total of 25 to 35 message bubbles. Keep each bubble short (3-8 words maximum) for fast reading speed on mobile.
+
+Output JSON ONLY in this array format:
+[
+  {{"speaker": "Alex", "type": "send", "text": "YOO! Did you see the new update? 🚨"}},
+  {{"speaker": "Sam", "type": "receive", "text": "No, what happened now? 🤔"}},
+  ...
+]
+"""
+
+# ------------------------------------------------------------------
+# SOCIAL PROMPTS (Metadata Optimization)
+# ------------------------------------------------------------------
+PROMPT_YOUTUBE_METADATA = """
+You are a YouTube SEO Expert specialized in Click-Through Rate (CTR).
+Input Article Headline: {draft_title}
+
+TASK: Generate High-Performance metadata for a YouTube Video covering this topic.
+
+OUTPUT GUIDELINES:
+1. **Title:** Must be clickbaity but truthful. Use ALL CAPS for key words. Include emojis. Max 60 chars. (Example: "GOOGLE Just KILLED ChatGPT? 🤯")
+2. **Description:** Start with a 2-sentence strong hook describing the conflict or news. Include 3-4 distinct hashtags related to the tech news.
+
+Output JSON ONLY:
+{{
+  "title": "Viral YouTube Title Here",
+  "description": "Strong hook text. \\n\\n#Tag1 #Tag2 #Tag3",
+  "tags": ["tag1", "tag2", "tag3", "tech news", "ai update"]
+}}
+"""
+
+PROMPT_FACEBOOK_HOOK = """
+You are a Social Media Manager. Create a Facebook Post caption for this news.
+Input Title: "{title}"
+
+Rules:
+1. **Hook:** Start with a polarizing question or a shocking stat related to the news.
+2. **Body:** 2 short sentences explaining the core update.
+3. **Engagement:** Use 3 relevant emojis to break up text.
+4. **Tags:** 3 Hashtags at the end.
+5. Do NOT include the link (the system adds it automatically).
+
+Output JSON ONLY:
+{{"facebook": "Your caption text here..."}}
+"""
 
 # ==============================================================================
 # 3. HELPER UTILITIES & CLASSES
