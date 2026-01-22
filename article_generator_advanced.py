@@ -371,7 +371,7 @@ def try_parse_json(text, context=""):
 
 
 
-        def decode_google_news_url(source_url):
+def decode_google_news_url(source_url):
     """
     🚀 DECODER v7 (VERBOSE MODE):
     Logic: Base64 decode -> Regex extraction.
