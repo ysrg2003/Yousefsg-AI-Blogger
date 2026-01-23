@@ -413,142 +413,209 @@ key_manager = KeyManager()
 # UPDATED JSON UTILITIES (AUTO-REPAIR MODE)
 # ==============================================================================
 
+
 # ==============================================================================
-# 5. ADVANCED AI ENGINE (Tenacity + Repair + Validation)
+# 5. ADVANCED AI ENGINE: THE "UNBREAKABLE" PIPELINE
 # ==============================================================================
-import json_repair
-import regex
+import logging
+import json
+import json_repair  # pip install json_repair
+import regex        # pip install regex
 from tenacity import (
-    retry, 
-    stop_after_attempt, 
-    wait_exponential, 
-    retry_if_exception_type, 
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
     before_sleep_log
 )
-import logging
+from google import genai
+from google.genai import types
 
-# إعداد اللوجر الخاص بـ Tenacity لمراقبة المحاولات
-logging.basicConfig(level=logging.INFO)
+# إعداد اللوجر الخاص بمكتبة Tenacity لمراقبة المحاولات في الخلفية
 logger = logging.getLogger("RetryEngine")
+logger.setLevel(logging.INFO)
+
+# ==============================================================================
+# A. CUSTOM EXCEPTIONS & STRICT INSTRUCTIONS
+# ==============================================================================
 
 class JSONValidationError(Exception):
-    """خطأ مخصص يطلق عندما يكون الـ JSON ناقص البيانات"""
+    """يُثار هذا الخطأ عندما يكون الـ JSON صالحاً نحوياً ولكن تنقصه مفاتيح أساسية."""
     pass
 
 class JSONParsingError(Exception):
-    """خطأ مخصص عندما يفشل تحليل الـ JSON تماماً"""
+    """يُثار هذا الخطأ عندما يفشل تحليل النص إلى JSON تماماً حتى بعد محاولات الإصلاح."""
     pass
+
+# البرومبت الصارم الذي يجبر الموديل على الصمت والالتزام بالتنسيق فقط
+STRICT_SYSTEM_PROMPT = """
+You are an assistant that MUST return ONLY the exact output requested. 
+No explanations, no headings, no extra text, no apologies. 
+Output exactly and only what the user asked for. 
+If the user requests JSON, return PURE JSON. 
+Obey safety policy.
+"""
+
+# ==============================================================================
+# B. HELPER PARSERS & VALIDATORS
+# ==============================================================================
 
 def master_json_parser(text):
     """
-    محرك التحليل (مدمج فيه json_repair و Regex)
+    محرك تحليل JSON شامل يستخدم Regex و json_repair لاستخراج البيانات من أي نص فوضوي.
     """
     if not text: return None
     
-    # 1. Regex Extraction: استخراج JSON من بين النصوص
-    # يبحث عن أي شيء يبدأ بـ { وينتهي بـ } حتى لو كان متداخلًا
+    # 1. Regex Extraction: استخراج ما بين الأقواس المعقوفة {}
+    # هذا يزيل أي نصوص قبل أو بعد الـ JSON
     match = regex.search(r'\{(?:[^{}]|(?R))*\}', text, regex.DOTALL)
     candidate = match.group(0) if match else text
     
-    # 2. json_repair: المحاولة السحرية للإصلاح
+    # 2. json_repair: المحاولة الأولى والأقوى للإصلاح
     try:
         decoded = json_repair.repair_json(candidate, return_objects=True)
-        return decoded
+        # التأكد من أن النتيجة هي قاموس أو قائمة وليست نصاً
+        if isinstance(decoded, (dict, list)):
+            return decoded
     except Exception:
-        # 3. Fallback: محاولة تنظيف بسيطة
-        try:
-            clean = candidate.replace("```json", "").replace("```", "").strip()
-            return json.loads(clean)
-        except:
-            return None
+        pass
+
+    # 3. Fallback: محاولة تنظيف بسيطة واستخدام json القياسي
+    try:
+        clean = candidate.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean)
+    except:
+        return None
 
 def validate_structure(data, required_keys):
     """
-    (Instructor Concept)
-    التحقق من أن البيانات تحتوي على المفاتيح المطلوبة
+    التحقق من صحة هيكل البيانات (Validation).
+    يرفع استثناء إذا كانت البيانات ناقصة ليجبر Tenacity على إعادة المحاولة.
     """
     if not isinstance(data, dict):
-        raise JSONValidationError(f"Expected Dict, got {type(data)}")
+        raise JSONValidationError(f"Expected Dictionary output, but got type: {type(data)}")
     
-    missing = [key for key in required_keys if key not in data]
-    if missing:
-        raise JSONValidationError(f"Missing required keys: {missing}")
+    missing_keys = [key for key in required_keys if key not in data]
+    
+    if missing_keys:
+        # هذا الخطأ سيتم التقاطه بواسطة Tenacity لإعادة المحاولة
+        raise JSONValidationError(f"JSON is valid but missing required keys: {missing_keys}")
+    
     return True
 
 # ==============================================================================
-# THE RETRY ENGINE (TENACITY)
+# C. THE MAIN STRICT GENERATION FUNCTION
 # ==============================================================================
-# شرح الإعدادات:
-# - stop=stop_after_attempt(5): سيحاول 5 مرات قبل أن يستسلم.
-# - wait=wait_exponential(multiplier=1, min=4, max=10): سينتظر 4 ثواني، ثم 8، ثم 10... (لتهدئة الـ API)
-# - retry=retry_if_exception_type(...): يعيد المحاولة فقط في حالة أخطاء التوليد أو التحليل.
 
 @retry(
-    stop=stop_after_attempt(5), 
+    # التوقف بعد 5 محاولات فاشلة
+    stop=stop_after_attempt(5),
+    
+    # الانتظار الأسي: يبدأ بـ 4 ثواني، ثم يتضاعف حتى يصل لأقصى حد 15 ثانية
     wait=wait_exponential(multiplier=1, min=4, max=15),
+    
+    # إعادة المحاولة فقط في حالة هذه الأخطاء المحددة
     retry=retry_if_exception_type((JSONParsingError, JSONValidationError, Exception)),
+    
+    # تسجيل رسالة في اللوج قبل الانتظار للمحاولة التالية
     before_sleep=before_sleep_log(logger, logging.WARNING)
 )
 def generate_step_strict(model_name, prompt, step_name, required_keys=[]):
     """
-    الدالة الرئيسية للتوليد. لن تخرج منها إلا بـ JSON صحيح أو بانهيار كامل بعد 5 محاولات.
-    لا يوجد "None". إما نجاح أو إعادة محاولة.
+    الدالة النهائية لتوليد المحتوى.
+    - تستخدم System Instructions لضمان النتيجة.
+    - تستخدم Tenacity لإعادة المحاولة عند الفشل.
+    - تستخدم AI Repair لإصلاح الأخطاء النحوية ذاتياً.
+    - تدير تبديل المفاتيح (Key Rotation) عند انتهاء الكوتا.
     """
     log(f"   🔄 [Tenacity] Executing: {step_name}...")
     
-    # 1. إدارة المفاتيح (Switching Keys)
+    # 1. جلب مفتاح API الحالي
     key = key_manager.get_current_key()
-    if not key: raise Exception("No API Keys available!")
+    if not key:
+        # إذا نفدت المفاتيح، نرفع خطأ قاتلاً لا يمكن إعادة المحاولة معه
+        raise RuntimeError("FATAL: All API Keys exhausted.")
     
     client = genai.Client(api_key=key)
     
     try:
-        # 2. طلب التوليد من Gemini
-        # نستخدم وضع JSON الرسمي من Gemini لضمان أفضل نتائج
+        # 2. إعداد الكونفيج الصارم
+        generation_config = types.GenerateContentConfig(
+            response_mime_type="application/json",  # إجبار الموديل على JSON
+            system_instruction=STRICT_SYSTEM_PROMPT,  # التعليمات الصارمة
+            temperature=0.3,  # تقليل العشوائية للدقة
+            top_p=0.8
+        )
+
+        # 3. الطلب الأساسي من الموديل
         response = client.models.generate_content(
             model=model_name, 
             contents=prompt, 
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json" 
-            )
+            config=generation_config
         )
+        
         raw_text = response.text
         
-        # 3. محاولة التحليل (Parsing)
+        # 4. محاولة التحليل الأولى
         parsed_data = master_json_parser(raw_text)
         
+        # 5. منطق الإصلاح الذاتي (AI Self-Correction)
+        # إذا فشل التحليل، نطلب من الذكاء الاصطناعي إصلاح ما أفسده
         if not parsed_data:
-            # (LangChain Concept) AI Self-Correction
-            # إذا فشل التحليل، نطلب من الذكاء الاصطناعي إصلاح ما أفسده فوراً
-            log(f"      ⚠️ Parsing failed. Triggering Instant AI Repair for {step_name}...")
-            fix_prompt = f"Fix this broken JSON string. Return ONLY valid JSON:\n\n{raw_text[:5000]}"
-            fix_resp = client.models.generate_content(
-                model="gemini-2.5-flash", # موديل سريع للإصلاح
-                contents=fix_prompt,
-                config=types.GenerateContentConfig(response_mime_type="application/json")
-            )
-            parsed_data = master_json_parser(fix_resp.text)
+            log(f"      ⚠️ Parsing failed locally for {step_name}. Triggering AI Repair...")
             
+            repair_prompt = f"""
+            SYSTEM ALERT: You generated INVALID JSON in the previous step.
+            Your output could not be parsed.
+            
+            TASK: Fix the syntax errors in the content below.
+            RULES:
+            1. Return ONLY the valid JSON object.
+            2. Do NOT add markdown blocks.
+            3. Fix unescaped quotes and trailing commas.
+            
+            BROKEN CONTENT:
+            {raw_text[:10000]}
+            """
+            
+            # نستخدم موديل سريع (Flash) لعملية الإصلاح لتوفير الوقت
+            repair_response = client.models.generate_content(
+                model="gemini-2.5-flash", 
+                contents=repair_prompt,
+                config=generation_config # نستخدم نفس الكونفيج الصارم
+            )
+            
+            # محاولة تحليل النص المصلح
+            parsed_data = master_json_parser(repair_response.text)
+            
+            # إذا استمر الفشل، نرفع خطأ Parsing ليقوم Tenacity بإعادة المحاولة من الصفر
             if not parsed_data:
-                raise JSONParsingError(f"Failed to parse JSON for {step_name} even after AI repair.")
+                raise JSONParsingError(f"Failed to parse JSON even after AI repair for step: {step_name}")
+            else:
+                log(f"      ✅ AI Repair Successful for {step_name}!")
 
-        # 4. التحقق من البنية (Validation)
-        # إذا نجح التحليل لكن البيانات ناقصة، نعتبرها فشلاً ونعيد المحاولة
+        # 6. التحقق من صحة الهيكل (Validation)
+        # هل المفاتيح المطلوبة موجودة؟
         if required_keys:
             validate_structure(parsed_data, required_keys)
             
-        log(f"      ✅ Success: {step_name}")
+        # إذا وصلنا هنا، فالبيانات سليمة 100%
+        log(f"      ✅ Success: {step_name} completed.")
         return parsed_data
 
     except Exception as e:
-        # هنا يلتقط Tenacity الخطأ ويقرر: هل يعيد المحاولة أم لا؟
-        if "429" in str(e) or "quota" in str(e).lower():
-            log("      ⚠️ Quota Exceeded. Switching Key & Retrying...")
-            key_manager.switch_key()
-            raise e # ارفع الخطأ ليعيد Tenacity المحاولة بالمفتاح الجديد
+        # التعامل مع أخطاء الكوتا (429) بشكل خاص
+        error_msg = str(e).lower()
+        if "429" in error_msg or "quota" in error_msg or "resource exhausted" in error_msg:
+            log("      ⚠️ Quota Exceeded (429). Switching Key & Retrying immediately...")
+            if key_manager.switch_key():
+                # نرفع الخطأ مرة أخرى ليقوم Tenacity بالتقاطه وإعادة المحاولة بالمفتاح الجديد
+                raise e 
+            else:
+                raise RuntimeError("FATAL: All keys exhausted during retry.")
         
-        log(f"      ❌ Attempt Failed for {step_name}: {str(e)[:100]}...")
-        # رفع الخطأ ضروري لكي يعرف Tenacity أن المحاولة فشلت ويعيد الكرّة
+        # تسجيل الخطأ ورفعه لإعادة المحاولة
+        log(f"      ❌ Attempt Failed for {step_name}: {str(e)[:200]}")
         raise e
             
 
