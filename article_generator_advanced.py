@@ -31,7 +31,7 @@ import trafilatura
 import ast
 import json_repair # يجب تثبيتها: pip install json_repair
 import regex # يجب تثبيتها: pip install regex
-
+import pydantic
 
 
 # ==============================================================================
