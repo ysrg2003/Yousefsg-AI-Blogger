@@ -200,6 +200,7 @@ Your task is to **SYNTHESIZE** them into one Master Guide.
 1. Return PURE VALID JSON ONLY.
 2. ESCAPE ALL QUOTES inside HTML.
 3. No Markdown.
+4. Ensure that all HTML attributes utilize escaped double quotes (e.g. class=\"classname\") and avoid unescaped newlines inside JSON values.
 """
 
 # ------------------------------------------------------------------
@@ -249,6 +250,7 @@ Output JSON ONLY:
 1. Return PURE VALID JSON ONLY.
 2. **ESCAPE QUOTES:** Ensure all HTML attributes use escaped quotes (\\").
 3. Do NOT truncate content.
+4. Ensure that all HTML attributes utilize escaped double quotes (e.g. class=\"classname\") and avoid unescaped newlines inside JSON values.
 """
 
 # ------------------------------------------------------------------
@@ -275,6 +277,7 @@ Output JSON ONLY (Keep structure):
 1. Return PURE VALID JSON ONLY.
 2. Maintain valid HTML escaping.
 3. No Markdown.
+4. Ensure that all HTML attributes utilize escaped double quotes (e.g. class=\"classname\") and avoid unescaped newlines inside JSON values.
 """
 
 # ------------------------------------------------------------------
@@ -292,6 +295,7 @@ Task: Output the exact same JSON, but ensure it is syntactically correct.
 1. Return RAW JSON STRING ONLY.
 2. Remove any markdown fences (```).
 3. Ensure no trailing commas.
+4. Ensure that all HTML attributes utilize escaped double quotes (e.g. class=\"classname\") and avoid unescaped newlines inside JSON values.
 """
 # ------------------------------------------------------------------
 # SOCIAL: ENGAGEMENT FOCUSED
