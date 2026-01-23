@@ -236,6 +236,13 @@ ARTICLE_STYLE = """
     .Sources { font-size: 0.9em; color: #777; margin-top: 50px; border-top: 1px solid #eee; padding-top: 20px; }
     .Sources ul { list-style-type: disc; padding-left: 20px; }
 </style>
+<div class="author-box" style="background:#f0f2f5; padding:20px; border-radius:10px; margin-top:40px; display:flex; align-items:center;">
+    <img src="URL_TO_YOUR_REALISTIC_PHOTO" style="width:80px; height:80px; border-radius:50%; margin-right:15px;">
+    <div>
+        <h4 style="margin:0;">Yousef Sameer</h4> <!-- استخدم اسماً ثابتاً -->
+        <p style="font-size:14px; margin:5px 0;">Senior Tech Editor dealing with AI since 2020. Obsessed with finding bugs in new updates.</p>
+    </div>
+</div>
 """
 
 # ==============================================================================
@@ -820,6 +827,11 @@ def run_pipeline(category, config, mode="trending"):
     # =====================================================
     # STEP 1: MULTI-SOURCE RESEARCH (THE HUNTER)
     # =====================================================
+   # (Pseudo-code logic to add)
+reddit_query = f"{target_keyword} site:reddit.com"
+# قم بجلب أول نتيجة من ريديت واستخرج النص منها
+# أضف هذا النص إلى "Payload" المرسل للموديل تحت عنوان:
+# *** REAL USER OPINIONS (REDDIT) ***
     # البحث في أخبار جوجل
     rss_query = f"{target_keyword} when:3d"
     rss_items = get_real_news_rss(rss_query.replace("when:3d","").strip(), category)
