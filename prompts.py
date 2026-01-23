@@ -42,9 +42,12 @@ SECTION: {section_focus}
 IGNORE: (Topics we ALREADY covered): {recent_titles}
 
 **STRICT DEDUPLICATION RULES:**
-1. **CHECK THE IGNORE LIST FIRST:** If a story in the RSS is about the same underlying topic as anything in the IGNORE LIST, **SKIP IT IMMEDIATELY**.
-2. **SEMANTIC MATCHING:** "Windows Notepad AI" is the SAME as "Microsoft Updates Windows Apps". Do not select it if it's already covered.
-3. **FIND SOMETHING FRESH:** Look for a different story, even if it's slightly less "breaking news", to avoid repetition.
+1. **CHECK THE HISTORY LIST FIRST:** Before selecting any story, scan the "ALREADY PUBLISHED ARTICLES" list above.
+2. **SEMANTIC MATCHING:** Do not just look at keywords. Look at the *event*.
+   - If History says "AI comes to Notepad", and RSS says "Microsoft updates Windows Apps with AI", **SKIP IT**. They are the same story.
+   - If History says "Tesla Optimus Update", and RSS has "Elon Musk reveals robot news", **SKIP IT**.
+3. **ONE STORY PER TOPIC:** We only need one article per major event. If we covered it recently, do not cover it again today.
+
 
 **STRICT EXCLUSION CRITERIA (IGNORE THESE):**
 1. **Corporate News:** Stock prices, quarterly earnings, lawsuits, CEO changes, market cap.
