@@ -1180,6 +1180,26 @@ def run_pipeline(category, config, mode="trending"):
     # =====================================================
     # STEP 4: PUBLISHING
     # =====================================================
+
+# ... داخل دالة run_pipeline قبل النشر ...
+    
+    # 1. حقن صندوق الكاتب يدوياً (Author Box Injection)
+    author_box_html = """
+    <div style="margin-top: 50px; padding: 20px; background-color: #f8f9fa; border-left: 5px solid #2c3e50; display: flex; align-items: center; border-radius: 5px;">
+        <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791" style="width: 80px; height: 80px; border-radius: 50%; margin-right: 20px;" alt="Editor">
+        <div>
+            <h4 style="margin: 0 0 5px 0; color: #333;">Tech Reviewer</h4>
+            <p style="margin: 0; font-size: 14px; color: #666;">Obsessed with testing AI tools so you don't have to break your device. Brutally honest reviews.</p>
+        </div>
+    </div>
+    """
+    
+    # دمج كل شيء
+    final_html_body = content_html + author_box_html 
+    
+    # ثم استخدم final_html_body في التجميع النهائي
+    # full_body = ARTICLE_STYLE + ... + final_html_body
+    
     log("   🚀 Publishing to Blogger...")
     
     full_body = ARTICLE_STYLE
@@ -1190,7 +1210,7 @@ def run_pipeline(category, config, mode="trending"):
     
     if vid_html: full_body += vid_html
     
-    full_body += content_html
+    full_body += ARTICLE_STYLE + ... + final_html_body
     
     if 'schemaMarkup' in final:
         try: full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
