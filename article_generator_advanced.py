@@ -408,132 +408,142 @@ key_manager = KeyManager()
 # ==============================================================================
 
 # ==============================================================================
-# UPDATED JSON UTILITIES (AUTO-REPAIR MODE v2.0)
+# 5. ADVANCED AI ENGINE (Tenacity + Repair + Validation)
 # ==============================================================================
+import json_repair
+import regex
+from tenacity import (
+    retry, 
+    stop_after_attempt, 
+    wait_exponential, 
+    retry_if_exception_type, 
+    before_sleep_log
+)
+import logging
 
-           # ==============================================================================
-# 5-LAYER ROBUST JSON PARSER (THE "UNBREAKABLE" ENGINE)
-# ==============================================================================
+# إعداد اللوجر الخاص بـ Tenacity لمراقبة المحاولات
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("RetryEngine")
 
-def master_json_parser(text, context=""):
+class JSONValidationError(Exception):
+    """خطأ مخصص يطلق عندما يكون الـ JSON ناقص البيانات"""
+    pass
+
+class JSONParsingError(Exception):
+    """خطأ مخصص عندما يفشل تحليل الـ JSON تماماً"""
+    pass
+
+def master_json_parser(text):
     """
-    يحاول إصلاح الـ JSON بـ 5 طرق مختلفة متتالية.
-    إذا نجحت واحدة، يعيد النتيجة. إذا فشل الكل، يعيد None.
+    محرك التحليل (مدمج فيه json_repair و Regex)
     """
     if not text: return None
     
-    log(f"      🛡️ [Parser] analyzing output for {context}...")
-
-    # --- المستوى 1: التنظيف البسيط والتحويل المباشر ---
-    # إزالة علامات الماركداون ```json ... ```
-    cleaned = re.sub(r'```(?:json)?', '', text).strip()
-    cleaned = cleaned.replace('```', '')
+    # 1. Regex Extraction: استخراج JSON من بين النصوص
+    # يبحث عن أي شيء يبدأ بـ { وينتهي بـ } حتى لو كان متداخلًا
+    match = regex.search(r'\{(?:[^{}]|(?R))*\}', text, regex.DOTALL)
+    candidate = match.group(0) if match else text
     
+    # 2. json_repair: المحاولة السحرية للإصلاح
     try:
-        return json.loads(cleaned)
-    except:
-        pass
-
-    # --- المستوى 2: مكتبة json_repair (الحل السحري) ---
-    # هذه المكتبة مخصصة لإصلاح أخطاء LLMs مثل الأقواس الناقصة
-    try:
-        repaired_obj = json_repair.repair_json(cleaned, return_objects=True)
-        if repaired_obj:
-            log(f"      🔧 [Parser] json_repair fixed the data!")
-            return repaired_obj
-    except:
-        pass
-
-    # --- المستوى 3: البحث عن JSON باستخدام Regex ---
-    # أحياناً يضع الذكاء الاصطناعي مقدمة نصية طويلة قبل الـ JSON
-    try:
-        # البحث عن أول قوس { وآخر قوس }
-        match = regex.search(r'\{(?:[^{}]|(?R))*\}', text, regex.DOTALL)
-        if match:
-            potential_json = match.group(0)
-            return json_repair.repair_json(potential_json, return_objects=True)
-    except:
-        pass
-
-    # --- المستوى 4: Python AST (لتعامل مع Single Quotes) ---
-    # أحياناً يستخدم الموديل ' بدلاً من " وهذا خطأ في JSON لكنه صحيح في Python
-    try:
-        # خطير قليلاً لكنه فعال كحل أخير
-        return ast.literal_eval(cleaned)
-    except:
-        pass
-
-    log(f"      ❌ [Parser] All local methods failed for {context}.")
-    return None
-
-def generate_step_robust(model, prompt, step_name):
-    """
-    دالة التوليد الذكية مع خاصية الإصلاح الذاتي (Self-Correction)
-    """
-    log(f"   👉 Generating: {step_name}")
-    
-    # 3 محاولات للتوليد
-    for attempt in range(3):
-        key = key_manager.get_current_key()
-        if not key: return None
-        
-        client = genai.Client(api_key=key)
-        
+        decoded = json_repair.repair_json(candidate, return_objects=True)
+        return decoded
+    except Exception:
+        # 3. Fallback: محاولة تنظيف بسيطة
         try:
-            # 1. الطلب من API
-            r = client.models.generate_content(
-                model=model, 
-                contents=prompt, 
+            clean = candidate.replace("```json", "").replace("```", "").strip()
+            return json.loads(clean)
+        except:
+            return None
+
+def validate_structure(data, required_keys):
+    """
+    (Instructor Concept)
+    التحقق من أن البيانات تحتوي على المفاتيح المطلوبة
+    """
+    if not isinstance(data, dict):
+        raise JSONValidationError(f"Expected Dict, got {type(data)}")
+    
+    missing = [key for key in required_keys if key not in data]
+    if missing:
+        raise JSONValidationError(f"Missing required keys: {missing}")
+    return True
+
+# ==============================================================================
+# THE RETRY ENGINE (TENACITY)
+# ==============================================================================
+# شرح الإعدادات:
+# - stop=stop_after_attempt(5): سيحاول 5 مرات قبل أن يستسلم.
+# - wait=wait_exponential(multiplier=1, min=4, max=10): سينتظر 4 ثواني، ثم 8، ثم 10... (لتهدئة الـ API)
+# - retry=retry_if_exception_type(...): يعيد المحاولة فقط في حالة أخطاء التوليد أو التحليل.
+
+@retry(
+    stop=stop_after_attempt(5), 
+    wait=wait_exponential(multiplier=1, min=4, max=15),
+    retry=retry_if_exception_type((JSONParsingError, JSONValidationError, Exception)),
+    before_sleep=before_sleep_log(logger, logging.WARNING)
+)
+def generate_step_strict(model_name, prompt, step_name, required_keys=[]):
+    """
+    الدالة الرئيسية للتوليد. لن تخرج منها إلا بـ JSON صحيح أو بانهيار كامل بعد 5 محاولات.
+    لا يوجد "None". إما نجاح أو إعادة محاولة.
+    """
+    log(f"   🔄 [Tenacity] Executing: {step_name}...")
+    
+    # 1. إدارة المفاتيح (Switching Keys)
+    key = key_manager.get_current_key()
+    if not key: raise Exception("No API Keys available!")
+    
+    client = genai.Client(api_key=key)
+    
+    try:
+        # 2. طلب التوليد من Gemini
+        # نستخدم وضع JSON الرسمي من Gemini لضمان أفضل نتائج
+        response = client.models.generate_content(
+            model=model_name, 
+            contents=prompt, 
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json" 
+            )
+        )
+        raw_text = response.text
+        
+        # 3. محاولة التحليل (Parsing)
+        parsed_data = master_json_parser(raw_text)
+        
+        if not parsed_data:
+            # (LangChain Concept) AI Self-Correction
+            # إذا فشل التحليل، نطلب من الذكاء الاصطناعي إصلاح ما أفسده فوراً
+            log(f"      ⚠️ Parsing failed. Triggering Instant AI Repair for {step_name}...")
+            fix_prompt = f"Fix this broken JSON string. Return ONLY valid JSON:\n\n{raw_text[:5000]}"
+            fix_resp = client.models.generate_content(
+                model="gemini-2.5-flash", # موديل سريع للإصلاح
+                contents=fix_prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
-            raw_text = r.text
+            parsed_data = master_json_parser(fix_resp.text)
             
-            # 2. محاولة التحليل باستخدام "المحرك الخماسي"
-            parsed_data = master_json_parser(raw_text, step_name)
+            if not parsed_data:
+                raise JSONParsingError(f"Failed to parse JSON for {step_name} even after AI repair.")
+
+        # 4. التحقق من البنية (Validation)
+        # إذا نجح التحليل لكن البيانات ناقصة، نعتبرها فشلاً ونعيد المحاولة
+        if required_keys:
+            validate_structure(parsed_data, required_keys)
             
-            # 3. التحقق من النتيجة
-            if parsed_data and isinstance(parsed_data, (dict, list)):
-                return parsed_data # ✅ نجاح!
-            
-            # --- المستوى 5: الإصلاح عبر الذكاء الاصطناعي (AI Repair) ---
-            # إذا فشلت كل الطرق البرمجية، نطلب من الذكاء الاصطناعي إصلاح نفسه
-            log(f"      ⚠️ parsing failed. Triggering AI Self-Correction (Attempt {attempt+1}/3)...")
-            
-            repair_prompt = f"""
-            SYSTEM ALERT: You generated INVALID JSON.
-            Error Context: The parser could not read your previous output.
-            
-            YOUR TASK: Fix the syntax errors in the content below. 
-            RULES:
-            1. Output ONLY valid JSON.
-            2. Check for unescaped quotes inside strings.
-            3. Remove any trailing commas.
-            
-            BROKEN CONTENT:
-            {raw_text[:8000]}
-            """
-            
-            # محاولة الإصلاح بموديل سريع
-            r_fix = client.models.generate_content(
-                model="gemini-2.5-flash", 
-                contents=repair_prompt,
-                config=types.GenerateContentConfig(response_mime_type="application/json")
-            )
-            
-            # فحص نتيجة الإصلاح
-            fixed_data = master_json_parser(r_fix.text, f"{step_name}_FIX")
-            if fixed_data and isinstance(fixed_data, (dict, list)):
-                log("      ✅ AI successfully repaired the JSON!")
-                return fixed_data
-                
-        except Exception as e:
-            if "429" in str(e):
-                key_manager.switch_key()
-            else:
-                log(f"❌ Error: {e}")
-                
-    log(f"❌ FATAL: Could not generate valid JSON for {step_name} after all attempts.")
-    return None # نعيد None بدلاً من String لتجنب AttributeError     
+        log(f"      ✅ Success: {step_name}")
+        return parsed_data
+
+    except Exception as e:
+        # هنا يلتقط Tenacity الخطأ ويقرر: هل يعيد المحاولة أم لا؟
+        if "429" in str(e) or "quota" in str(e).lower():
+            log("      ⚠️ Quota Exceeded. Switching Key & Retrying...")
+            key_manager.switch_key()
+            raise e # ارفع الخطأ ليعيد Tenacity المحاولة بالمفتاح الجديد
+        
+        log(f"      ❌ Attempt Failed for {step_name}: {str(e)[:100]}...")
+        # رفع الخطأ ضروري لكي يعرف Tenacity أن المحاولة فشلت ويعيد الكرّة
+        raise e
             
 
 def fetch_full_article(url):
