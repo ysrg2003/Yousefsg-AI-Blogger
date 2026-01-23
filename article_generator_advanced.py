@@ -110,6 +110,26 @@ ARTICLE_STYLE = """
 # ==============================================================================
 # 2. PROMPTS DEFINITIONS (v10.0 - THE "CREATOR" MODE)
 # ==============================================================================
+# ------------------------------------------------------------------
+# PROMPT ZERO: SEO STRATEGIST (THE BRAIN)
+# ------------------------------------------------------------------
+PROMPT_ZERO_SEO = """
+Role: Senior SEO Strategist.
+Input Category: "{category}"
+Date: {date}
+
+Task: Identify ONE specific, high-potential "Long-Tail Keyword" related to this category that is trending NOW.
+Target: A topic that is "Winnable" (not too broad like "AI", but specific like "Gemini vs GPT-5 pricing").
+
+Output JSON ONLY:
+{{
+  "target_keyword": "The specific search query to use in Google News",
+  "reasoning": "Why this topic is hot today"
+}}
+**CRITICAL OUTPUT RULES:**
+1. Return PURE VALID JSON ONLY.
+2. No Markdown.
+"""
 
 # ------------------------------------------------------------------
 # PROMPT A: TOPIC SELECTION (Filter: "Is this clickable content?")
@@ -148,49 +168,34 @@ Find the ONE story that a **YouTuber** or **TikToker** would make a video about 
 # PROMPT B: CONTENT CREATOR (The "Friendly Expert")
 # ------------------------------------------------------------------
 PROMPT_B_TEMPLATE = """
-B: You are 'LatestAI', a popular Tech Blogger and Creator.
-**CONTEXT:** You are NOT a journalist. You are a guide. 
-Use the `SOURCE CONTENT` facts, but rewrite them as a helpful blog post.
-
+B: You are 'LatestAI', a popular Tech Analyst.
 INPUT: {json_input}
-FORBIDDEN WORDS: {forbidden_phrases} (Plus: "Reportedly", "According to sources", "Allegedly").
+FORBIDDEN: {forbidden_phrases}
 
-**STRATEGY:**
-- **Tone:** Enthusiastic, Personal, Clear. Use "I", "We", "You".
-- **Goal:** Take complex news and turn it into actionable advice.
+**CRITICAL CONTEXT:**
+I have provided **MULTIPLE SOURCES** below. 
+Your task is to **SYNTHESIZE** them into one Master Guide.
+- Cross-reference facts (if Source 1 says X and Source 2 says Y, mention the debate).
+- If sources agree, confirm it as fact.
+- Use the combined data to form a strong "Verdict" or "Opinion".
 
 **STRICT HTML STRUCTURE:**
-1. **The Hook (Intro):** Start with a relatable problem. "Don't you hate it when...?" Then introduce the news as the solution.
-2. **What Actually Happened:** `<h2>` Title. Simple explanation of the news (No jargon).
-3. **The "Cheat Sheet":** 
-   - `<h2>` titled "**Quick Summary**".
-   - Under it: `<ul>` with 5 bullet points (Emojis allowed here).
-4. **Navigation:** Insert: `[[TOC_PLACEHOLDER]]`.
-5. **Why This Matters to YOU:** `<h2>` Title. 
-   - Explain the *benefit*. Will it save time? Save money?
-6. **The Tutorial / How-To (Crucial):** `<h2>` Title (e.g., "**How to Try It**" or "**What to Expect**").
-   - Even if the feature isn't out, explain the steps to get ready.
-7. **The Verdict:** `<h2>` titled "**My Opinion**". Is it hype or real?
-8. **Comparison Table:** HTML `<table>` comparing "Old Way" vs "New Way".
+1. **Hook:** Why this topic is trending right now.
+2. **What's Happening:** Combine facts from all sources.
+3. **Quick Summary:** <ul> list.
+4. [[TOC_PLACEHOLDER]]
+5. **Deep Dive:** Explain the tech/news in detail.
+6. **The Verdict (My Take):** Your analysis based on all data.
+7. **Comparison Table:** <table>.
 
 **WRITING RULES:**
-- **Short & Punchy:** Paragraphs = 2-3 lines max.
-- **Visuals:** Use `<strong>` to highlight cool features.
-- **Explain:** If you say "latency", write "(aka lag)".
+- Tone: Professional but personal (Use "I", "We").
+- Length: 1500+ words (You have plenty of source material now).
 
-Output JSON ONLY:
-{{
-  "draftTitle": "A Title That Sounds Like a YouTube Video (e.g. 'Stop Doing This...')",
-  "draftContent": "<html>...Content...</html>",
-  "excerpt": "Compelling summary for social media.",
-  "sources_used": ["List"]
-}}
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ONLY.
-2. **ESCAPE QUOTES:** You are writing HTML inside JSON. You MUST escape quotes.
-   - WRONG: "content": "<div class="box">"
-   - RIGHT: "content": "<div class=\\"box\\">"
-3. No Markdown blocks.
+2. ESCAPE ALL QUOTES inside HTML.
+3. No Markdown.
 """
 
 # ------------------------------------------------------------------
@@ -717,206 +722,294 @@ def resolve_and_scrape(google_url):
         if driver:
             driver.quit()
 
-
-# ==============================================================================
-# 5. CORE PIPELINE LOGIC (OFFLINE DECODER + JINA)
-# ==============================================================================
-
-
 def run_pipeline(category, config, mode="trending"):
+    """
+    The Master Pipeline v11.0 (Smart Analyst Mode).
+    1. SEO Strategy (AI decides the keyword).
+    2. Multi-Source Scraping (Collects top 3 sources).
+    3. Synthesis & Drafting (Writes a comprehensive guide).
+    4. Multimedia Gen (Video/Image) with Absolute Path fixes.
+    5. Publishing & Distribution.
+    """
     model = config['settings'].get('model_name')
     cat_conf = config['categories'][category]
     
-    log(f"\n🚀 INIT PIPELINE: {category} (High Quality Mode)")
+    log(f"\n🚀 INIT PIPELINE: {category} (Smart Analyst Mode 🧠)")
     
     # تحميل قاعدة المعرفة لتجنب التكرار
     recent_titles = get_recent_titles_string(limit=60)
-    
-    # إعداد محاولات البحث (لتغيير الكلمة المفتاحية اذا لم نجد مقالات)
-    max_global_retries = 6 
-    article_found = False
-    
-    selected_item = None
-    source_content = None
-    final_resolved_url = None
-    
-    # 🔄 الحلقة الكبرى: تدور وتغير الكلمات المفتاحية حتى تجد مقالاً مناسباً
-    for attempt in range(max_global_retries):
-        if article_found: break
-        
-        log(f"\n🔎 Attempt #{attempt+1} of {max_global_retries}")
-        
-        # 1. اختيار موضوع عشوائي (Keyword Rotation)
-        query_keywords = cat_conf.get('trending_focus', category)
-        current_topic = category # Default
-        
-        if "," in query_keywords:
-            topics = [t.strip() for t in query_keywords.split(',') if t.strip()]
-            # اختيار عشوائي لضمان التنوع في كل محاولة
-            current_topic = random.choice(topics)
-            log(f"   🎯 Targeted Search: '{current_topic}'")
-            # نضيف 'when:1d' لأخبار اليوم، أو 'when:3d' إذا أردت نطاق أوسع
-            rss_query = f"{current_topic} when:2d" 
-        else:
-            rss_query = f"{query_keywords} when:2d"
 
-        # 2. جلب RSS
-        rss_items = get_real_news_rss(rss_query.replace("when:2d","").strip(), category)
-        
+    # =====================================================
+    # STEP 0: SEO STRATEGY (THE BRAIN)
+    # =====================================================
+    log("   🧠 Consulting SEO Strategist for a winning keyword...")
+    
+    # طلب كلمة مفتاحية ذكية من الذكاء الاصطناعي بناءً على الفئة والتاريخ
+    seo_prompt = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today())
+    seo_plan = try_parse_json(generate_step(model, seo_prompt, "Step 0 (SEO Strategy)"), "SEO")
+    
+    target_keyword = ""
+    if seo_plan and 'target_keyword' in seo_plan:
+        target_keyword = seo_plan.get('target_keyword')
+        log(f"   🎯 Strategy Defined: Targeting keyword '{target_keyword}'")
+        log(f"   📝 Reasoning: {seo_plan.get('reasoning', 'No reasoning provided')}")
+    else:
+        # Fallback: في حال فشل الذكاء الاصطناعي، نعود للكلمات الموجودة في الإعدادات
+        target_keyword = cat_conf.get('trending_focus', category)
+        if "," in target_keyword:
+            target_keyword = random.choice([t.strip() for t in target_keyword.split(',')])
+        log(f"   ⚠️ SEO Step failed or timed out. Using fallback keyword: '{target_keyword}'")
+
+    # =====================================================
+    # STEP 1: MULTI-SOURCE RESEARCH (THE HUNTER)
+    # =====================================================
+    # البحث في أخبار جوجل عن الكلمة المفتاحية المحددة (آخر 3 أيام لضمان الحداثة ووفرة المصادر)
+    rss_query = f"{target_keyword} when:3d"
+    rss_items = get_real_news_rss(rss_query.replace("when:3d","").strip(), category)
+    
+    # محاولة ثانية بنطاق أوسع إذا لم نجد نتائج دقيقة
+    if not rss_items:
+        log("   ⚠️ No specific news found for this keyword. Retrying with broad category search...")
+        rss_items = get_real_news_rss(category, category)
         if not rss_items:
-            log("   ⚠️ No RSS items found for this keyword. Retrying next...")
-            continue
-            
-        # 3. حلقة فحص المقالات داخل RSS
-        for item in rss_items:
-            # فلترة التكرار
-            if item['title'][:20] in recent_titles: 
-                log(f"   ⏭️ Skipped duplicate: {item['title'][:30]}")
-                continue
-            
-            log(f"   📌 Checking RSS Item: {item['title'][:50]}...")
-            
-            # محاولة الفك والجلب
-            r_url, r_title, text = resolve_and_scrape(item['link'])
-            
-            # --- شرط الجودة (The Quality Check) ---
-            # 1. يجب أن يوجد نص
-            # 2. يجب أن يكون النص أطول من 1500 حرف (لضمان أنه مقال كامل وليس فيديو أو خبر قصير)
-            if text and len(text) >= 1500:
-                log(f"      ✅ High Quality Content Found! ({len(text)} chars)")
-                log(f"      ⚖️  Match Check:\n          RSS: {item['title']}\n          Pg : {r_title}")
-                
-                selected_item = item
-                selected_item['link'] = r_url # تحديث الرابط بالرابط الحقيقي
-                selected_item['real_title'] = r_title # حفظ العنوان الحقيقي للمقارنة لاحقاً
-                source_content = text
-                article_found = True
-                break # نخرج من حلقة المقالات
-            else:
-                current_len = len(text) if text else 0
-                log(f"      ⚠️ Content too short ({current_len} chars) or failed. Looking for better article...")
-                time.sleep(2) # راحة قصيرة
-        
-        if not article_found:
-            log("   ⚠️ None of the RSS items met the quality standards. Switching topic...")
-            time.sleep(3)
+            log("❌ FATAL: No RSS items found even after fallback. Aborting.")
+            return
 
-    # 4. إذا انتهت كل المحاولات ولم نجد شيئاً
-    if not selected_item or not source_content:
-        log("❌ FATAL: Could not find ANY high-quality article after multiple attempts.")
-        log("❌ Skipping this run to preserve quality.")
+    collected_sources = []
+    main_headline = ""
+    main_link = ""
+    
+    log(f"   🕵️‍♂️ Investigating multiple sources for: '{target_keyword}'...")
+    
+    # حلقة الفحص: نفحص أول 6 نتائج لنستخرج أفضل 3 منها
+    for item in rss_items[:6]:
+        # 1. فلترة التكرار (تجاهل ما تم نشره سابقاً)
+        if item['title'][:20] in recent_titles: 
+            log(f"      ⏭️ Skipped duplicate title: {item['title'][:30]}...")
+            continue
+        
+        # 2. فلترة المصدر المكرر (لا نأخذ مقالين من نفس الموقع)
+        if any(src['domain'] in item['link'] for src in collected_sources): 
+            continue
+
+        log(f"      📌 Checking Source: {item['title'][:40]}...")
+        
+        # محاولة فك الرابط وجلب المحتوى
+        r_url, r_title, text = resolve_and_scrape(item['link'])
+        
+        # 3. فلترة الجودة (The Quality Filter)
+        # نرفض المقالات القصيرة جداً (أقل من 800 حرف) لأنها لا تصلح لبناء محتوى دسم
+        if text and len(text) >= 800:
+            log(f"         ✅ Accepted Source! ({len(text)} chars).")
+            
+            domain = urllib.parse.urlparse(r_url).netloc
+            collected_sources.append({
+                "title": r_title,
+                "text": text,
+                "domain": domain,
+                "url": r_url,
+                "date": item['date']
+            })
+            
+            # نعتمد بيانات أول مصدر كبيانات أساسية (للعنوان والرابط)
+            if not main_headline:
+                main_headline = item['title']
+                main_link = item['link']
+            
+            # نكتفي بـ 3 مصادر قوية
+            if len(collected_sources) >= 3: 
+                log("      ✨ Collected sufficient data (3 robust sources). Proceeding to draft.")
+                break
+        else:
+            current_len = len(text) if text else 0
+            log(f"         ⚠️ Rejected (Weak/Short Content). Length: {current_len}")
+            time.sleep(1) # راحة لتجنب الحظر
+
+    # إذا لم ننجح في جمع أي مصدر صالح
+    if not collected_sources:
+        log("❌ FATAL: No valid high-quality sources found after filtering. Skipping execution.")
         return
 
-    # =======================================================
-    # B. DRAFTING PHASE (Now we are sure we have good content)
-    # =======================================================
-    log(f"\n✍️ Starting Writing Process for: {selected_item['title']}")
+    # =====================================================
+    # STEP 2: DRAFTING & SYNTHESIS (THE WRITER)
+    # =====================================================
+    log(f"\n✍️ Synthesizing Content from {len(collected_sources)} sources...")
     
-    # تحضير الـ Payload
+    # دمج النصوص المستخرجة في كتلة نصية واحدة منظمة
+    combined_text = ""
+    for i, src in enumerate(collected_sources):
+        combined_text += f"\n--- SOURCE {i+1}: {src['domain']} ---\nTitle: {src['title']}\nDate: {src['date']}\nCONTENT:\n{src['text'][:9000]}\n"
+
+    # تحضير الـ Payload للنموذج
     json_ctx = {
-        "rss_headline": selected_item['title'],
-        "resolved_headline": selected_item.get('real_title', ''),
-        "original_link": selected_item['link'],
-        "date": selected_item['date']
+        "rss_headline": main_headline, # العنوان المقترح من المصدر الأول
+        "keyword_focus": target_keyword,
+        "source_count": len(collected_sources),
+        "date": str(datetime.date.today())
     }
     
-    # دمج العنوانين للموديل ليفهم السياق أفضل
-    prefix = "*** FULL SOURCE TEXT (High Quality Scrape) ***"
-    payload = f"METADATA: {json.dumps(json_ctx)}\n\n{prefix}\n\n{source_content}"
+    # توجيه الموديل لاستخدام المصادر المتعددة
+    prefix = "*** MULTI-SOURCE RESEARCH DATA (SYNTHESIZE THIS) ***"
+    payload = f"METADATA: {json.dumps(json_ctx)}\n\n{prefix}\n{combined_text}"
     
-    # Step B
-    json_b = try_parse_json(generate_step(model, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Step B"), "B")
+    # توليد المسودة (Step B)
+    json_b = try_parse_json(generate_step(model, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Step B (Writer)"), "B")
     if not json_b: return
 
-    # Step C (SEO)
+    # تحسين السيو والتنسيق (Step C)
     kg_links = get_relevant_kg_for_linking(category)
     prompt_c = PROMPT_C_TEMPLATE.format(json_input=json.dumps(json_b), knowledge_graph=kg_links)
-    json_c = try_parse_json(generate_step(model, prompt_c, "Step C"), "C")
+    json_c = try_parse_json(generate_step(model, prompt_c, "Step C (SEO & Style)"), "C")
     if not json_c: return
 
-    # Step D (Audit)
+    # التدقيق وأنسنة النص (Step D)
     prompt_d = PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c))
-    json_d = try_parse_json(generate_step(model, prompt_d, "Step D"), "D")
+    json_d = try_parse_json(generate_step(model, prompt_d, "Step D (Humanizer)"), "D")
     if not json_d: return
 
-    # Step E (Publish)
+    # التنظيف النهائي للكود (Step E)
     prompt_e = PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d))
-    final = try_parse_json(generate_step(model, prompt_e, "Step E"), "E")
+    final = try_parse_json(generate_step(model, prompt_e, "Step E (Final Polish)"), "E")
+    
+    # في حال فشل الخطوة الأخيرة، نعود للخطوة السابقة
     if not final: final = json_d 
 
-    title = final.get('finalTitle', selected_item['title'])
+    # اعتماد العنوان النهائي
+    title = final.get('finalTitle', main_headline)
     
-    # =======================================================
-    # SOCIALS & VIDEO
-    # =======================================================
-    log("   🧠 Socials...")
+    # =====================================================
+    # STEP 3: MULTIMEDIA GENERATION (VIDEO & IMAGE)
+    # =====================================================
+    log("   🧠 Generating Multimedia Assets...")
+    
+    # 1. Social Metadata
     yt_meta = try_parse_json(generate_step(model, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta"))
-    # تأمين البيانات الافتراضية
-    if not yt_meta: yt_meta = {"title": title, "description": f"Read full story: {selected_item['link']}", "tags": []}
+    if not yt_meta: 
+        yt_meta = {"title": title, "description": f"Read full story: {main_link}", "tags": []}
     
     fb_dat = try_parse_json(generate_step(model, PROMPT_FACEBOOK_HOOK.format(title=title, category=category), "FB Hook"))
     fb_cap = fb_dat.get('facebook', title) if fb_dat else title
 
-    # Video Gen
+    # 2. Video Generation (With Absolute Path Fix)
     vid_html, vid_main, vid_short, fb_path = "", None, None, None
+    
     try:
-        # استخراج ملخص نصي نظيف للسكربت
-        summ = re.sub('<[^<]+?>','', final.get('finalContent',''))[:2000]
+        # إصلاح المسار: استخدام مسار مطلق (Absolute Path) لتجنب أخطاء ffmpeg
+        base_output_dir = os.path.abspath("output")
+        os.makedirs(base_output_dir, exist_ok=True) # إنشاء المجلد إذا لم يكن موجوداً
         
-        # التأكد من تمرير النص الكامل لتوليد سكريبت جيد
-        script = try_parse_json(generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Script"))
+        # استخراج ملخص للنص لعمل السكربت
+        summ = re.sub('<[^<]+?>','', final.get('finalContent',''))[:2500]
+        
+        # توليد السكربت
+        script = try_parse_json(generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script"))
         
         if script:
-            os.makedirs("output", exist_ok=True)
+            timestamp = int(time.time())
             rr = video_renderer.VideoRenderer()
-            # فيديو عرضي لليوتيوب
-            pm = rr.render_video(script, title, f"output/main_{int(time.time())}.mp4")
-            if pm:
-                desc = f"{yt_meta.get('description','')}\n\n🚀 Article Link Coming Soon.\n\n#{category.replace(' ','')} #AI"
-                vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
-                if vid_main:
-                    vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
             
-            # فيديو طولي (Reels/Shorts)
-            rs = video_renderer.VideoRenderer(width=1080, height=1920)
-            ps = rs.render_video(script, title, f"output/short_{int(time.time())}.mp4")
-            if ps:
-                fb_path = ps
-                vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
-    except Exception as e: log(f"⚠️ Video Error: {e}")
+            # --- Main Video (Landscape) ---
+            main_video_filename = f"main_{timestamp}.mp4"
+            main_video_path = os.path.join(base_output_dir, main_video_filename)
+            
+            log(f"      🎬 Rendering Main Video to: {main_video_path}")
+            pm = rr.render_video(script, title, main_video_path)
+            
+            if pm and os.path.exists(pm):
+                # رفع الفيديو لليوتيوب
+                desc = f"{yt_meta.get('description','')}\n\n🚀 Full Article Link Coming Soon.\n\n#{category.replace(' ','')} #AI #TechNews"
+                vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
+                
+                if vid_main:
+                    # تضمين الفيديو في المقال
+                    vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
+            else:
+                log("      ⚠️ Main video render returned None or file missing.")
 
-    # =======================================================
-    # PUBLISHING
-    # =======================================================
-    body = ARTICLE_STYLE
+            # --- Short Video (Portrait/Reel) ---
+            rs = video_renderer.VideoRenderer(width=1080, height=1920)
+            short_video_filename = f"short_{timestamp}.mp4"
+            short_video_path = os.path.join(base_output_dir, short_video_filename)
+            
+            log(f"      🎬 Rendering Short Video to: {short_video_path}")
+            ps = rs.render_video(script, title, short_video_path)
+            
+            if ps and os.path.exists(ps):
+                fb_path = ps # نحتفظ بالمسار للفيسبوك
+                # رفع الشورت لليوتيوب
+                vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
+            else:
+                log("      ⚠️ Short video render returned None or file missing.")
+                
+    except Exception as e: 
+        log(f"⚠️ Video Generation Logic Error: {e}")
+        # طباعة تتبع الخطأ في الكونسول للمساعدة في التصحيح
+        import traceback
+        traceback.print_exc()
+
+    # 3. Image Generation
     img = generate_and_upload_image(final.get('imageGenPrompt', title), final.get('imageOverlayText', 'News'))
-    if img: body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img}"><img src="{img}" alt="{final.get("seo",{}).get("imageAltText","News")}" /></a></div>'
+
+    # =====================================================
+    # STEP 4: PUBLISHING
+    # =====================================================
+    log("   🚀 Publishing to Blogger...")
     
+    # تجميع جسم المقال (HTML)
+    body = ARTICLE_STYLE # الستايلات
+    
+    # إضافة الصورة البارزة
+    if img: 
+        alt_text = final.get("seo",{}).get("imageAltText","Tech News")
+        body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img}"><img src="{img}" alt="{alt_text}" /></a></div>'
+    
+    # إضافة الفيديو (إذا وجد)
     if vid_html: body += vid_html
+    
+    # إضافة المحتوى النصي
     body += final.get('finalContent', '')
     
+    # إضافة Schema (JSON-LD)
     if 'schemaMarkup' in final:
-        try: body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
+        try: 
+            body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
         except: pass
     
+    # النشر الفعلي
     url = publish_post(title, body, [category])
     
+    # =====================================================
+    # STEP 5: DISTRIBUTION & UPDATES
+    # =====================================================
     if url:
+        # تحديث قاعدة المعرفة
         update_kg(title, url, category)
-        # تحديث الوصف بالرابط
-        upd_desc = f"{yt_meta.get('description','')}\n\n👇 FULL STORY:\n{url}\n\n#AI #TechNews"
+        
+        # تحديث وصف فيديوهات اليوتيوب بالرابط الجديد
+        upd_desc = f"{yt_meta.get('description','')}\n\n👇 READ THE FULL STORY HERE:\n{url}\n\n#AI #Technology #{category.replace(' ','')}"
         if vid_main: youtube_manager.update_video_description(vid_main, upd_desc)
         if vid_short: youtube_manager.update_video_description(vid_short, upd_desc)
         
         try:
-            if fb_path: 
-                # نشر الريلز مع الهاشتاغات والرابط
-                fb_full_text = f"{fb_cap}\n\nRead more: {url}\n\n#AI #Technology #{category.replace(' ','')}"
+            # النشر على فيسبوك
+            log("   📢 Distributing to Social Media...")
+            
+            # الخيار الأول: نشر الفيديو القصير (Reel)
+            if fb_path and os.path.exists(fb_path): 
+                fb_full_text = f"{fb_cap}\n\nRead more: {url}\n\n#AI #{category.replace(' ','')}"
                 social_manager.post_reel_to_facebook(fb_path, fb_full_text)
-                time.sleep(15)
+                time.sleep(15) # انتظار للمعالجة
+            
+            # الخيار الثاني: نشر الصورة مع الرابط (إذا لم ينجح الفيديو)
             elif img:
                 social_manager.distribute_content(f"{fb_cap}\n\n👇 Read Article:\n{url}", url, img)
-        except Exception as e: log(f"Social Post Error: {e}")
+                
+        except Exception as e: 
+            log(f"   ⚠️ Social Distribution Error: {e}")
+# ==============================================================================
+# 5. CORE PIPELINE LOGIC (OFFLINE DECODER + JINA)
+# ==============================================================================
+
 
 # ==============================================================================
 # 7. MAIN
