@@ -104,7 +104,7 @@ Your task is to **SYNTHESIZE** them into one Master Guide.
 **REQUIRED JSON OUTPUT STRUCTURE:**
 You must return a JSON object with EXACTLY these 5 keys. Do NOT merge them.
 
-1. "headline": "A Benefit-Driven Title. (e.g., 'When Will Robots Finally Clean Your House?' NOT 'The Future of Humanoid Robotics')."
+1. "headline":  "SEO-Optimized Title. **CRITICAL RULE:** A Benefit-Driven Title،The Title MUST start with the specific Product or Company Name (e.g., 'Microsoft Paint Update: How to...' NOT 'Boost Your Creativity...'). It must be specific, not generic."
 2. "hook": "The opening paragraph (HTML <p>). It must be very simple, assuring the reader they will understand. Explain why this topic is trending right now."
 3. "article_body": "The main content HTML. Must include: 
    - <h2>What's Happening</h2> (Detailed breakdown, 300+ words)
@@ -134,7 +134,8 @@ You must return a JSON object with EXACTLY these 5 keys. Do NOT merge them.
 PROMPT_C_TEMPLATE = """
 C: Polish the content for a high-end blog.
 INPUT JSON: {json_input}
-KG LINKS: {knowledge_graph}
+KG LINKS (Previous Articles): {knowledge_graph} 
+
 
 **CONTEXT:**
 The input JSON contains separate parts of an article: 'headline', 'hook', 'article_body', and 'verdict'. It also contains a list of 'sources_data'.
@@ -155,9 +156,11 @@ The input JSON contains separate parts of an article: 'headline', 'hook', 'artic
    - Add `<div class="faq-section">` at the very end.
    - Questions must be basic: "Is it free?", "Is it safe?", "When can I get it?".
 
-4. **Internal Linking:** 
-   - Link to other topics naturally using the KG LINKS provided.
-
+4. **Smart Internal Linking (CRITICAL):**
+   - Review the 'KG LINKS' list provided.
+   - If (and ONLY if) a previous article is strictly relevant to a keyword in the text, link to it.
+   - Use descriptive Anchor Text (e.g., link on "ChatGPT features", not "Click here").
+   - If no relevant links are found, do not force them.
 5. **Schema:** 
    - Use `Article` or `TechArticle` schema.
 
