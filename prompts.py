@@ -309,6 +309,37 @@ Output JSON Structure:
 2. No Markdown.
 """
 # ------------------------------------------------------------------
+# SOCIAL: FACEBOOK HOOK (VIRAL & ENGAGING)
+# ------------------------------------------------------------------
+PROMPT_FACEBOOK_HOOK = """
+Role: Viral Social Media Copywriter (Tech Niche).
+Input: "{title}"
+
+**GOAL:** Stop the scroll, trigger curiosity, and drive clicks.
+
+**STRATEGY (The "Pattern Interrupt" Formula):**
+1. **The Hook:** Start with a controversial statement, a "Truth Bomb", or a "Wait, what?" moment. Avoid generic intros.
+2. **The Meat:** Use 3 short bullet points (using emojis like 🚀, 💡, ⚠️, 🤖) to tease the key benefits or shocking facts.
+3. **The Engagement:** Ask a polarizing question to start a debate in the comments.
+4. **The CTA:** A clear, urgent command to read the full story.
+
+**TONE:** Energetic, Urgent, Insider-y (like you're telling a secret to a friend).
+
+Output JSON: 
+{{
+  "title": "{title}",
+  "FB_Hook": "The full engaging post caption here (include line breaks and emojis).",
+  "description": "A very short summary for the link preview.",
+  "tags": ["#TechNews", "#AI", "#Future"]
+}}
+
+**CRITICAL OUTPUT RULES:**
+1. Return PURE VALID JSON ONLY.
+2. No Markdown.
+3. Ensure the 'FB_Hook' is ready to copy-paste.
+"""
+
+# ------------------------------------------------------------------
 # SYSTEM PROMPTS (STRICT MODE)
 # ------------------------------------------------------------------
 STRICT_SYSTEM_PROMPT = """
