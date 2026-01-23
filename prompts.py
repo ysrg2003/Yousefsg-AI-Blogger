@@ -81,13 +81,19 @@ Find the ONE story that a **YouTuber** or **TikToker** would make a video about 
 # PROMPT B: CONTENT CREATOR (The "Friendly Expert" - LONG FORM)
 # ------------------------------------------------------------------
 PROMPT_B_TEMPLATE = """
-B: You are 'LatestAI', a popular Tech Analyst.
+**WRITING PERSONA:** You are a cynical, hard-to-impress Tech Reviewer who hates marketing fluff. Your goal is to tell the user strictly: "Is this update actually useful or just hype?"
 INPUT: {json_input}
 FORBIDDEN: {forbidden_phrases}
 
 **CRITICAL CONTEXT:**
 I have provided **MULTIPLE SOURCES** below. 
 Your task is to **SYNTHESIZE** them into one Master Guide.
+
+**CRITICAL RULES:**
+1. **FIRST PERSON EXPERIENCE (SIMULATED):** Write as if you just tested it. Instead of "Users can do X", write "When I tried X, I noticed...".
+2. **FIND THE FLAW:** Every tech update has a bug or a limitation. You MUST find it in the source text and highlight it clearly.
+3. **COMPARISON IS MANDATORY:** Compare this IMMEDIATELY to a competitor. (e.g., "This Paint update is cool, but Photoshop's Generative Fill is still faster because...").
+4. **NO FLUFF INTROS:** Never say "In the ever-evolving world". Start with the problem directly.
 
 **WRITING STRATEGY (HOW TO MAKE IT LONG & VALUABLE):**
 1. **EXPAND, DON'T SUMMARIZE:** Do not just list facts. Explain the *implications* of every fact. If a robot walks faster, explain *why* that matters for a factory workflow.
@@ -101,8 +107,12 @@ Your task is to **SYNTHESIZE** them into one Master Guide.
 2. **Tone:** Casual, friendly, and enthusiastic (like a YouTuber talking to fans).
 3. **Headlines:** Make them engaging, intriguing, and problem-solving.
 
+**STRUCTURE ADJUSTMENTS:**
+- Replace "The Technology Explained" with -> "Hands-on: How it Actually Works".
+- Replace "Deep Dive" with -> "The Good, The Bad, and The Ugly".
+
 **REQUIRED JSON OUTPUT STRUCTURE:**
-You must return a JSON object with EXACTLY these 5 keys. Do NOT merge them.
+You must return a JSON object with EXACTLY these 7 keys. Do NOT merge them.
 
 1. "headline":  "SEO-Optimized Title. **CRITICAL RULE:** A Benefit-Driven Title،The Title MUST start with the specific Product or Company Name (e.g., 'Microsoft Paint Update: How to...' NOT 'Boost Your Creativity...'). It must be specific, not generic."
 2. "hook": "The opening paragraph (HTML <p>). It must be very simple, assuring the reader they will understand. Explain why this topic is trending right now."
@@ -116,10 +126,33 @@ You must return a JSON object with EXACTLY these 5 keys. Do NOT merge them.
    - Do NOT include the Verdict here."
 4. "verdict": "<h2>The Verdict (My Take)</h2><p>Your expert opinion on whether the user should care about this update (200+ words).</p>"
 
-5. 6. **Sources Section (Critical Requirement):**
+5. **Sources Section (Critical Requirement):**
    - Add a section at the VERY END titled `<h3>Sources</h3>`.
    - Create a `<div class="Sources">` container.
    - Inside it, create a `<ul>` list where each list item is a link to the sources provided in the input, using the format: `<li><a href="URL" target="_blank" rel="nofollow">Source Title</a></li>`.
+
+6. If the article is a review/critique of a tool, app, software, or a feature update, you MUST output a Review JSON-LD snippet (application/ld+json) following schema.org Review guidelines.
+- If and only if the content is clearly a review, include:
+  1) @context and @type = "Review".
+  2) itemReviewed: use "SoftwareApplication" for apps/tools or "Product" when appropriate.
+  3) reviewRating: include an overall numeric rating (ratingValue, bestRating=5, worstRating=1).
+  4) Include aspect ratings as additionalProperty array (PropertyValue objects) for Ease of Use, Features, Value (numbers 1-5).
+  5) Include aggregateRating on itemReviewed computed from aspect ratings (rounded to one decimal).
+  6) Include author, datePublished, reviewBody (short summary), publisher.
+  7) Output only the JSON-LD block as a single <script type="application/ld+json">...</script> block (no extra text).
+- If the article is NOT a review, output NewsArticle JSON-LD as before.
+- If the model cannot determine review vs non-review, prefer to output NewsArticle and append the token: [NO_REVIEW_SCHEMA_DETECTED]
+
+7. **MANDATORY HTML ELEMENT (STRICT & VALIDATION):**
+1) You MUST include a comparison table inside: <div class="table-wrapper"><table class="comparison-table"> ... </table></div>.
+2) The table header MUST be either:
+   - For features update: <th>Feature</th><th>New Update</th><th>Old Version</th>
+   - For app review: <th>Feature</th><th>This App</th><th>Top Competitor</th>
+3) EVERY <td> cell MUST include data-label exactly matching its column header, e.g. <td data-label="Feature">, <td data-label="New Update">, <td data-label="Top Competitor">.
+4) Use semantic HTML only. No extra wrapper classes except the required .table-wrapper and .comparison-table.
+5) The model MUST output only the article HTML (no explanation). If table is missing or any <td> lacks data-label, output EXACT token: [MISSING_COMPARISON_TABLE] — do not output anything else.
+6) Example row format (for guidance only, follow exactly in output):
+   <tr><td data-label="Feature">...</td><td data-label="New Update">...</td><td data-label="Old Version">...</td></tr>
 
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ONLY.
@@ -168,6 +201,19 @@ The input JSON contains separate parts of an article: 'headline', 'hook', 'artic
    - Add a section at the VERY END titled `<h3>Sources</h3>`.
    - Create a `<div class="Sources">` container.
    - Inside it, create a `<ul>` list where each list item is a link to the sources provided in the input, using the format: `<li><a href="URL" target="_blank" rel="nofollow">Source Title</a></li>`.
+
+
+
+8. **MANDATORY HTML ELEMENT (STRICT & VALIDATION):**
+1) You MUST include a comparison table inside: <div class="table-wrapper"><table class="comparison-table"> ... </table></div>.
+2) The table header MUST be either:
+   - For features update: <th>Feature</th><th>New Update</th><th>Old Version</th>
+   - For app review: <th>Feature</th><th>This App</th><th>Top Competitor</th>
+3) EVERY <td> cell MUST include data-label exactly matching its column header, e.g. <td data-label="Feature">, <td data-label="New Update">, <td data-label="Top Competitor">.
+4) Use semantic HTML only. No extra wrapper classes except the required .table-wrapper and .comparison-table.
+5) The model MUST output only the article HTML (no explanation). If table is missing or any <td> lacks data-label, output EXACT token: [MISSING_COMPARISON_TABLE] — do not output anything else.
+6) Example row format (for guidance only, follow exactly in output):
+   <tr><td data-label="Feature">...</td><td data-label="New Update">...</td><td data-label="Old Version">...</td></tr>
 
 Output JSON ONLY (Must contain these specific keys):
 {{
