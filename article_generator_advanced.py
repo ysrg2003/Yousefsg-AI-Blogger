@@ -1111,8 +1111,7 @@ def run_pipeline(category, config, mode="trending"):
                     "source_image": og_image  # <-- نحفظ رابط الصورة هنا
                 })
                 
-                if not main_headline:
-                    # ...
+                
                 
                 if not main_headline:
                     main_headline = item['title']
