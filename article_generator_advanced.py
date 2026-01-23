@@ -41,6 +41,7 @@ from tenacity import (
 )
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from io import BytesIO
+from github import Github, InputGitTreeElement # تأكد من وجود هذا الاستيراد
 from prompts import *
 
 # ==============================================================================
