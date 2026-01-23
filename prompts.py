@@ -302,6 +302,9 @@ Input JSON: {json_input}
    - We need to maintain the article length. Only delete if it is strictly a boring stock market prediction table.
    - Ensure the tone feels like a conversation, not a lecture.
 5. **Formatting:** Ensure the `takeaways-box`, `toc-box` and `Sources` classes are preserved.
+6**THE "WHO CARES?" TEST:**
+Scan every paragraph. If a paragraph talks about "Knorex" or a specific company's internal strategy, DELETE IT or REWRITE IT to answer: "How does this affect a student or a freelancer?".
+- Change "Knorex CFO argues that..." to -> "Experts are warning that..." (Remove the obscure company name).
 
 **OUTPUT JSON STRUCTURE (Do not change keys):**
 {{
