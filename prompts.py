@@ -39,7 +39,12 @@ PROMPT_A_TRENDING = """
 A: You are a Viral Content Strategist for a Tech Blog.
 INPUT RSS DATA: {rss_data}
 SECTION: {section_focus}
-IGNORE: {recent_titles}
+IGNORE: (Topics we ALREADY covered): {recent_titles}
+
+**STRICT DEDUPLICATION RULES:**
+1. **CHECK THE IGNORE LIST FIRST:** If a story in the RSS is about the same underlying topic as anything in the IGNORE LIST, **SKIP IT IMMEDIATELY**.
+2. **SEMANTIC MATCHING:** "Windows Notepad AI" is the SAME as "Microsoft Updates Windows Apps". Do not select it if it's already covered.
+3. **FIND SOMETHING FRESH:** Look for a different story, even if it's slightly less "breaking news", to avoid repetition.
 
 **STRICT EXCLUSION CRITERIA (IGNORE THESE):**
 1. **Corporate News:** Stock prices, quarterly earnings, lawsuits, CEO changes, market cap.
@@ -65,7 +70,7 @@ Find the ONE story that a **YouTuber** or **TikToker** would make a video about 
 }}
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ONLY.
-2. No Markdown (```json).
+2. No Markdown (```json) ,(```).
 3. No conversational filler.
 """
 
