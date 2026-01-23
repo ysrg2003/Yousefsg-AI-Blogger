@@ -629,11 +629,32 @@ def load_kg():
     except: pass
     return []
 
-def get_recent_titles_string(limit=50):
+def get_recent_titles_string(category=None, limit=100):
+    """
+    تقرأ ملف knowledge_graph.json وتعيد قائمة بالعناوين السابقة.
+    التحسين: تقوم بفلترة العناوين حسب الفئة الحالية لزيادة دقة منع التكرار.
+    """
     kg = load_kg()
-    if not kg: return "None"
-    return ", ".join([i.get('title','') for i in kg[-limit:]])
+    if not kg: return "No previous articles found."
+    
+    # تصفية النتائج: نأخذ فقط المقالات التي تنتمي لنفس الفئة الحالية
+    # أو نأخذ الكل إذا لم نحدد فئة
+    if category:
+        relevant_items = [i for i in kg if i.get('section') == category]
+    else:
+        relevant_items = kg
 
+    # نأخذ آخر 'limit' عنصر (الأحدث)
+    recent_items = relevant_items[-limit:]
+    
+    # ندمجها في نص واحد مفصول بـ " | " ليسهل على الموديل قراءته
+    titles = [f"- {i.get('title','Unknown')}" for i in recent_items]
+    
+    if not titles:
+        return "No previous articles in this category."
+        
+    return "\n".join(titles)
+    
 def get_relevant_kg_for_linking(category, limit=60):
     kg = load_kg()
     links = [{"title":i['title'],"url":i['url']} for i in kg if i.get('section')==category][:limit]
