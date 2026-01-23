@@ -233,7 +233,7 @@ Task: Output the exact same JSON, but ensure it is syntactically correct.
 # ------------------------------------------------------------------
 
 # ------------------------------------------------------------------
-# SOCIAL: VIDEO SCRIPT (FIXED KEYS)
+# SOCIAL: VIDEO SCRIPT (FIXED: FORCES RAW LIST)
 # ------------------------------------------------------------------
 PROMPT_VIDEO_SCRIPT = """
 Role: Scriptwriter for Viral Tech Shorts.
@@ -248,44 +248,47 @@ Characters:
 1. You MUST use exactly these keys: "speaker", "type", "text".
 2. "type" must be either "send" (Right side) or "receive" (Left side).
 3. "text" is the dialogue.
-4. The sentences must be short, and it's okay for the same person to have more than one message under each other.
+4. Keep sentences punchy and short.
 
-Example Output:
+**OUTPUT FORMAT (VERY IMPORTANT):**
+- Return a **Top-Level JSON Array** (List).
+- **DO NOT** create a root object (like `{{"script": [...]}}`).
+- The output must START with `[` and END with `]`.
+
+Example of CORRECT Output:
 [
-  {{"speaker": "User", "type": "receive", "text": "Wait, did you see this update?"}},
-  {{"speaker": "Pro", "type": "send", "text": "Yes! It's actually insane. Here is why..."}}
+  {{"speaker": "User", "type": "receive", "text": "Wait, is this real?"}},
+  {{"speaker": "Pro", "type": "send", "text": "Yes! It changed everything."}}
 ]
 
+Example of WRONG Output (DO NOT DO THIS):
+{{
+  "script": [ ... ] 
+}}
+
 **CRITICAL OUTPUT RULES:**
-1. Return PURE VALID JSON ARRAY ONLY ( [ ... ] ).
+1. Return PURE VALID JSON ARRAY ONLY.
 2. No Markdown.
 """
 
+# ------------------------------------------------------------------
+# SOCIAL: YOUTUBE METADATA
+# ------------------------------------------------------------------
 PROMPT_YOUTUBE_METADATA = """
 Role: YouTube Expert.
 Input: {draft_title}
 
-Output JSON: {{"title": "...", "description": "...", "tags": [...]}}
+Task: Write high-CTR metadata for this video.
+
+Output JSON Structure:
+{{
+  "title": "Clickable Title (under 100 chars)",
+  "description": "First 2 lines hook the viewer + SEO keywords.",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+}}
 
 **CRITICAL OUTPUT RULES:**
-1. Return PURE VALID JSON ONLY.
-2. No Markdown.
-"""
-
-PROMPT_FACEBOOK_HOOK = """
-Role: Community Manager.
-Input: {title}
-
-**Strategy:** 
-- Start with a question.
-- "Tag a friend who needs this".
-- Keep it under 280 chars.
-
-Output JSON: {{"title": "...", "FB_Hook": "...", "description": "...", "tags": [...]}}
-
-
-**CRITICAL OUTPUT RULES:**
-1. Return PURE VALID JSON ONLY.
+1. Return PURE VALID JSON OBJECT ONLY.
 2. No Markdown.
 """
 # ------------------------------------------------------------------
