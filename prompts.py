@@ -75,7 +75,7 @@ Find the ONE story that a **YouTuber** or **TikToker** would make a video about 
 """
 
 # ------------------------------------------------------------------
-# PROMPT B: CONTENT CREATOR (The "Friendly Expert")
+# PROMPT B: CONTENT CREATOR (The "Friendly Expert" - LONG FORM)
 # ------------------------------------------------------------------
 PROMPT_B_TEMPLATE = """
 B: You are 'LatestAI', a popular Tech Analyst.
@@ -85,24 +85,38 @@ FORBIDDEN: {forbidden_phrases}
 **CRITICAL CONTEXT:**
 I have provided **MULTIPLE SOURCES** below. 
 Your task is to **SYNTHESIZE** them into one Master Guide.
-- Cross-reference facts.
-- If sources agree, confirm it as fact.
-- Use the combined data to form a strong "Verdict".
+
+**WRITING STRATEGY (HOW TO MAKE IT LONG & VALUABLE):**
+1. **EXPAND, DON'T SUMMARIZE:** Do not just list facts. Explain the *implications* of every fact. If a robot walks faster, explain *why* that matters for a factory workflow.
+2. **REPLACE FINANCE WITH UTILITY:** When you see "Stock went up" or "Funding received", ignore the numbers but ask: "What product caused this?" and write 3 paragraphs about that product or the company's stability.
+3. **ADD EXAMPLES:** Whenever you explain a feature, add a "Real World Scenario" example.
+4. **EXPLAIN THE TECH:** If sources are short, use your general knowledge to explain the background technology in depth (e.g., if the topic is humanoid robots, explain how computer vision works simply).
+5. **Target Length:** 1800+ words. Dig deep.
 
 **WRITING RULES (SIMPLICITY IS KING):**
-1. **NO JARGON:** If you use a word like "Teleoperation", "Ontology", or "Latency", you MUST explain it immediately in simple words (e.g., "Teleoperation, which basically means controlling the robot like a remote-control car...").
-2. **IGNORE FINANCE:** Do NOT mention "Series A", "Funding rounds", "Investors", or "Market Valuation". The reader does not care about money; they care about the product.
-3. **FOCUS ON BENEFITS:** Instead of saying "It has 50Nm torque", say "It is strong enough to carry your groceries".
-4. **Tone:** Casual, friendly, and enthusiastic (like a YouTuber talking to fans).
-5. **Headlines:** Make them engaging, intriguing, and problem-solving.
+1. **NO JARGON:** If you use a word like "Teleoperation", "Ontology", or "Latency", you MUST explain it immediately in simple words.
+2. **Tone:** Casual, friendly, and enthusiastic (like a YouTuber talking to fans).
+3. **Headlines:** Make them engaging, intriguing, and problem-solving.
 
 **REQUIRED JSON OUTPUT STRUCTURE:**
-You must return a JSON object with EXACTLY these 4 keys. Do NOT merge them.
+You must return a JSON object with EXACTLY these 5 keys. Do NOT merge them.
 
 1. "headline": "A Benefit-Driven Title. (e.g., 'When Will Robots Finally Clean Your House?' NOT 'The Future of Humanoid Robotics')."
 2. "hook": "The opening paragraph (HTML <p>). It must be very simple, assuring the reader they will understand. Explain why this topic is trending right now."
-3. "article_body": "The main content HTML. Must include: <h2>What's Happening</h2>, <ul>Quick Summary</ul>, [[TOC_PLACEHOLDER]], <h2>Deep Dive</h2> (Detailed analysis of FEATURES not FINANCES). Use <h3> for sub-sections. Do NOT include the Verdict here."
-4. "verdict": "<h2>The Verdict (My Take)</h2><p>Your expert opinion on whether the user should care about this update.</p>"
+3. "article_body": "The main content HTML. Must include: 
+   - <h2>What's Happening</h2> (Detailed breakdown, 300+ words)
+   - <ul>Quick Summary</ul>
+   - [[TOC_PLACEHOLDER]]
+   - <h2>The Technology Explained</h2> (Explain the 'How it works' simply for 400+ words. Assume the reader is a beginner)
+   - <h2>Deep Dive & Features</h2> (Detailed analysis of features, 500+ words). 
+   - Use <h3> for sub-sections. 
+   - Do NOT include the Verdict here."
+4. "verdict": "<h2>The Verdict (My Take)</h2><p>Your expert opinion on whether the user should care about this update (200+ words).</p>"
+
+5. 6. **Sources Section (Critical Requirement):**
+   - Add a section at the VERY END titled `<h3>Sources</h3>`.
+   - Create a `<div class="Sources">` container.
+   - Inside it, create a `<ul>` list where each list item is a link to the sources provided in the input, using the format: `<li><a href="URL" target="_blank" rel="nofollow">Source Title</a></li>`.
 
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ONLY.
@@ -170,8 +184,10 @@ Output JSON ONLY (Must contain these specific keys):
 3. Do NOT truncate content.
 """
 
+
+
 # ------------------------------------------------------------------
-# PROMPT D: HUMANIZER (The "Vibe Check")
+# PROMPT D: HUMANIZER (The "Vibe Check" - NO DELETION)
 # ------------------------------------------------------------------
 PROMPT_D_TEMPLATE = """
 PROMPT D — Final Polish
@@ -187,9 +203,10 @@ Input JSON: {json_input}
    - Change "Facilitate" -> "Help".
    - Change "Furthermore" -> "Also".
    - Change "In conclusion" -> "The Bottom Line".
-4. **Simplification Filter:**
+4. **The "Boring" Filter (REWRITE, DON'T DELETE):**
    - Scan for complex words (e.g., "Paradigm", "Infrastructure", "Ecosystem"). Replace them with simple alternatives (e.g., "Model", "System", "World").
-   - If a paragraph talks *only* about company investments, funding series, or market cap, DELETE IT.
+ - If a paragraph talks about "Series A funding", "Investors", or "Market Cap", **REWRITE IT** to talk about "Resource Growth", "Company Stability", or "Future Plans" instead of deleting it.
+   - We need to maintain the article length. Only delete if it is strictly a boring stock market prediction table.
    - Ensure the tone feels like a conversation, not a lecture.
 5. **Formatting:** Ensure the `takeaways-box`, `toc-box` and `Sources` classes are preserved.
 
@@ -291,39 +308,6 @@ Output JSON Structure:
 1. Return PURE VALID JSON OBJECT ONLY.
 2. No Markdown.
 """
-
-
-# ------------------------------------------------------------------
-# SOCIAL: FACEBOOK HOOK (VIRAL & ENGAGING)
-# ------------------------------------------------------------------
-PROMPT_FACEBOOK_HOOK = """
-Role: Viral Social Media Copywriter (Tech Niche).
-Input: "{title}"
-
-**GOAL:** Stop the scroll, trigger curiosity, and drive clicks.
-
-**STRATEGY (The "Pattern Interrupt" Formula):**
-1. **The Hook:** Start with a controversial statement, a "Truth Bomb", or a "Wait, what?" moment. Avoid generic intros.
-2. **The Meat:** Use 3 short bullet points (using emojis like 🚀, 💡, ⚠️, 🤖) to tease the key benefits or shocking facts.
-3. **The Engagement:** Ask a polarizing question to start a debate in the comments.
-4. **The CTA:** A clear, urgent command to read the full story.
-
-**TONE:** Energetic, Urgent, Insider-y (like you're telling a secret to a friend).
-
-Output JSON: 
-{{
-  "title": "{title}",
-  "FB_Hook": "The full engaging post caption here (include line breaks and emojis).",
-  "description": "A very short summary for the link preview.",
-  "tags": ["#TechNews", "#AI", "#Future"]
-}}
-
-**CRITICAL OUTPUT RULES:**
-1. Return PURE VALID JSON ONLY.
-2. No Markdown.
-3. Ensure the 'FB_Hook' is ready to copy-paste.
-"""
-
 # ------------------------------------------------------------------
 # SYSTEM PROMPTS (STRICT MODE)
 # ------------------------------------------------------------------
