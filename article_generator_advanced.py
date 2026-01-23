@@ -71,6 +71,12 @@ FORBIDDEN_PHRASES = [
     "realm of"
 ]
 
+BORING_KEYWORDS = [
+    "CFO", "CEO", "Quarterly", "Earnings", "Report", "Market Cap", 
+    "Dividend", "Shareholders", "Acquisition", "Merger", "Appointment", 
+    "Executive", "Knorex", "Partner", "Agreement", "B2B", "Enterprise"
+]
+
 def log(msg):
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
     print(f"[{timestamp}] {msg}", flush=True)
@@ -904,6 +910,12 @@ def run_pipeline(category, config, mode="trending"):
     
     for item in rss_items[:6]:
         if item['title'][:20] in recent_titles: continue
+            # --- NEW BLOCKER ---
+        # إذا كان العنوان يحتوي على كلمات مملة، تجاوزه فوراً
+        if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
+            log(f"         ⛔ Skipped Boring Corporate Topic: {item['title']}")
+            continue
+        # -------------------
         if any(src['domain'] in item['link'] for src in collected_sources): continue
 
         log(f"      📌 Checking Source: {item['title'][:40]}...")
