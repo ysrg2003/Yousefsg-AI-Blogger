@@ -949,8 +949,8 @@ def run_pipeline(category, config, mode="trending"):
         traceback.print_exc()
         return
 
-   # =====================================================
-    # STEP 3: MULTIMEDIA GENERATION (FIXED & ROBUST)
+# =====================================================
+    # STEP 3: MULTIMEDIA GENERATION (SELF-HEALING)
     # =====================================================
     log("   🧠 Generating Multimedia Assets...")
     
@@ -982,28 +982,81 @@ def run_pipeline(category, config, mode="trending"):
         # 2. Image Generation
         img_url = generate_and_upload_image(img_prompt, img_overlay)
 
-        # 3. Video Generation (Smart Fix)
+        # 3. Video Generation (With Active Retry Loop)
         summ_clean = re.sub('<[^<]+?>','', content_html)[:2500]
         
-        script_raw = generate_step_strict(
-            model_name, 
-            PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean), 
-            "Video Script"
-        )
+        script_json = None
         
-        # 🛠️ إصلاح ذكي للسكربت (Script Extractor)
-        script_json = []
-        if isinstance(script_raw, list):
-            script_json = script_raw
-        elif isinstance(script_raw, dict):
-            # محاولة البحث عن القائمة داخل القيم
-            for key, value in script_raw.items():
-                if isinstance(value, list):
-                    script_json = value
-                    break
+        # نحدد البرومبت الأساسي
+        current_script_prompt = PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean)
         
-        # التأكد من أن القائمة ليست فارغة وتحتوي على مفاتيح صحيحة
-        if script_json and len(script_json) > 0 and 'text' in script_json[0]:
+        # حلقة المحاولة (3 محاولات قصوى)
+        for attempt in range(1, 4):
+            log(f"      🎬 Generating Script (Attempt {attempt}/3)...")
+            
+            try:
+                # طلب التوليد
+                raw_result = generate_step_strict(
+                    model_name, 
+                    current_script_prompt, 
+                    f"Video Script (Att {attempt})"
+                )
+                
+                # --- التحقق والاستخراج ---
+                
+                # الحالة 1: نجاح مباشر (قائمة)
+                if isinstance(raw_result, list) and len(raw_result) > 0:
+                    script_json = raw_result
+                    log("      ✅ Valid Script List received.")
+                    break # خروج من الحلقة
+                
+                # الحالة 2: النتيجة قاموس (نحاول الإصلاح محلياً)
+                elif isinstance(raw_result, dict):
+                    log("      ⚠️ Received Dict, trying extraction...")
+                    found_list = None
+                    
+                    # البحث عن مفاتيح محتملة
+                    for key in ['script', 'dialogue', 'conversation', 'messages', 'scenes']:
+                        if key in raw_result and isinstance(raw_result[key], list):
+                            found_list = raw_result[key]
+                            break
+                    
+                    # البحث عن أي قيمة هي قائمة
+                    if not found_list:
+                        for val in raw_result.values():
+                            if isinstance(val, list) and len(val) > 0:
+                                if isinstance(val[0], dict) and 'text' in val[0]:
+                                    found_list = val
+                                    break
+                    
+                    if found_list:
+                        script_json = found_list
+                        log("      ✅ Successfully extracted list from dict.")
+                        break # خروج من الحلقة
+                    
+                    else:
+                        # الحالة 3: فشل الاستخراج -> نطلب إعادة التوليد مع توبيخ الموديل
+                        log("      ❌ Extraction failed. Forcing re-generation...")
+                        current_script_prompt = f"""
+                        SYSTEM ERROR: You returned a JSON OBJECT. I need a JSON ARRAY.
+                        
+                        REQUIREMENT:
+                        Output MUST be a list: [ {{"speaker": "...", "type": "...", "text": "..."}}, ... ]
+                        Do NOT wrap it in {{ "script": ... }}.
+                        
+                        Original Task:
+                        {PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean)}
+                        """
+                        # الحلقة ستعيد التشغيل الآن بالبرومبت الجديد
+                        continue 
+
+            except Exception as e:
+                log(f"      ⚠️ Error in script generation attempt {attempt}: {e}")
+        
+        # --- نهاية حلقة المحاولة ---
+
+        # إذا نجحنا في الحصول على السكربت، نبدأ الريندر
+        if script_json and len(script_json) > 0:
             timestamp = int(time.time())
             base_output_dir = os.path.abspath("output")
             os.makedirs(base_output_dir, exist_ok=True)
@@ -1023,7 +1076,7 @@ def run_pipeline(category, config, mode="trending"):
                     if vid_main:
                         vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
             except Exception as e:
-                log(f"      ⚠️ Main Video Render Error: {e}")
+                log(f"      ⚠️ Main Video Error: {e}")
 
             # --- Short Video ---
             log(f"      🎬 Rendering Short Video...")
@@ -1038,15 +1091,16 @@ def run_pipeline(category, config, mode="trending"):
                         ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts']
                     )
             except Exception as e:
-                log(f"      ⚠️ Short Video Render Error: {e}")
+                log(f"      ⚠️ Short Video Error: {e}")
 
         else:
-            log(f"      ❌ Script Format Invalid. Got: {type(script_raw)}")
+            log(f"      ❌ Failed to generate valid script after 3 attempts.")
 
     except Exception as e:
         log(f"⚠️ Multimedia Process Error: {e}")
         import traceback
         traceback.print_exc()
+    
     # =====================================================
     # STEP 4: PUBLISHING
     # =====================================================
