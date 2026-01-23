@@ -195,6 +195,11 @@ Your task is to **SYNTHESIZE** them into one Master Guide.
 **WRITING RULES:**
 - Tone: Professional but personal (Use "I", "We").
 - Length: 1500+ words (You have plenty of source material now).
+- Audience : ordinary people and beginners 
+- Imagine you are explaining something to your friend who knows nothing about computers.
+- The introduction should be very simple and assure the reader that they will understand everything easily.
+- Explain complex concepts and concepts related to the subject itself in a simplified way so that anyone who knows nothing about computers or the subject itself can understand them.
+- Headlines: Make them engaging, intriguing, and problem-solving.
 
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ONLY.
@@ -264,6 +269,7 @@ Input: {json_input}
 
 **RULES:**
 1. **Sentence Length:** If a sentence is too long (20+ words), split it.
+3. *"Paragraphs:** Vary the length of the paragraphs, but do not exceed 5 lines.
 2. **Vocabulary:** 
    - Change "Utilize" -> "Use".
    - Change "Facilitate" -> "Help".
