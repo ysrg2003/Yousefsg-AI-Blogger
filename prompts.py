@@ -267,21 +267,15 @@ Characters:
 3. "text" is the dialogue.
 4. Keep sentences punchy and short.
 
-**OUTPUT FORMAT (VERY IMPORTANT):**
-- Return a **Top-Level JSON Array** (List).
-- **DO NOT** create a root object (like `{{"script": [...]}}`).
-- The output must START with `[` and END with `]`.
+**OUTPUT FORMAT RULES:**
+1. Return a JSON OBJECT with a single key: "video_script".
+2. The value of "video_script" must be a LIST of objects.
+3. Each object must have: "speaker", "type", "text".
 
-Example of CORRECT Output:
-[
-  {{"speaker": "User", "type": "receive", "text": "Wait, is this real?"}},
-  {{"speaker": "Pro", "type": "send", "text": "Yes! It changed everything."}}
+Example Output: {{ "video_script": [ {{"speaker": "User", "type": "receive", "text": "Wait, really?"}}, {{"speaker": "Pro", "type": "send", "text": "Yes, look at this..."}} ] }} 
+
 ]
 
-Example of WRONG Output (DO NOT DO THIS):
-{{
-  "script": [ ... ] 
-}}
 
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ARRAY ONLY.
