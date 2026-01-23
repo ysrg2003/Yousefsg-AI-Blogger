@@ -614,20 +614,75 @@ def publish_post(title, content, labels):
         log(f"❌ Connection Fail: {e}")
         return None
 
+
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
-    if not key: return None
-    log(f"   🎨 Flux Image Gen...")
+    if not key: 
+        log("❌ IMG_BB Key Missing!")
+        return None
+    
+    log(f"   🎨 Generating Thumbnail: '{prompt_text[:30]}...'")
+
+    # 1. تحسين البرومبت برمجياً لضمان الواقعية
+    # نضيف كلمات مفتاحية تقنية للكاميرا والإضاءة بغض النظر عما كتبه الموديل
+    enhancers = ", photorealistic, shot on Sony A7R IV, 85mm lens, f/1.8, cinematic lighting, youtube thumbnail style, 8k, --no cartoon, --no illustration, --no 3d render"
+    
+    final_prompt = f"{prompt_text}{enhancers}"
+    
+    # 2. تجهيز الرابط (Pollinations with Flux Model)
+    # Flux هو أفضل موديل مجاني حالياً للواقعية والنصوص
+    encoded_prompt = urllib.parse.quote(final_prompt)
+    
+    # إضافة النص (Overlay) إذا وجد
+    text_param = ""
+    if overlay_text:
+        # نستخدم خط عريض ولون أصفر أو أبيض لزيادة التباين
+        text_param = f"&text={urllib.parse.quote(overlay_text)}&font=arial&fontsize=60&color=yellow"
+
+    # استخدام seed عشوائي لضمان تنوع الصور لنفس الموضوع
+    seed = random.randint(1, 99999)
+    
+    # رابط API المحدث (نحدد موديل Flux صراحة)
+    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&model=flux&seed={seed}&nologo=true{text_param}"
+
+    # 3. المحاولة والرفع
     for i in range(3):
         try:
-            safe = urllib.parse.quote(f"{prompt_text}, abstract tech, 8k, --no text")
-            txt = f"&text={urllib.parse.quote(overlay_text)}&font=roboto&fontsize=48&color=white" if overlay_text else ""
-            url = f"https://image.pollinations.ai/prompt/{safe}?width=1280&height=720&model=flux&nologo=true&seed={random.randint(1,999)}{txt}"
-            r = requests.get(url, timeout=60)
+            log(f"      ⏳ Downloading Image (Attempt {i+1})...")
+            # مهلة 60 ثانية لأن Flux قد يأخذ وقتاً
+            r = requests.get(image_url, timeout=60)
+            
             if r.status_code == 200:
-                res = requests.post("https://api.imgbb.com/1/upload", data={"key":key}, files={"image":r.content}, timeout=60)
-                if res.status_code == 200: return res.json()['data']['url']
-        except: time.sleep(3)
+                log("      ✅ Image Generated. Uploading to ImgBB...")
+                
+                # رفع الصورة إلى ImgBB للحصول على رابط دائم
+                upload_payload = {
+                    "key": key,
+                    "image": base64.b64encode(r.content), # ImgBB يفضل base64 أحياناً
+                    "name": f"thumbnail_{seed}"
+                }
+                # ملاحظة: إذا فشل base64 يمكن العودة لإرسال الملفات binary
+                # هنا نستخدم الطريقة الأبسط للملفات
+                res = requests.post(
+                    "https://api.imgbb.com/1/upload", 
+                    data={"key": key}, 
+                    files={"image": r.content}, 
+                    timeout=60
+                )
+                
+                if res.status_code == 200:
+                    final_link = res.json()['data']['url']
+                    log(f"      🎉 Thumbnail Ready: {final_link}")
+                    return final_link
+                else:
+                    log(f"      ⚠️ ImgBB Error: {res.text}")
+            else:
+                log(f"      ⚠️ Pollinations Error: {r.status_code}")
+                
+        except Exception as e:
+            log(f"      ⚠️ Image Error: {e}")
+            time.sleep(3) # انتظار قبل المحاولة التالية
+
     return None
 
 def load_kg():
