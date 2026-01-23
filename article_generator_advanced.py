@@ -346,6 +346,9 @@ Input: {title}
 - "Tag a friend who needs this".
 - Keep it under 280 chars.
 
+Output JSON: {{"title": "...", "FB Hook": "...", "description": "...", "tags": [...]}}
+
+
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ONLY.
 2. No Markdown.
@@ -893,7 +896,7 @@ def run_pipeline(category, config, mode="trending"):
         yt_meta = {"title": title, "description": f"Read full story: {main_link}", "tags": []}
     
     fb_dat = try_parse_json(generate_step(model, PROMPT_FACEBOOK_HOOK.format(title=title, category=category), "FB Hook"))
-    fb_cap = fb_dat.get('facebook', title) if fb_dat else title
+    fb_cap = fb_dat.get('facebook', title ,FB Hook) if fb_dat else title
 
     # 2. Video Generation (With Absolute Path Fix)
     vid_html, vid_main, vid_short, fb_path = "", None, None, None
