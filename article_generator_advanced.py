@@ -114,17 +114,21 @@ ARTICLE_STYLE = """
 # PROMPT ZERO: SEO STRATEGIST (THE BRAIN)
 # ------------------------------------------------------------------
 PROMPT_ZERO_SEO = """
-Role: Senior SEO Strategist.
+Role: Aggressive SEO Strategist.
 Input Category: "{category}"
 Date: {date}
 
-Task: Identify ONE specific, high-potential "Long-Tail Keyword" related to this category that is trending NOW.
-Target: A topic that is "Winnable" (not too broad like "AI", but specific like "Gemini vs GPT-5 pricing").
+Task: Identify ONE specific, high-potential "Long-Tail Keyword".
+
+**STRICT RULES:**
+1. **AVOID GENERAL TOPICS:** Do NOT choose broad terms like "Future of AI", "AI Jobs", "Robotics News".
+2. **BE SPECIFIC:** Target specific entities (e.g., "Figure 01 vs Tesla Optimus", "Devin AI update", "Gemini 1.5 Pro features").
+3. **CONFLICT/HYPE:** Look for controversy, new releases, or specific problems.
 
 Output JSON ONLY:
 {{
-  "target_keyword": "The specific search query to use in Google News",
-  "reasoning": "Why this topic is hot today"
+  "target_keyword": "Specific search query",
+  "reasoning": "Why this specific topic wins"
 }}
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ONLY.
