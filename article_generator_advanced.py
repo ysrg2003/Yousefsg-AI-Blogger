@@ -795,7 +795,202 @@ def draw_text_with_outline(draw, position, text, font, fill_color, outline_color
                 draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
     draw.text(position, text, font=font, fill=fill_color)
 
+# ==============================================================================
+# GITHUB IMAGE HOSTING ENGINE (CDN)
+# ==============================================================================
 
+def upload_to_github_cdn(image_bytes, filename):
+    """
+    Uploads image bytes to the 'images' folder in the GitHub Repository.
+    Returns a fast jsDelivr CDN URL.
+    """
+    try:
+        # 1. جلب البيانات من البيئة
+        gh_token = os.getenv('MY_GITHUB_TOKEN') # نفس التوكن المستخدم للتشغيل
+        repo_name = os.getenv('GITHUB_REPO_NAME') # اسم المستودع (user/repo)
+        
+        if not gh_token or not repo_name:
+            log("      ❌ GitHub Token or Repo Name missing for image upload.")
+            return None
+
+        g = Github(gh_token)
+        repo = g.get_repo(repo_name)
+        
+        # 2. تحديد المسار
+        # نضيف التاريخ لضمان عدم تكرار الأسماء وتنظيم المجلدات
+        date_folder = datetime.datetime.now().strftime("%Y-%m")
+        file_path = f"images/{date_folder}/{filename}"
+        
+        # 3. الرفع (Create or Update)
+        # نحاول الإنشاء، وإذا الملف موجود، نقوم بتغيير الاسم قليلاً
+        try:
+            repo.create_file(
+                path=file_path,
+                message=f"🤖 Auto-upload: {filename}",
+                content=image_bytes.getvalue(), # استخراج البايتات من الذاكرة
+                branch="main" 
+            )
+        except Exception as e:
+            if "already exists" in str(e):
+                # إذا الملف موجود، نضيف رقم عشوائي للاسم
+                filename = f"{random.randint(1000,9999)}_{filename}"
+                file_path = f"images/{date_folder}/{filename}"
+                repo.create_file(
+                    path=file_path,
+                    message=f"🤖 Auto-upload (Retry): {filename}",
+                    content=image_bytes.getvalue(),
+                    branch="main"
+                )
+            else:
+                raise e
+
+        # 4. تكوين رابط CDN السريع
+        # الصيغة: https://cdn.jsdelivr.net/gh/USER/REPO@main/PATH
+        cdn_url = f"https://cdn.jsdelivr.net/gh/{repo_name}@main/{file_path}"
+        
+        log(f"      ☁️ Hosted on GitHub CDN: {cdn_url}")
+        return cdn_url
+
+    except Exception as e:
+        log(f"      ❌ GitHub Upload Error: {e}")
+        return None
+
+# ==============================================================================
+# IMAGE PROCESSING (SOURCE -> GITHUB)
+# ==============================================================================
+
+def process_source_image(source_url, overlay_text, filename_title):
+    log(f"   🖼️ Processing Source Image: {source_url[:60]}...")
+    try:
+        # 1. Download
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(source_url, headers=headers, timeout=15, stream=True)
+        if r.status_code != 200: return None
+        
+        original_img = Image.open(BytesIO(r.content)).convert("RGBA")
+        
+        # 2. Resize & Crop (1200x630)
+        target_w, target_h = 1200, 630
+        img_ratio = original_img.width / original_img.height
+        target_ratio = target_w / target_h
+        
+        if img_ratio > target_ratio:
+            new_width = int(target_h * img_ratio)
+            new_height = target_h
+        else:
+            new_width = target_w
+            new_height = int(target_w / img_ratio)
+            
+        original_img = original_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # Center Crop
+        left = (new_width - target_w) / 2
+        top = (new_height - target_h) / 2
+        right = (new_width + target_w) / 2
+        bottom = (new_height + target_h) / 2
+        base_img = original_img.crop((left, top, right, bottom))
+        
+        # 3. Dark Overlay
+        overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 90))
+        base_img = Image.alpha_composite(base_img, overlay)
+        
+        # 4. Text Overlay
+        if overlay_text:
+            draw = ImageDraw.Draw(base_img)
+            W, H = base_img.size
+            try:
+                font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+                if not os.path.exists(font_path): font_path = "arialbd.ttf"
+                font = ImageFont.truetype(font_path, 70)
+            except: font = ImageFont.load_default()
+            
+            words = overlay_text.upper().split()
+            lines = []
+            current_line = []
+            for word in words:
+                test_line = ' '.join(current_line + [word])
+                bbox = draw.textbbox((0, 0), test_line, font=font)
+                if bbox[2] < W - 100: current_line.append(word)
+                else:
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+            lines.append(' '.join(current_line))
+            
+            text_y = H / 2 - (len(lines) * 85 / 2)
+            for line in lines:
+                bbox = draw.textbbox((0, 0), line, font=font)
+                line_x = (W - (bbox[2] - bbox[0])) / 2
+                draw_text_with_outline(draw, (line_x, text_y), line, font, "#FFD700", "black", 4)
+                text_y += 85
+
+        # 5. Prepare for GitHub Upload
+        img_byte_arr = BytesIO()
+        base_img.convert("RGB").save(img_byte_arr, format='JPEG', quality=92)
+        
+        # Clean filename
+        safe_filename = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50]
+        safe_filename += ".jpg"
+        
+        # 6. Upload to GitHub
+        return upload_to_github_cdn(img_byte_arr, safe_filename)
+            
+    except Exception as e:
+        log(f"      ⚠️ Source Image Error: {e}")
+        return None
+
+# ==============================================================================
+# AI IMAGE GENERATION (AI -> GITHUB)
+# ==============================================================================
+
+def generate_and_upload_image(prompt_text, overlay_text=""):
+    log(f"   🎨 Generating Thumbnail (Flux + GitHub Host)...")
+    
+    enhancers = ", photorealistic, shot on Sony A7R IV, 8k, youtube thumbnail style"
+    final_prompt = urllib.parse.quote(f"{prompt_text}{enhancers}")
+    seed = random.randint(1, 99999)
+    image_url = f"https://image.pollinations.ai/prompt/{final_prompt}?width=1280&height=720&model=flux&seed={seed}&nologo=true"
+
+    try:
+        r = requests.get(image_url, timeout=60)
+        if r.status_code != 200: return None
+        
+        img = Image.open(BytesIO(r.content)).convert("RGBA")
+        
+        if overlay_text:
+            draw = ImageDraw.Draw(img)
+            W, H = img.size
+            try:
+                font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+                if not os.path.exists(font_path): font_path = "arial.ttf"
+                font = ImageFont.truetype(font_path, 80)
+            except: font = ImageFont.load_default()
+            
+            text = overlay_text.upper()
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+            x = (W - text_w) / 2
+            y = H - text_h - 50
+            
+            # Draw Outline
+            for dx in range(-4, 5):
+                for dy in range(-4, 5):
+                    draw.text((x+dx, y+dy), text, font=font, fill="black")
+            draw.text((x, y), text, font=font, fill="yellow")
+
+        # Prepare upload
+        img_byte_arr = BytesIO()
+        img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
+        
+        filename = f"ai_gen_{seed}.jpg"
+        
+        return upload_to_github_cdn(img_byte_arr, filename)
+            
+    except Exception as e:
+        log(f"      ⚠️ AI Image Error: {e}")
+    
+    return None
+    
 def run_pipeline(category, config, mode="trending"):
     """
     The Master Pipeline v14.0 (Viral B2C + Strict Integration + Robust Multimedia).
