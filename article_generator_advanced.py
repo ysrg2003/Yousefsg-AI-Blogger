@@ -32,7 +32,13 @@ import ast
 import json_repair # يجب تثبيتها: pip install json_repair
 import regex # يجب تثبيتها: pip install regex
 import pydantic
-
+from tenacity import (
+    retry, 
+    stop_after_attempt, 
+    wait_exponential, 
+    retry_if_exception_type, 
+    before_sleep_log
+)
 
 # ==============================================================================
 # 0. CONFIG & LOGGING
