@@ -949,8 +949,8 @@ def run_pipeline(category, config, mode="trending"):
         traceback.print_exc()
         return
 
-    # =====================================================
-    # STEP 3: MULTIMEDIA GENERATION (CRITICAL FIXES)
+   # =====================================================
+    # STEP 3: MULTIMEDIA GENERATION (FIXED & ROBUST)
     # =====================================================
     log("   🧠 Generating Multimedia Assets...")
     
@@ -982,75 +982,71 @@ def run_pipeline(category, config, mode="trending"):
         # 2. Image Generation
         img_url = generate_and_upload_image(img_prompt, img_overlay)
 
-        # 3. Video Generation (Robust Fix)
-        # تنظيف النص من أكواد HTML لضمان عدم إرباك الموديل
+        # 3. Video Generation (Smart Fix)
         summ_clean = re.sub('<[^<]+?>','', content_html)[:2500]
         
-        script_json = generate_step_strict(
+        script_raw = generate_step_strict(
             model_name, 
             PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean), 
             "Video Script"
         )
         
-        # التحقق الصارم من أن السكربت قائمة (List)
-        if isinstance(script_json, list) and len(script_json) > 0:
+        # 🛠️ إصلاح ذكي للسكربت (Script Extractor)
+        script_json = []
+        if isinstance(script_raw, list):
+            script_json = script_raw
+        elif isinstance(script_raw, dict):
+            # محاولة البحث عن القائمة داخل القيم
+            for key, value in script_raw.items():
+                if isinstance(value, list):
+                    script_json = value
+                    break
+        
+        # التأكد من أن القائمة ليست فارغة وتحتوي على مفاتيح صحيحة
+        if script_json and len(script_json) > 0 and 'text' in script_json[0]:
             timestamp = int(time.time())
-            
-            # استخدام مسارات مطلقة (Absolute Paths) حصراً لتجنب أخطاء ffmpeg
             base_output_dir = os.path.abspath("output")
             os.makedirs(base_output_dir, exist_ok=True)
             
-            # --- Main Video (Landscape) ---
-            log(f"      🎬 Rendering Main Video (Landscape)...")
-            # استدعاء VideoRenderer من الملف الذي أرفقته
-            rr = video_renderer.VideoRenderer(output_dir=base_output_dir, width=1920, height=1080)
-            
-            main_video_filename = f"main_{timestamp}.mp4"
-            # VideoRenderer يعيد المسار الكامل
-            pm = rr.render_video(script_json, title, main_video_filename)
-            
-            if pm and os.path.exists(pm):
-                desc = f"{yt_meta.get('description','')}\n\n🚀 Full Story: {main_link}\n\n#{category.replace(' ','')}"
-                vid_main, embed_link = youtube_manager.upload_video_to_youtube(
-                    pm, 
-                    yt_meta.get('title',title)[:100], 
-                    desc, 
-                    yt_meta.get('tags',[])
-                )
+            # --- Main Video ---
+            log(f"      🎬 Rendering Main Video...")
+            try:
+                rr = video_renderer.VideoRenderer(output_dir=base_output_dir, width=1920, height=1080)
+                main_video_path = os.path.join(base_output_dir, f"main_{timestamp}.mp4")
+                pm = rr.render_video(script_json, title, main_video_path)
                 
-                if vid_main:
-                    # بناء كود التضمين
-                    vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
-            else:
-                log("      ⚠️ Main video render failed or returned None.")
+                if pm and os.path.exists(pm):
+                    desc = f"{yt_meta.get('description','')}\n\n🚀 Full Story: {main_link}\n\n#{category.replace(' ','')}"
+                    vid_main, _ = youtube_manager.upload_video_to_youtube(
+                        pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[])
+                    )
+                    if vid_main:
+                        vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
+            except Exception as e:
+                log(f"      ⚠️ Main Video Render Error: {e}")
 
-            # --- Short Video (Portrait) ---
-            log(f"      🎬 Rendering Short Video (Portrait)...")
-            rs = video_renderer.VideoRenderer(output_dir=base_output_dir, width=1080, height=1920)
-            
-            short_video_filename = f"short_{timestamp}.mp4"
-            ps = rs.render_video(script_json, title, short_video_filename)
-            
-            if ps and os.path.exists(ps):
-                fb_path = ps # حفظ المسار للفيسبوك
+            # --- Short Video ---
+            log(f"      🎬 Rendering Short Video...")
+            try:
+                rs = video_renderer.VideoRenderer(output_dir=base_output_dir, width=1080, height=1920)
+                short_video_path = os.path.join(base_output_dir, f"short_{timestamp}.mp4")
+                ps = rs.render_video(script_json, title, short_video_path)
                 
-                vid_short, _ = youtube_manager.upload_video_to_youtube(
-                    ps, 
-                    f"{yt_meta.get('title',title)[:90]} #Shorts", 
-                    desc, 
-                    yt_meta.get('tags',[])+['shorts']
-                )
-            else:
-                log("      ⚠️ Short video render failed.")
+                if ps and os.path.exists(ps):
+                    fb_path = ps
+                    vid_short, _ = youtube_manager.upload_video_to_youtube(
+                        ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts']
+                    )
+            except Exception as e:
+                log(f"      ⚠️ Short Video Render Error: {e}")
+
         else:
-            log("      ❌ Video Script is invalid or empty.")
+            log(f"      ❌ Script Format Invalid. Got: {type(script_raw)}")
 
     except Exception as e:
-        log(f"⚠️ Multimedia Error: {e}")
-        # طباعة تتبع الخطأ كاملاً لمعرفة سبب توقف الفيديو
+        log(f"⚠️ Multimedia Process Error: {e}")
         import traceback
         traceback.print_exc()
-
     # =====================================================
     # STEP 4: PUBLISHING
     # =====================================================
