@@ -623,14 +623,14 @@ def resolve_and_scrape(google_url):
 
 def run_pipeline(category, config, mode="trending"):
     """
-    The Master Pipeline v12.0 (Unbreakable & Strict Mode).
-    Uses Tenacity for retries and strictly adheres to validation rules.
+    The Master Pipeline v14.0 (Viral B2C + Strict Integration + Robust Multimedia).
+    Integrates social_manager, video_renderer, and youtube_manager flawlessly.
     """
     # 1. إعداد المتغيرات الأساسية
     model_name = config['settings'].get('model_name')
     cat_conf = config['categories'][category]
     
-    log(f"\n🚀 INIT PIPELINE: {category} (Strict Analyst Mode 🧠)")
+    log(f"\n🚀 INIT PIPELINE: {category} (Viral Explainer Mode ⚡)")
     
     # تحميل قاعدة المعرفة لتجنب التكرار
     recent_titles = get_recent_titles_string(limit=60)
@@ -641,13 +641,11 @@ def run_pipeline(category, config, mode="trending"):
     log("   🧠 Consulting SEO Strategist for a winning keyword...")
     
     target_keyword = ""
-    seo_reasoning = ""
 
     try:
-        # طلب كلمة مفتاحية ذكية من الذكاء الاصطناعي
+        # طلب كلمة مفتاحية ذكية
         seo_prompt = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today())
         
-        # نستخدم الدالة الصارمة، إذا فشلت 5 مرات سترفع خطأ
         seo_plan = generate_step_strict(
             model_name, 
             seo_prompt, 
@@ -656,12 +654,10 @@ def run_pipeline(category, config, mode="trending"):
         )
         
         target_keyword = seo_plan.get('target_keyword')
-        seo_reasoning = seo_plan.get('reasoning', 'N/A')
         log(f"   🎯 Strategy Defined: Targeting keyword '{target_keyword}'")
         
     except Exception as e:
-        # هذه الخطوة الوحيدة التي نسمح فيها بالـ Fallback اليدوي لأننا نستطيع العمل بدونه
-        log(f"   ⚠️ SEO Step failed after retries: {e}. Using config fallback.")
+        log(f"   ⚠️ SEO Step failed. Using fallback.")
         target_keyword = cat_conf.get('trending_focus', category)
         if "," in target_keyword:
             target_keyword = random.choice([t.strip() for t in target_keyword.split(',')])
@@ -673,75 +669,83 @@ def run_pipeline(category, config, mode="trending"):
     rss_query = f"{target_keyword} when:3d"
     rss_items = get_real_news_rss(rss_query.replace("when:3d","").strip(), category)
     
-    # محاولة ثانية بنطاق أوسع إذا لم نجد نتائج
     if not rss_items:
-        log("   ⚠️ No specific news found. Retrying with broad category search...")
+        log("   ⚠️ No specific news found. Retrying broad search...")
         rss_items = get_real_news_rss(category, category)
         if not rss_items:
-            log("❌ FATAL: No RSS items found even after fallback. Aborting.")
+            log("❌ FATAL: No RSS items found. Aborting.")
             return
 
     collected_sources = []
     main_headline = ""
     main_link = ""
     
-    log(f"   🕵️‍♂️ Investigating multiple sources for: '{target_keyword}'...")
+    log(f"   🕵️‍♂️ Investigating sources for: '{target_keyword}'...")
     
-    # حلقة الفحص وجمع المصادر
     for item in rss_items[:6]:
-        # 1. فلترة التكرار
-        if item['title'][:20] in recent_titles: 
-            log(f"      ⏭️ Skipped duplicate title: {item['title'][:30]}...")
-            continue
-        
-        # 2. فلترة النطاق المكرر
-        if any(src['domain'] in item['link'] for src in collected_sources): 
-            continue
+        if item['title'][:20] in recent_titles: continue
+        if any(src['domain'] in item['link'] for src in collected_sources): continue
 
         log(f"      📌 Checking Source: {item['title'][:40]}...")
         
-        # محاولة فك الرابط وجلب المحتوى
-        r_url, r_title, text = resolve_and_scrape(item['link'])
+        # استخدام دالة url_resolver التي أرفقتها
+        data = url_resolver.get_page_html(item['link'])
         
-        # 3. فلترة الجودة (الطول)
-        if text and len(text) >= 800:
-            log(f"         ✅ Accepted Source! ({len(text)} chars).")
+        if data and data.get('html'):
+            r_url = data['url']
+            html_content = data['html']
             
-            domain = urllib.parse.urlparse(r_url).netloc
-            collected_sources.append({
-                "title": r_title,
-                "text": text,
-                "domain": domain,
-                "url": r_url,
-                "date": item['date']
-            })
+            # استخراج النص باستخدام Trafilatura
+            text = trafilatura.extract(html_content, include_comments=False, include_tables=True)
             
-            # تحديد البيانات الرئيسية من المصدر الأول
-            if not main_headline:
-                main_headline = item['title']
-                main_link = item['link']
-            
-            # الاكتفاء بـ 3 مصادر
-            if len(collected_sources) >= 3: 
-                log("      ✨ Collected sufficient data (3 robust sources).")
-                break
+            # Fallback إذا فشل Trafilatura
+            if not text:
+                soup = BeautifulSoup(html_content, 'html.parser')
+                for script in soup(["script", "style", "nav", "footer"]): script.extract()
+                text = soup.get_text(" ", strip=True)
+
+            # قبول المقالات ذات الطول المناسب
+            if text and len(text) >= 800:
+                log(f"         ✅ Accepted Source! ({len(text)} chars).")
+                domain = urllib.parse.urlparse(r_url).netloc
+                r_title = item['title'] # نستخدم عنوان RSS كعنوان مبدئي
+
+                collected_sources.append({
+                    "title": r_title,
+                    "text": text,
+                    "domain": domain,
+                    "url": r_url,
+                    "date": item['date']
+                })
+                
+                if not main_headline:
+                    main_headline = item['title']
+                    main_link = item['link']
+                
+                if len(collected_sources) >= 3: break
+            else:
+                log("         ⚠️ Content too short or extraction failed.")
         else:
-            log(f"         ⚠️ Rejected (Weak/Short Content).")
-            time.sleep(1)
+             log("         ⚠️ Selenium failed to resolve URL.")
+             
+        time.sleep(2) # راحة لتجنب الحظر
 
     if not collected_sources:
-        log("❌ FATAL: No valid high-quality sources found. Skipping.")
+        log("❌ FATAL: No valid sources found. Skipping.")
         return
 
     # =====================================================
-    # STEP 2: DRAFTING & SYNTHESIS (STRICT CHAIN)
+    # STEP 2: DRAFTING & SYNTHESIS (THE STRICT CHAIN)
     # =====================================================
     log(f"\n✍️ Synthesizing Content from {len(collected_sources)} sources...")
     
-    # تحضير النص المجمع
+    # تحضير النص للموديل
     combined_text = ""
     for i, src in enumerate(collected_sources):
         combined_text += f"\n--- SOURCE {i+1}: {src['domain']} ---\nTitle: {src['title']}\nDate: {src['date']}\nCONTENT:\n{src['text'][:9000]}\n"
+
+    # تحضير قائمة المصادر لاستخدامها لاحقاً في Step C
+    sources_list_formatted = [{"title": s['title'], "url": s['url']} for s in collected_sources]
 
     json_ctx = {
         "rss_headline": main_headline,
@@ -750,15 +754,12 @@ def run_pipeline(category, config, mode="trending"):
         "date": str(datetime.date.today())
     }
     
-    prefix = "*** MULTI-SOURCE RESEARCH DATA (SYNTHESIZE THIS) ***"
-    payload = f"METADATA: {json.dumps(json_ctx)}\n\n{prefix}\n{combined_text}"
+    payload = f"METADATA: {json.dumps(json_ctx)}\n\n*** RESEARCH DATA ***\n{combined_text}"
     
-    # هنا نبدأ السلسلة الصارمة (Strict Chain)
-    # أي فشل هنا سيؤدي لإيقاف البايبلاين بدلاً من نشر محتوى سيء
     try:
-        # --- Step B: Writer ---
-        # نطلب مفاتيح محددة جداً لضمان الهيكل
+        # --- Step B: Writer (B2C Style) ---
         required_b = ["headline", "hook", "article_body", "verdict"]
+        
         json_b = generate_step_strict(
             model_name, 
             PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), 
@@ -768,8 +769,14 @@ def run_pipeline(category, config, mode="trending"):
 
         # --- Step C: SEO & Style ---
         kg_links = get_relevant_kg_for_linking(category)
+        
+        input_for_c = {
+            "draft_content": json_b,
+            "sources_data": sources_list_formatted 
+        }
+        
         required_c = ["finalTitle", "finalContent", "seo", "imageGenPrompt"]
-        prompt_c = PROMPT_C_TEMPLATE.format(json_input=json.dumps(json_b), knowledge_graph=kg_links)
+        prompt_c = PROMPT_C_TEMPLATE.format(json_input=json.dumps(input_for_c), knowledge_graph=kg_links)
         
         json_c = generate_step_strict(
             model_name, 
@@ -800,7 +807,7 @@ def run_pipeline(category, config, mode="trending"):
             required_keys=required_e
         )
         
-        # استخراج النتائج النهائية الموثوقة
+        # استخراج النتائج النهائية
         title = final['finalTitle']
         content_html = final['finalContent']
         seo_data = final.get('seo', {})
@@ -808,13 +815,13 @@ def run_pipeline(category, config, mode="trending"):
         img_overlay = final.get('imageOverlayText', 'News')
 
     except Exception as e:
-        # هذا البلوك يلتقط أي فشل نهائي بعد استنفاد محاولات Tenacity
-        log(f"❌ PIPELINE CRASHED during generation phase: {e}")
-        log("❌ Aborting to prevent publishing bad content.")
+        log(f"❌ PIPELINE CRASHED during generation: {e}")
+        import traceback
+        traceback.print_exc()
         return
 
     # =====================================================
-    # STEP 3: MULTIMEDIA GENERATION
+    # STEP 3: MULTIMEDIA GENERATION (CRITICAL FIXES)
     # =====================================================
     log("   🧠 Generating Multimedia Assets...")
     
@@ -846,48 +853,72 @@ def run_pipeline(category, config, mode="trending"):
         # 2. Image Generation
         img_url = generate_and_upload_image(img_prompt, img_overlay)
 
-        # 3. Video Generation
-        # استخراج ملخص للنص لعمل السكربت
-        summ = re.sub('<[^<]+?>','', content_html)[:2500]
+        # 3. Video Generation (Robust Fix)
+        # تنظيف النص من أكواد HTML لضمان عدم إرباك الموديل
+        summ_clean = re.sub('<[^<]+?>','', content_html)[:2500]
         
-        # توليد السكربت بصيغة صارمة
         script_json = generate_step_strict(
             model_name, 
-            PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), 
+            PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean), 
             "Video Script"
         )
         
-        # التحقق من أن السكربت قائمة (List) كما هو مطلوب
+        # التحقق الصارم من أن السكربت قائمة (List)
         if isinstance(script_json, list) and len(script_json) > 0:
             timestamp = int(time.time())
-            rr = video_renderer.VideoRenderer()
+            
+            # استخدام مسارات مطلقة (Absolute Paths) حصراً لتجنب أخطاء ffmpeg
             base_output_dir = os.path.abspath("output")
             os.makedirs(base_output_dir, exist_ok=True)
             
             # --- Main Video (Landscape) ---
-            main_video_path = os.path.join(base_output_dir, f"main_{timestamp}.mp4")
-            log(f"      🎬 Rendering Main Video...")
-            pm = rr.render_video(script_json, title, main_video_path)
+            log(f"      🎬 Rendering Main Video (Landscape)...")
+            # استدعاء VideoRenderer من الملف الذي أرفقته
+            rr = video_renderer.VideoRenderer(output_dir=base_output_dir, width=1920, height=1080)
+            
+            main_video_filename = f"main_{timestamp}.mp4"
+            # VideoRenderer يعيد المسار الكامل
+            pm = rr.render_video(script_json, title, main_video_filename)
             
             if pm and os.path.exists(pm):
-                desc = f"{yt_meta.get('description','')}\n\n🚀 Full Article Link Coming Soon.\n\n#{category.replace(' ','')} #AI"
-                vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
+                desc = f"{yt_meta.get('description','')}\n\n🚀 Full Story: {main_link}\n\n#{category.replace(' ','')}"
+                vid_main, embed_link = youtube_manager.upload_video_to_youtube(
+                    pm, 
+                    yt_meta.get('title',title)[:100], 
+                    desc, 
+                    yt_meta.get('tags',[])
+                )
                 
                 if vid_main:
+                    # بناء كود التضمين
                     vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
+            else:
+                log("      ⚠️ Main video render failed or returned None.")
 
             # --- Short Video (Portrait) ---
-            rs = video_renderer.VideoRenderer(width=1080, height=1920)
-            short_video_path = os.path.join(base_output_dir, f"short_{timestamp}.mp4")
-            log(f"      🎬 Rendering Short Video...")
-            ps = rs.render_video(script_json, title, short_video_path)
+            log(f"      🎬 Rendering Short Video (Portrait)...")
+            rs = video_renderer.VideoRenderer(output_dir=base_output_dir, width=1080, height=1920)
+            
+            short_video_filename = f"short_{timestamp}.mp4"
+            ps = rs.render_video(script_json, title, short_video_filename)
             
             if ps and os.path.exists(ps):
-                fb_path = ps
-                vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
+                fb_path = ps # حفظ المسار للفيسبوك
+                
+                vid_short, _ = youtube_manager.upload_video_to_youtube(
+                    ps, 
+                    f"{yt_meta.get('title',title)[:90]} #Shorts", 
+                    desc, 
+                    yt_meta.get('tags',[])+['shorts']
+                )
+            else:
+                log("      ⚠️ Short video render failed.")
+        else:
+            log("      ❌ Video Script is invalid or empty.")
 
     except Exception as e:
         log(f"⚠️ Multimedia Error: {e}")
+        # طباعة تتبع الخطأ كاملاً لمعرفة سبب توقف الفيديو
         import traceback
         traceback.print_exc()
 
@@ -896,53 +927,50 @@ def run_pipeline(category, config, mode="trending"):
     # =====================================================
     log("   🚀 Publishing to Blogger...")
     
-    # تجميع المقال النهائي
     full_body = ARTICLE_STYLE
     
-    # الصورة
     if img_url: 
         alt_text = seo_data.get("imageAltText", title)
         full_body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}"><img src="{img_url}" alt="{alt_text}" /></a></div>'
     
-    # الفيديو
     if vid_html: full_body += vid_html
     
-    # المحتوى
     full_body += content_html
     
-    # Schema Markup
     if 'schemaMarkup' in final:
-        try: 
-            full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
+        try: full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
         except: pass
     
-    # النشر
-    published_url = publish_post(title, full_body, [category, "Tech News", "AI"])
+    published_url = publish_post(title, full_body, [category, "Tech News", "Explainers"])
     
     # =====================================================
     # STEP 5: DISTRIBUTION & UPDATES
     # =====================================================
     if published_url:
-        log(f"✅ PUBLISHED SUCCESSFULLY: {published_url}")
-        
-        # 1. تحديث قاعدة المعرفة
+        log(f"✅ PUBLISHED: {published_url}")
         update_kg(title, published_url, category)
         
-        # 2. تحديث وصف اليوتيوب بالرابط
-        new_desc = f"{yt_meta.get('description','')}\n\n👇 READ THE FULL STORY HERE:\n{published_url}\n\n#AI #Technology"
+        # 1. تحديث الوصف في يوتيوب
+        new_desc = f"{yt_meta.get('description','')}\n\n👇 READ THE FULL ARTICLE HERE:\n{published_url}\n\n#AI #TechNews"
         if vid_main: youtube_manager.update_video_description(vid_main, new_desc)
         if vid_short: youtube_manager.update_video_description(vid_short, new_desc)
         
-        # 3. النشر على فيسبوك
+        # 2. النشر على فيسبوك باستخدام social_manager
         try:
             log("   📢 Distributing to Facebook...")
+            
+            # الأولوية للريلز (Reels) لأنها تجلب تفاعلاً أكبر
             if fb_path and os.path.exists(fb_path): 
                 fb_text = f"{fb_cap}\n\nRead more: {published_url}\n\n#AI"
+                # استدعاء الدالة من social_manager
                 social_manager.post_reel_to_facebook(fb_path, fb_text)
+            
+            # إذا لم يوجد فيديو، ننشر الصورة والمقال
             elif img_url:
                 social_manager.distribute_content(f"{fb_cap}\n\n👇 Read Article:\n{published_url}", published_url, img_url)
+                
         except Exception as e:
-            log(f"   ⚠️ Social Dist Error: {e}")
+            log(f"   ⚠️ Social Distribution Error: {e}")
     else:
         log("❌ Blogger Publish Failed.")
 
