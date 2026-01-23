@@ -520,7 +520,7 @@ def try_parse_json(text, context=""):
     
     # إذا وصلنا هنا، فالنص معطوب حقاً ولا يمكن قراءته برمجياً
     log(f"      ⚠️ Parsing failed locally. Context: {context}")
-    return "FAILED"
+    return "None"
 
 def generate_step(model, prompt, step_name):
     """
