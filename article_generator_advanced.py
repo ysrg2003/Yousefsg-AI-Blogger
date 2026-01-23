@@ -1067,19 +1067,29 @@ def run_pipeline(category, config, mode="trending"):
                 for script in soup(["script", "style", "nav", "footer"]): script.extract()
                 text = soup.get_text(" ", strip=True)
 
+
+                # ... (داخل حلقة فحص المصادر) ...
+            
+            # استخراج الصورة الأصلية من الـ HTML الذي جلبناه
+            og_image = extract_og_image(html_content)
+
             # قبول المقالات ذات الطول المناسب
             if text and len(text) >= 800:
-                log(f"         ✅ Accepted Source! ({len(text)} chars).")
+                log(f"         ✅ Accepted Source! ({len(text)} chars). Has Image? {'Yes' if og_image else 'No'}")
                 domain = urllib.parse.urlparse(r_url).netloc
-                r_title = item['title'] # نستخدم عنوان RSS كعنوان مبدئي
+                r_title = item['title']
 
                 collected_sources.append({
                     "title": r_title,
                     "text": text,
                     "domain": domain,
                     "url": r_url,
-                    "date": item['date']
+                    "date": item['date'],
+                    "source_image": og_image  # <-- نحفظ رابط الصورة هنا
                 })
+                
+                if not main_headline:
+                    # ...
                 
                 if not main_headline:
                     main_headline = item['title']
@@ -1189,21 +1199,18 @@ def run_pipeline(category, config, mode="trending"):
         traceback.print_exc()
         return
 
-# =====================================================
-    # STEP 3: MULTIMEDIA GENERATION (KEY-BASED EXTRACTION)
+    # =====================================================
+    # STEP 3: MULTIMEDIA GENERATION (Priority: Real -> AI)
     # =====================================================
     log("   🧠 Generating Multimedia Assets...")
     
     yt_meta = {}
     fb_cap = title
     vid_html = ""
-    vid_main = None
-    vid_short = None
-    fb_path = None
     img_url = None
 
     try:
-        # 1. Social Metadata
+        # 1. Social Metadata & Hooks
         yt_meta = generate_step_strict(
             model_name, 
             PROMPT_YOUTUBE_METADATA.format(draft_title=title), 
@@ -1219,8 +1226,32 @@ def run_pipeline(category, config, mode="trending"):
         )
         fb_cap = fb_dat.get('FB_Hook', title)
 
-        # 2. Image Generation
-        img_url = generate_and_upload_image(img_prompt, img_overlay)
+        # 2. Image Strategy: Try Sources First, Then AI
+        overlay_text_clean = img_overlay if img_overlay else "NEWS UPDATE"
+        
+        log("   🖼️ Starting Image Strategy (Real Sources First)...")
+        
+        # الحلقة الذكية: نحاول المصدر الأول، ثم الثاني، وهكذا
+        for src in collected_sources:
+            raw_img_url = src.get('source_image')
+            if raw_img_url:
+                log(f"      🎯 Trying image from source: {src['domain']}...")
+                # محاولة المعالجة
+                img_url = process_source_image(raw_img_url, overlay_text_clean, title)
+                
+                if img_url:
+                    log("      ✅ Success! Real source image processed & uploaded.")
+                    break # وجدنا صورة، نخرج من الحلقة
+                else:
+                    log("      ⚠️ Failed to process this source image. Trying next...")
+        
+        # إذا انتهت الحلقة ولم نجد صورة (img_url لا يزال None)
+        if not img_url:
+            log("      🎨 No valid source images found/processed. Fallback to AI Generation...")
+            img_url = generate_and_upload_image(img_prompt, img_overlay)
+
+        # 3. Video Generation (كما هو بدون تغيير...)
+        # ...
 
         # 3. Video Generation (Robust Key Search)
         summ_clean = re.sub('<[^<]+?>','', content_html)[:2500]
