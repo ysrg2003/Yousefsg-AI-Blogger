@@ -138,6 +138,10 @@ Find the ONE story that a **YouTuber** or **TikToker** would make a video about 
   "why_selected": "High practical value for beginners",
   "date_context": "{today_date}"
 }}
+**CRITICAL OUTPUT RULES:**
+1. Return PURE VALID JSON ONLY.
+2. No Markdown (```json).
+3. No conversational filler.
 """
 
 # ------------------------------------------------------------------
@@ -181,6 +185,12 @@ Output JSON ONLY:
   "excerpt": "Compelling summary for social media.",
   "sources_used": ["List"]
 }}
+**CRITICAL OUTPUT RULES:**
+1. Return PURE VALID JSON ONLY.
+2. **ESCAPE QUOTES:** You are writing HTML inside JSON. You MUST escape quotes.
+   - WRONG: "content": "<div class="box">"
+   - RIGHT: "content": "<div class=\\"box\\">"
+3. No Markdown blocks.
 """
 
 # ------------------------------------------------------------------
@@ -226,6 +236,10 @@ Output JSON ONLY:
   }},
   "schemaMarkup": {{ ... }}
 }}
+**CRITICAL OUTPUT RULES:**
+1. Return PURE VALID JSON ONLY.
+2. **ESCAPE QUOTES:** Ensure all HTML attributes use escaped quotes (\\").
+3. Do NOT truncate content.
 """
 
 # ------------------------------------------------------------------
@@ -248,47 +262,69 @@ Input: {json_input}
 
 Output JSON ONLY (Keep structure):
 {{"finalTitle":"...", "finalContent":"...", "imageGenPrompt":"...", "imageOverlayText":"...", "seo": {{...}}, "schemaMarkup":{{...}}, "sources":[...], "excerpt":"..."}}
+**CRITICAL OUTPUT RULES:**
+1. Return PURE VALID JSON ONLY.
+2. Maintain valid HTML escaping.
+3. No Markdown.
 """
 
 # ------------------------------------------------------------------
 # PROMPT E: CLEANER
 # ------------------------------------------------------------------
 PROMPT_E_TEMPLATE = """
-E: Return valid raw JSON string only. No markdown.
+E: You are a JSON Formatter.
 Input: {json_input}
-"""
 
+Task: Output the exact same JSON, but ensure it is syntactically correct.
+1. Escape all double quotes inside HTML attributes (e.g. `class=\\"box\\"`)
+2. Do NOT change the content logic.
+
+**CRITICAL OUTPUT RULES:**
+1. Return RAW JSON STRING ONLY.
+2. Remove any markdown fences (```).
+3. Ensure no trailing commas.
+"""
 # ------------------------------------------------------------------
 # SOCIAL: ENGAGEMENT FOCUSED
 # ------------------------------------------------------------------
 
+# ------------------------------------------------------------------
+# SOCIAL: VIDEO SCRIPT (FIXED KEYS)
+# ------------------------------------------------------------------
 PROMPT_VIDEO_SCRIPT = """
-Role: Scriptwriter for Short-Form Tech Content.
+Role: Scriptwriter for Viral Tech Shorts.
 Input: "{title}" & "{text_summary}"
 
-**Format:** "Explain Like I'm 5" (ELI5) Dialogue.
-**Characters:** 
-- **User:** "Why is my phone acting weird?" / "What is this new app?"
-- **Pro:** "It's the new update! Check this out..."
+Task: Create a dialogue script between two characters.
+Characters:
+- "User" (Curious, asks questions).
+- "Pro" (Expert, explains solution).
 
-**Flow:**
-1. User expresses a common pain point.
-2. Pro introduces the news as the fix.
-3. Pro gives one specific example of how to use it.
-4. Call to Action: "Link in bio for the full guide."
+**CRITICAL JSON RULES:**
+1. You MUST use exactly these keys: "speaker", "type", "text".
+2. "type" must be either "send" (Right side) or "receive" (Left side).
+3. "text" is the dialogue.
 
-Output JSON Array (Standard format).
+Example Output:
+[
+  {{"speaker": "User", "type": "receive", "text": "Wait, did you see this update?"}},
+  {{"speaker": "Pro", "type": "send", "text": "Yes! It's actually insane. Here is why..."}}
+]
+
+**CRITICAL OUTPUT RULES:**
+1. Return PURE VALID JSON ARRAY ONLY ( [ ... ] ).
+2. No Markdown.
 """
 
 PROMPT_YOUTUBE_METADATA = """
-Role: YouTube Strategist.
+Role: YouTube Expert.
 Input: {draft_title}
 
-**Strategy:** 
-- Title must trigger "FOMO" (Fear Of Missing Out).
-- Tags must be broad (e.g., "Technology", "iPhone") + specific.
+Output JSON: {{"title": "...", "description": "...", "tags": [...]}}
 
-Output JSON.
+**CRITICAL OUTPUT RULES:**
+1. Return PURE VALID JSON ONLY.
+2. No Markdown.
 """
 
 PROMPT_FACEBOOK_HOOK = """
@@ -300,7 +336,9 @@ Input: {title}
 - "Tag a friend who needs this".
 - Keep it under 280 chars.
 
-Output JSON.
+**CRITICAL OUTPUT RULES:**
+1. Return PURE VALID JSON ONLY.
+2. No Markdown.
 """
 
 
@@ -338,64 +376,81 @@ key_manager = KeyManager()
 # ==============================================================================
 # UPDATED JSON UTILITIES (AUTO-REPAIR MODE)
 # ==============================================================================
-import ast  # <--- تأكد من إضافة هذا في بداية الملف
 
 def clean_json(text):
     """
-    Advanced cleaner that removes Markdown, 'thinking' blocks, and extracts
-    the largest valid JSON-like structure (list or dict).
+    Advanced cleaner: Removes Markdown, extracts the JSON array/object only.
     """
     if not text: return ""
     text = text.strip()
     
-    # 1. Remove Markdown Code Blocks
+    # 1. تنظيف كود الماركدوان
     match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
-    if match:
-        text = match.group(1)
+    if match: text = match.group(1)
     
-    # 2. Remove common prefixes/suffixes usually added by AI
-    text = re.sub(r'^[^{[]+', '', text)  # Remove anything before the first { or [
-    text = re.sub(r'[^}\]]+$', '', text) # Remove anything after the last } or ]
+    # 2. البحث عن أول قوس { أو [ وآخر قوس } أو ]
+    # هذا يزيل أي مقدمات مثل "Here is the JSON code:"
+    start_brace = text.find('{')
+    start_bracket = text.find('[')
     
+    start_index = -1
+    if start_brace != -1 and start_bracket != -1:
+        start_index = min(start_brace, start_bracket)
+    elif start_brace != -1:
+        start_index = start_brace
+    elif start_bracket != -1:
+        start_index = start_bracket
+        
+    if start_index != -1:
+        text = text[start_index:]
+        
+    # البحث عن النهاية
+    end_brace = text.rfind('}')
+    end_bracket = text.rfind(']')
+    
+    end_index = -1
+    if end_brace != -1 and end_bracket != -1:
+        end_index = max(end_brace, end_bracket)
+    elif end_brace != -1:
+        end_index = end_brace
+    elif end_bracket != -1:
+        end_index = end_bracket
+        
+    if end_index != -1:
+        text = text[:end_index+1]
+        
     return text.strip()
 
 def try_parse_json(text, context=""):
     """
-    Robust parser that tries multiple methods to recover broken JSON.
+    Robust parser: Tries standard JSON, then Python Eval, then manual fixes.
     """
-    if not text:
-        log(f"      ❌ JSON Error ({context}): Empty input.")
-        return None
-
-    # Method 1: Standard Strict JSON
+    if not text: return None
+    
+    # المحاولة 1: JSON قياسي
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
-        pass # Continue to backup methods
+    except:
+        pass
 
-    # Method 2: Python Literal Eval (Handles single quotes ' vs double quotes ")
-    # Many models output Python dicts instead of JSON.
+    # المحاولة 2: Python Literal Eval
+    # (موديلات AI غالباً تستخدم ' بدلاً من " وهذا يكسر JSON لكنه مقبول في بايثون)
     try:
         return ast.literal_eval(text)
     except:
         pass
 
-    # Method 3: Aggressive Escaping Fix (Common HTML in JSON issue)
-    # This tries to fix unescaped double quotes inside HTML attributes
+    # المحاولة 3: إصلاح الهروب (Escaping Fix) - لمحاولة إنقاذ HTML المكسور
     try:
-        # This regex looks for double quotes that appear inside specific HTML tags and escapes them
-        # (This is a simplified fix, not perfect, but helps often)
+        # استبدال الأسطر الجديدة الحقيقية بـ \n
         fixed_text = text.replace('\n', '\\n').replace('\r', '')
-        # Try finding the content block and escaping inner quotes manually if needed
+        # محاولة أخيرة بوضع strict=False
         return json.loads(fixed_text, strict=False)
     except:
-        pass
-
-    # Method 4: Last Resort - Regex Extraction (If JSON is totally broken)
-    # We try to construct a partial object if possible, but usually log failure here.
-    log(f"      ❌ JSON Parse Error ({context}). Raw snippet: {text[:100]}...")
-    return None
-
+        log(f"      ❌ JSON Parse Error ({context}). Input length: {len(text)}")
+        # في حال الفشل التام، نطبع جزءاً من النص لنعرف السبب
+        log(f"      🔍 Broken Snippet: {text[:100]}...")
+        return None
 
 
 def fetch_full_article(url):
