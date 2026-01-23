@@ -237,6 +237,10 @@ KG LINKS: {knowledge_graph}
 5. **Schema:** 
    - Use `Article` or `TechArticle` schema (better than NewsArticle for evergreen content).
 
+6. *"Sources:**
+   - Add `<div class="Sources">` 
+   - Add titles of sources of the article with their linkes
+
 Output JSON ONLY:
 {{
   "finalTitle": "...",
