@@ -617,78 +617,7 @@ def publish_post(title, content, labels):
         return None
         
 
-def generate_and_upload_image(prompt_text, overlay_text=""):
-    key = os.getenv('IMGBB_API_KEY')
-    if not key: return None
-    
-    log(f"   🎨 Generating Thumbnail (Flux + Local Overlay)...")
 
-    # 1. تحسين البرومبت (Flux Realism)
-    enhancers = ", photorealistic, shot on Sony A7R IV, 85mm lens, f/1.8, cinematic lighting, youtube thumbnail style, 8k, --no cartoon, --no illustration, --no 3d render"
-    final_prompt = urllib.parse.quote(f"{prompt_text}{enhancers}")
-    seed = random.randint(1, 99999)
-    
-    # نطلب الصورة "خام" بدون نص من Pollinations
-    image_url = f"https://image.pollinations.ai/prompt/{final_prompt}?width=1280&height=720&model=flux&seed={seed}&nologo=true"
-
-    try:
-        # 2. تحميل الصورة إلى الذاكرة
-        r = requests.get(image_url, timeout=60)
-        if r.status_code != 200: return None
-        
-        img = Image.open(BytesIO(r.content)).convert("RGBA")
-        
-        # 3. معالجة النص (Overlay) محلياً باستخدام PIL
-        if overlay_text:
-            draw = ImageDraw.Draw(img)
-            W, H = img.size
-            
-            # محاولة تحميل خط عريض، أو استخدام الافتراضي
-            try:
-                # محاولة استخدام خطوط النظام الشائعة
-                font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-                if not os.path.exists(font_path):
-                    font_path = "arial.ttf"
-                font = ImageFont.truetype(font_path, 80)
-            except:
-                font = ImageFont.load_default()
-
-            # تجهيز النص (أحرف كبيرة)
-            text = overlay_text.upper()
-            
-            # حساب أبعاد النص لتوسيطه
-            bbox = draw.textbbox((0, 0), text, font=font)
-            text_w = bbox[2] - bbox[0]
-            text_h = bbox[3] - bbox[1]
-            
-            x = (W - text_w) / 2
-            y = H - text_h - 50 # مسافة من الأسفل
-            
-            # رسم حدود سوداء للنص (Stroke) لزيادة الوضوح
-            stroke_width = 4
-            draw.text((x, y), text, font=font, fill="yellow", stroke_width=stroke_width, stroke_fill="black")
-
-        # 4. تحويل الصورة المعدلة للرفع
-        img_byte_arr = BytesIO()
-        img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
-        img_byte_arr.seek(0)
-        
-        # 5. الرفع إلى ImgBB
-        log("      ✅ Uploading processed thumbnail...")
-        res = requests.post(
-            "https://api.imgbb.com/1/upload", 
-            data={"key": key, "name": f"thumb_{seed}"}, 
-            files={"image": img_byte_arr}, 
-            timeout=60
-        )
-        
-        if res.status_code == 200:
-            return res.json()['data']['url']
-            
-    except Exception as e:
-        log(f"      ⚠️ Image Generation/Upload Error: {e}")
-    
-    return None 
 
 def load_kg():
     try:
