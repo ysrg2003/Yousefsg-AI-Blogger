@@ -783,7 +783,12 @@ def run_pipeline(category, config, mode="trending"):
     log(f"\n🚀 INIT PIPELINE: {category} (Viral Explainer Mode ⚡)")
     
     # تحميل قاعدة المعرفة لتجنب التكرار
-    recent_titles = get_recent_titles_string(limit=60)
+    # تحميل قاعدة المعرفة لتجنب التكرار
+    # نمرر الـ category لنحصل على تاريخ هذا القسم فقط
+    recent_titles = get_recent_titles_string(category=category, limit=100)
+    
+    # طباعة للتأكد من أن النظام يرى التاريخ
+    # log(f"   📚 Knowledge Graph Loaded: Found {len(recent_titles.split(' | '))} previous articles in '{category}'.")
 
     # =====================================================
     # STEP 0: SEO STRATEGY (THE BRAIN)
