@@ -240,9 +240,13 @@ Output JSON ONLY (Must contain these specific keys):
 {{
   "finalTitle": "Refined Headline",
   "finalContent": "The complete, polished HTML body (Hook + Body + Verdict + FAQ + Sources)",
-  "imageGenPrompt": "Cinematic photo of a friendly humanoid robot or tech subject [doing a specific action: e.g., cooking, holding a phone], realistic, daily life context, bright lighting, high detail, 8k, --no text, --no faces",
-  "imageOverlayText": "Simple Label (e.g. 'NEW UPDATE')",
-  "seo": {{
+  "imageGenPrompt": "CHOOSE ONE OF THESE 3 STYLES based on the article type:
+      1. (For App/Software Reviews): 'Close-up POV shot of a human hand holding a modern smartphone showing the [App Name/Icon] interface clearly on screen, blurred cozy home office background, bokeh, 4k, realistic photorealistic, tech review style'.
+      2. (For Comparisons): 'Split screen composition, left side shows [Product A] with red tint lighting, right side shows [Product B] with blue tint lighting, high contrast, 8k resolution, versus mode, hyper-realistic'.
+      3. (For News/Warnings): 'Cinematic shot of a person looking concerned at a laptop screen in a dark room, screen glowing blue, displaying [Error Message/Topic], cyber security context, dramatic lighting, shot on Sony A7R IV'.
+      **CRITICAL:** Do NOT describe 'abstract AI brains' or 'flying robots'. Describe REAL LIFE SCENES.",
+   "imageOverlayText": "A Short, Punchy 1-2 Word Hook (e.g., 'DON'T UPDATE', 'NEW FEATURE', 'VS', 'HIDDEN TRICK'). Keep it uppercase.",
+    "seo": {{
       "metaTitle": "Clicky Title (60 chars)",
       "metaDescription": "Benefit-driven description (150 chars).",
       "tags": ["tag1", "tag2", "tag3"],
