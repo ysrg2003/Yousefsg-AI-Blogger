@@ -39,6 +39,8 @@ from tenacity import (
     retry_if_exception_type, 
     before_sleep_log
 )
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+from io import BytesIO
 from prompts import *
 
 # ==============================================================================
@@ -236,13 +238,6 @@ ARTICLE_STYLE = """
     .Sources { font-size: 0.9em; color: #777; margin-top: 50px; border-top: 1px solid #eee; padding-top: 20px; }
     .Sources ul { list-style-type: disc; padding-left: 20px; }
 </style>
-<div class="author-box" style="background:#f0f2f5; padding:20px; border-radius:10px; margin-top:40px; display:flex; align-items:center;">
-    <img src="https://blogger.googleusercontent.com/img/a/AVvXsEixenfOUfJ8hB4zmLeKBmG7I3Ktv7_J4KIcWOiX0LJ9ok_FIUgWzx-ILY-6I72NWc51056aJSu4MxuGUEdo5jbocsel9UWusc0f4B3vq0I9THcNgI6dxbQDmtcSqwkv8ykAfh2D-nDMR6MG0pggxuuTiPcmv6vY894e5SaLVCZnF5XiyhtYwKZfA5mu3-c=s791" style="width:80px; height:80px; border-radius:50%; margin-right:15px;">
-    <div>
-        <h4 style="margin:0;">Yousef Sameer</h4> <!-- استخدم اسماً ثابتاً -->
-        <p style="font-size:14px; margin:5px 0;">Senior Tech Editor dealing with AI since 2020. Obsessed with finding bugs in new updates.</p>
-    </div>
-</div>
 """
 
 # ==============================================================================
@@ -615,75 +610,82 @@ def publish_post(title, content, labels):
         return None
 
 
+
+                
+               # تأكد من وجود هذه الاستيرادات في أعلى الملف (عادة هي موجودة لكن تأكد):
+
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
-    if not key: 
-        log("❌ IMG_BB Key Missing!")
-        return None
+    if not key: return None
     
-    log(f"   🎨 Generating Thumbnail: '{prompt_text[:30]}...'")
+    log(f"   🎨 Generating Thumbnail (Flux + Local Overlay)...")
 
-    # 1. تحسين البرومبت برمجياً لضمان الواقعية
-    # نضيف كلمات مفتاحية تقنية للكاميرا والإضاءة بغض النظر عما كتبه الموديل
+    # 1. تحسين البرومبت (Flux Realism)
     enhancers = ", photorealistic, shot on Sony A7R IV, 85mm lens, f/1.8, cinematic lighting, youtube thumbnail style, 8k, --no cartoon, --no illustration, --no 3d render"
-    
-    final_prompt = f"{prompt_text}{enhancers}"
-    
-    # 2. تجهيز الرابط (Pollinations with Flux Model)
-    # Flux هو أفضل موديل مجاني حالياً للواقعية والنصوص
-    encoded_prompt = urllib.parse.quote(final_prompt)
-    
-    # إضافة النص (Overlay) إذا وجد
-    text_param = ""
-    if overlay_text:
-        # نستخدم خط عريض ولون أصفر أو أبيض لزيادة التباين
-        text_param = f"&text={urllib.parse.quote(overlay_text)}&font=arial&fontsize=60&color=yellow"
-
-    # استخدام seed عشوائي لضمان تنوع الصور لنفس الموضوع
+    final_prompt = urllib.parse.quote(f"{prompt_text}{enhancers}")
     seed = random.randint(1, 99999)
     
-    # رابط API المحدث (نحدد موديل Flux صراحة)
-    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&model=flux&seed={seed}&nologo=true{text_param}"
+    # نطلب الصورة "خام" بدون نص من Pollinations
+    image_url = f"https://image.pollinations.ai/prompt/{final_prompt}?width=1280&height=720&model=flux&seed={seed}&nologo=true"
 
-    # 3. المحاولة والرفع
-    for i in range(3):
-        try:
-            log(f"      ⏳ Downloading Image (Attempt {i+1})...")
-            # مهلة 60 ثانية لأن Flux قد يأخذ وقتاً
-            r = requests.get(image_url, timeout=60)
+    try:
+        # 2. تحميل الصورة إلى الذاكرة
+        r = requests.get(image_url, timeout=60)
+        if r.status_code != 200: return None
+        
+        img = Image.open(BytesIO(r.content)).convert("RGBA")
+        
+        # 3. معالجة النص (Overlay) محلياً باستخدام PIL
+        if overlay_text:
+            draw = ImageDraw.Draw(img)
+            W, H = img.size
             
-            if r.status_code == 200:
-                log("      ✅ Image Generated. Uploading to ImgBB...")
-                
-                # رفع الصورة إلى ImgBB للحصول على رابط دائم
-                upload_payload = {
-                    "key": key,
-                    "image": base64.b64encode(r.content), # ImgBB يفضل base64 أحياناً
-                    "name": f"thumbnail_{seed}"
-                }
-                # ملاحظة: إذا فشل base64 يمكن العودة لإرسال الملفات binary
-                # هنا نستخدم الطريقة الأبسط للملفات
-                res = requests.post(
-                    "https://api.imgbb.com/1/upload", 
-                    data={"key": key}, 
-                    files={"image": r.content}, 
-                    timeout=60
-                )
-                
-                if res.status_code == 200:
-                    final_link = res.json()['data']['url']
-                    log(f"      🎉 Thumbnail Ready: {final_link}")
-                    return final_link
-                else:
-                    log(f"      ⚠️ ImgBB Error: {res.text}")
-            else:
-                log(f"      ⚠️ Pollinations Error: {r.status_code}")
-                
-        except Exception as e:
-            log(f"      ⚠️ Image Error: {e}")
-            time.sleep(3) # انتظار قبل المحاولة التالية
+            # محاولة تحميل خط عريض، أو استخدام الافتراضي
+            try:
+                # محاولة استخدام خطوط النظام الشائعة
+                font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+                if not os.path.exists(font_path):
+                    font_path = "arial.ttf"
+                font = ImageFont.truetype(font_path, 80)
+            except:
+                font = ImageFont.load_default()
 
-    return None
+            # تجهيز النص (أحرف كبيرة)
+            text = overlay_text.upper()
+            
+            # حساب أبعاد النص لتوسيطه
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+            
+            x = (W - text_w) / 2
+            y = H - text_h - 50 # مسافة من الأسفل
+            
+            # رسم حدود سوداء للنص (Stroke) لزيادة الوضوح
+            stroke_width = 4
+            draw.text((x, y), text, font=font, fill="yellow", stroke_width=stroke_width, stroke_fill="black")
+
+        # 4. تحويل الصورة المعدلة للرفع
+        img_byte_arr = BytesIO()
+        img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
+        img_byte_arr.seek(0)
+        
+        # 5. الرفع إلى ImgBB
+        log("      ✅ Uploading processed thumbnail...")
+        res = requests.post(
+            "https://api.imgbb.com/1/upload", 
+            data={"key": key, "name": f"thumb_{seed}"}, 
+            files={"image": img_byte_arr}, 
+            timeout=60
+        )
+        
+        if res.status_code == 200:
+            return res.json()['data']['url']
+            
+    except Exception as e:
+        log(f"      ⚠️ Image Generation/Upload Error: {e}")
+    
+    return None 
 
 def load_kg():
     try:
