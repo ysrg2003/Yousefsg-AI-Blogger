@@ -74,38 +74,167 @@ def log(msg):
     print(f"[{timestamp}] {msg}", flush=True)
 
 # ==============================================================================
-# 1. CSS STYLING
+# 1. CSS STYLING (UPDATED v14.1 - Fixed Layout & TOC)
 # ==============================================================================
 ARTICLE_STYLE = """
 <style>
-    .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.85; color: #2c3e50; font-size: 19px; }
-    h2 { color: #111; font-weight: 800; margin-top: 55px; margin-bottom: 25px; border-bottom: 4px solid #f1c40f; padding-bottom: 8px; display: inline-block; font-size: 28px; }
-    h3 { color: #2980b9; font-weight: 700; margin-top: 40px; font-size: 24px; }
-    .toc-box { background: #ffffff; border: 1px solid #e1e4e8; padding: 30px; margin: 40px 0; border-radius: 12px; display: inline-block; min-width: 60%; box-shadow: 0 8px 16px rgba(0,0,0,0.05); }
-    .toc-box h3 { margin-top: 0; font-size: 22px; border-bottom: 2px solid #3498db; padding-bottom: 8px; display: inline-block; margin-bottom: 15px; color: #222; }
-    .toc-box ul { list-style: none; padding: 0; margin: 0; }
-    .toc-box li { margin-bottom: 12px; border-bottom: 1px dashed #f0f0f0; padding-bottom: 8px; padding-left: 20px; position: relative; }
-    .toc-box li:before { content: "►"; color: #3498db; position: absolute; left: 0; font-size: 14px; top: 4px; }
-    .toc-box a { color: #444; font-weight: 600; font-size: 18px; text-decoration: none; transition: 0.2s; }
-    .toc-box a:hover { color: #3498db; padding-left: 8px; }
-    .table-wrapper { overflow-x: auto; margin: 45px 0; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); border: 1px solid #eee; }
-    table { width: 100%; border-collapse: collapse; background: #fff; min-width: 600px; font-size: 18px; }
-    th { background: #2c3e50; color: #fff; padding: 18px; text-align: left; text-transform: uppercase; font-size: 16px; letter-spacing: 1px; }
-    td { padding: 16px 18px; border-bottom: 1px solid #eee; color: #34495e; }
-    tr:nth-child(even) { background-color: #f8f9fa; }
-    tr:hover { background-color: #e9ecef; transition: 0.3s; }
-    .takeaways-box { background: linear-gradient(135deg, #fdfbf7 0%, #fff 100%); border-left: 6px solid #e67e22; padding: 30px; margin: 40px 0; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
-    .takeaways-box h3 { margin-top: 0; color: #d35400; font-size: 22px; margin-bottom: 20px; display: flex; align-items: center; }
-    .takeaways-box ul { margin: 0; padding-left: 25px; }
-    .takeaways-box li { margin-bottom: 10px; font-weight: 600; font-size: 18px; color: #222; }
-    .faq-section { margin-top: 70px; border-top: 3px solid #f1f1f1; padding-top: 50px; background: #fffcf5; padding: 40px; border-radius: 20px; }
-    .faq-title { font-size: 30px; font-weight: 900; color: #222; margin-bottom: 35px; text-align: center; }
-    .faq-q { font-weight: 700; font-size: 20px; color: #d35400; margin-bottom: 10px; display: block; }
-    .faq-a { font-size: 19px; color: #555; line-height: 1.8; }
-    .separator img { border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.12); max-width: 100%; height: auto; display: block; }
-    blockquote { background: #ffffff; border-left: 5px solid #f1c40f; margin: 40px 0; padding: 25px 35px; font-style: italic; color: #555; font-size: 1.3em; line-height: 1.6; box-shadow: 0 3px 10px rgba(0,0,0,0.05); }
-    a { color: #2980b9; text-decoration: none; font-weight: 600; border-bottom: 2px dotted #2980b9; transition: all 0.3s; }
-    a:hover { color: #e67e22; border-bottom: 2px solid #e67e22; background-color: #fff8e1; }
+    /* Global Settings */
+    .post-body { 
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+        line-height: 1.8; 
+        color: #333; 
+        font-size: 18px; 
+        max-width: 100%;
+        overflow-x: hidden; /* Prevents horizontal scroll */
+    }
+    
+    /* Headers */
+    h2 { 
+        color: #111; 
+        font-weight: 800; 
+        margin-top: 60px; 
+        margin-bottom: 25px; 
+        border-bottom: 3px solid #f1c40f; 
+        padding-bottom: 10px; 
+        font-size: 28px; 
+        clear: both; /* Fixes overlap issue */
+        display: block; /* Ensures it takes full width */
+    }
+    h3 { 
+        color: #2980b9; 
+        font-weight: 700; 
+        margin-top: 40px; 
+        margin-bottom: 20px;
+        font-size: 24px; 
+        clear: both;
+    }
+    
+    /* Table of Contents (Fixed) */
+    .toc-box { 
+        background: #fdfdfd; 
+        border: 1px solid #e1e4e8; 
+        padding: 25px; 
+        margin: 30px 0 50px 0; /* Extra bottom margin to prevent overlap */
+        border-radius: 12px; 
+        display: block; /* Changed from inline-block to block */
+        width: 100%; /* Full width to avoid wrapping issues */
+        box-sizing: border-box;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+    }
+    .toc-box h3 { 
+        margin-top: 0; 
+        font-size: 22px; 
+        border-bottom: 2px solid #3498db; 
+        padding-bottom: 10px; 
+        margin-bottom: 20px; 
+        color: #2c3e50;
+        display: inline-block;
+    }
+    .toc-box ul { 
+        list-style: none !important; 
+        padding: 0 !important; 
+        margin: 0 !important; 
+    }
+    .toc-box li { 
+        margin-bottom: 12px; 
+        border-bottom: 1px dashed #eee; 
+        padding-bottom: 8px; 
+        padding-left: 0; /* Reset padding */
+        position: relative; 
+    }
+    .toc-box a { 
+        color: #444; 
+        font-weight: 600; 
+        font-size: 18px; 
+        text-decoration: none; 
+        transition: 0.2s; 
+        display: flex; /* Aligns icon and text */
+        align-items: center;
+        border: none;
+    }
+    .toc-box a:before { 
+        content: "👉"; /* Simple emoji icon */
+        margin-right: 10px; 
+        font-size: 16px; 
+    }
+    .toc-box a:hover { 
+        color: #3498db; 
+        padding-left: 5px; 
+        background: none;
+    }
+
+    /* Takeaways Box */
+    .takeaways-box { 
+        background: linear-gradient(135deg, #fffcf5 0%, #fff 100%); 
+        border-left: 6px solid #e67e22; 
+        padding: 25px; 
+        margin: 40px 0; 
+        border-radius: 8px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.03); 
+    }
+    
+    /* Tables */
+    .table-wrapper { 
+        overflow-x: auto; 
+        margin: 40px 0; 
+        border-radius: 8px; 
+        border: 1px solid #eee; 
+    }
+    table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        background: #fff; 
+        font-size: 17px; 
+    }
+    th { 
+        background: #2c3e50; 
+        color: #fff; 
+        padding: 15px; 
+        text-align: left; 
+    }
+    td { 
+        padding: 15px; 
+        border-bottom: 1px solid #eee; 
+        color: #444; 
+    }
+
+    /* Quote/Verdict */
+    blockquote { 
+        background: #f8f9fa; 
+        border-left: 5px solid #27ae60; 
+        margin: 40px 0; 
+        padding: 20px 30px; 
+        font-style: italic; 
+        color: #555; 
+        font-size: 1.2em; 
+    }
+
+    /* Links */
+    a { 
+        color: #2980b9; 
+        text-decoration: none; 
+        font-weight: 600; 
+        border-bottom: 2px dotted #2980b9; 
+        transition: all 0.3s; 
+    }
+    a:hover { 
+        color: #e67e22; 
+        border-bottom: 2px solid #e67e22; 
+    }
+    
+    /* FAQ */
+    .faq-section { 
+        margin-top: 60px; 
+        background: #fdfdfd; 
+        padding: 30px; 
+        border-radius: 15px; 
+        border: 1px solid #eee; 
+    }
+    .faq-q { color: #d35400; font-weight: bold; font-size: 20px; display: block; margin-bottom: 10px; }
+    
+    /* Sources */
+    .Sources { font-size: 0.9em; color: #777; margin-top: 50px; border-top: 1px solid #eee; padding-top: 20px; }
+    .Sources ul { list-style-type: disc; padding-left: 20px; }
 </style>
 """
 
