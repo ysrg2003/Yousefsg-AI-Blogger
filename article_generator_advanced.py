@@ -885,17 +885,14 @@ def resolve_and_scrape(google_url):
 
 def run_pipeline(category, config, mode="trending"):
     """
-    The Master Pipeline v11.0 (Smart Analyst Mode).
-    1. SEO Strategy (AI decides the keyword).
-    2. Multi-Source Scraping (Collects top 3 sources).
-    3. Synthesis & Drafting (Writes a comprehensive guide).
-    4. Multimedia Gen (Video/Image) with Absolute Path fixes.
-    5. Publishing & Distribution.
+    The Master Pipeline v12.0 (Unbreakable & Strict Mode).
+    Uses Tenacity for retries and strictly adheres to validation rules.
     """
-    model = config['settings'].get('model_name')
+    # 1. إعداد المتغيرات الأساسية
+    model_name = config['settings'].get('model_name')
     cat_conf = config['categories'][category]
     
-    log(f"\n🚀 INIT PIPELINE: {category} (Smart Analyst Mode 🧠)")
+    log(f"\n🚀 INIT PIPELINE: {category} (Strict Analyst Mode 🧠)")
     
     # تحميل قاعدة المعرفة لتجنب التكرار
     recent_titles = get_recent_titles_string(limit=60)
@@ -905,32 +902,42 @@ def run_pipeline(category, config, mode="trending"):
     # =====================================================
     log("   🧠 Consulting SEO Strategist for a winning keyword...")
     
-    # طلب كلمة مفتاحية ذكية من الذكاء الاصطناعي بناءً على الفئة والتاريخ
-    seo_prompt = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today())
-    seo_plan = try_parse_json(generate_step(model, seo_prompt, "Step 0 (SEO Strategy)"), "SEO")
-    
     target_keyword = ""
-    if seo_plan and 'target_keyword' in seo_plan:
+    seo_reasoning = ""
+
+    try:
+        # طلب كلمة مفتاحية ذكية من الذكاء الاصطناعي
+        seo_prompt = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today())
+        
+        # نستخدم الدالة الصارمة، إذا فشلت 5 مرات سترفع خطأ
+        seo_plan = generate_step_strict(
+            model_name, 
+            seo_prompt, 
+            "Step 0 (SEO Strategy)", 
+            required_keys=["target_keyword"]
+        )
+        
         target_keyword = seo_plan.get('target_keyword')
+        seo_reasoning = seo_plan.get('reasoning', 'N/A')
         log(f"   🎯 Strategy Defined: Targeting keyword '{target_keyword}'")
-        log(f"   📝 Reasoning: {seo_plan.get('reasoning', 'No reasoning provided')}")
-    else:
-        # Fallback: في حال فشل الذكاء الاصطناعي، نعود للكلمات الموجودة في الإعدادات
+        
+    except Exception as e:
+        # هذه الخطوة الوحيدة التي نسمح فيها بالـ Fallback اليدوي لأننا نستطيع العمل بدونه
+        log(f"   ⚠️ SEO Step failed after retries: {e}. Using config fallback.")
         target_keyword = cat_conf.get('trending_focus', category)
         if "," in target_keyword:
             target_keyword = random.choice([t.strip() for t in target_keyword.split(',')])
-        log(f"   ⚠️ SEO Step failed or timed out. Using fallback keyword: '{target_keyword}'")
 
     # =====================================================
     # STEP 1: MULTI-SOURCE RESEARCH (THE HUNTER)
     # =====================================================
-    # البحث في أخبار جوجل عن الكلمة المفتاحية المحددة (آخر 3 أيام لضمان الحداثة ووفرة المصادر)
+    # البحث في أخبار جوجل
     rss_query = f"{target_keyword} when:3d"
     rss_items = get_real_news_rss(rss_query.replace("when:3d","").strip(), category)
     
-    # محاولة ثانية بنطاق أوسع إذا لم نجد نتائج دقيقة
+    # محاولة ثانية بنطاق أوسع إذا لم نجد نتائج
     if not rss_items:
-        log("   ⚠️ No specific news found for this keyword. Retrying with broad category search...")
+        log("   ⚠️ No specific news found. Retrying with broad category search...")
         rss_items = get_real_news_rss(category, category)
         if not rss_items:
             log("❌ FATAL: No RSS items found even after fallback. Aborting.")
@@ -942,14 +949,14 @@ def run_pipeline(category, config, mode="trending"):
     
     log(f"   🕵️‍♂️ Investigating multiple sources for: '{target_keyword}'...")
     
-    # حلقة الفحص: نفحص أول 6 نتائج لنستخرج أفضل 3 منها
+    # حلقة الفحص وجمع المصادر
     for item in rss_items[:6]:
-        # 1. فلترة التكرار (تجاهل ما تم نشره سابقاً)
+        # 1. فلترة التكرار
         if item['title'][:20] in recent_titles: 
             log(f"      ⏭️ Skipped duplicate title: {item['title'][:30]}...")
             continue
         
-        # 2. فلترة المصدر المكرر (لا نأخذ مقالين من نفس الموقع)
+        # 2. فلترة النطاق المكرر
         if any(src['domain'] in item['link'] for src in collected_sources): 
             continue
 
@@ -958,8 +965,7 @@ def run_pipeline(category, config, mode="trending"):
         # محاولة فك الرابط وجلب المحتوى
         r_url, r_title, text = resolve_and_scrape(item['link'])
         
-        # 3. فلترة الجودة (The Quality Filter)
-        # نرفض المقالات القصيرة جداً (أقل من 800 حرف) لأنها لا تصلح لبناء محتوى دسم
+        # 3. فلترة الجودة (الطول)
         if text and len(text) >= 800:
             log(f"         ✅ Accepted Source! ({len(text)} chars).")
             
@@ -972,205 +978,235 @@ def run_pipeline(category, config, mode="trending"):
                 "date": item['date']
             })
             
-            # نعتمد بيانات أول مصدر كبيانات أساسية (للعنوان والرابط)
+            # تحديد البيانات الرئيسية من المصدر الأول
             if not main_headline:
                 main_headline = item['title']
                 main_link = item['link']
             
-            # نكتفي بـ 3 مصادر قوية
+            # الاكتفاء بـ 3 مصادر
             if len(collected_sources) >= 3: 
-                log("      ✨ Collected sufficient data (3 robust sources). Proceeding to draft.")
+                log("      ✨ Collected sufficient data (3 robust sources).")
                 break
         else:
-            current_len = len(text) if text else 0
-            log(f"         ⚠️ Rejected (Weak/Short Content). Length: {current_len}")
-            time.sleep(1) # راحة لتجنب الحظر
+            log(f"         ⚠️ Rejected (Weak/Short Content).")
+            time.sleep(1)
 
-    # إذا لم ننجح في جمع أي مصدر صالح
     if not collected_sources:
-        log("❌ FATAL: No valid high-quality sources found after filtering. Skipping execution.")
+        log("❌ FATAL: No valid high-quality sources found. Skipping.")
         return
 
     # =====================================================
-    # STEP 2: DRAFTING & SYNTHESIS (THE WRITER)
+    # STEP 2: DRAFTING & SYNTHESIS (STRICT CHAIN)
     # =====================================================
     log(f"\n✍️ Synthesizing Content from {len(collected_sources)} sources...")
     
-    # دمج النصوص المستخرجة في كتلة نصية واحدة منظمة
+    # تحضير النص المجمع
     combined_text = ""
     for i, src in enumerate(collected_sources):
         combined_text += f"\n--- SOURCE {i+1}: {src['domain']} ---\nTitle: {src['title']}\nDate: {src['date']}\nCONTENT:\n{src['text'][:9000]}\n"
 
-    # تحضير الـ Payload للنموذج
     json_ctx = {
-        "rss_headline": main_headline, # العنوان المقترح من المصدر الأول
+        "rss_headline": main_headline,
         "keyword_focus": target_keyword,
         "source_count": len(collected_sources),
         "date": str(datetime.date.today())
     }
     
-    # توجيه الموديل لاستخدام المصادر المتعددة
     prefix = "*** MULTI-SOURCE RESEARCH DATA (SYNTHESIZE THIS) ***"
     payload = f"METADATA: {json.dumps(json_ctx)}\n\n{prefix}\n{combined_text}"
     
-    # توليد المسودة (Step B)
-    json_b = try_parse_json(generate_step(model, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Step B (Writer)"), "B")
-    if not json_b: return
+    # هنا نبدأ السلسلة الصارمة (Strict Chain)
+    # أي فشل هنا سيؤدي لإيقاف البايبلاين بدلاً من نشر محتوى سيء
+    try:
+        # --- Step B: Writer ---
+        # نطلب مفاتيح محددة جداً لضمان الهيكل
+        required_b = ["headline", "hook", "article_body", "verdict"]
+        json_b = generate_step_strict(
+            model_name, 
+            PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), 
+            "Step B (Writer)", 
+            required_keys=required_b
+        )
 
-    # تحسين السيو والتنسيق (Step C)
-    kg_links = get_relevant_kg_for_linking(category)
-    prompt_c = PROMPT_C_TEMPLATE.format(json_input=json.dumps(json_b), knowledge_graph=kg_links)
-    json_c = try_parse_json(generate_step(model, prompt_c, "Step C (SEO & Style)"), "C")
-    if not json_c: return
+        # --- Step C: SEO & Style ---
+        kg_links = get_relevant_kg_for_linking(category)
+        required_c = ["finalTitle", "finalContent", "seo", "imageGenPrompt"]
+        prompt_c = PROMPT_C_TEMPLATE.format(json_input=json.dumps(json_b), knowledge_graph=kg_links)
+        
+        json_c = generate_step_strict(
+            model_name, 
+            prompt_c, 
+            "Step C (SEO & Style)", 
+            required_keys=required_c
+        )
 
-    # التدقيق وأنسنة النص (Step D)
-    prompt_d = PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c))
-    json_d = try_parse_json(generate_step(model, prompt_d, "Step D (Humanizer)"), "D")
-    if not json_d: return
+        # --- Step D: Humanizer ---
+        required_d = ["finalTitle", "finalContent"]
+        prompt_d = PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c))
+        
+        json_d = generate_step_strict(
+            model_name, 
+            prompt_d, 
+            "Step D (Humanizer)", 
+            required_keys=required_d
+        )
 
-    # التنظيف النهائي للكود (Step E)
-    prompt_e = PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d))
-    final = try_parse_json(generate_step(model, prompt_e, "Step E (Final Polish)"), "E")
-    
-    # في حال فشل الخطوة الأخيرة، نعود للخطوة السابقة
-    if not final: final = json_d 
+        # --- Step E: Final Polish ---
+        required_e = ["finalTitle", "finalContent", "imageGenPrompt", "seo"]
+        prompt_e = PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d))
+        
+        final = generate_step_strict(
+            model_name, 
+            prompt_e, 
+            "Step E (Final Polish)", 
+            required_keys=required_e
+        )
+        
+        # استخراج النتائج النهائية الموثوقة
+        title = final['finalTitle']
+        content_html = final['finalContent']
+        seo_data = final.get('seo', {})
+        img_prompt = final.get('imageGenPrompt', title)
+        img_overlay = final.get('imageOverlayText', 'News')
 
-    # اعتماد العنوان النهائي
-    title = final.get('finalTitle', main_headline)
-    
+    except Exception as e:
+        # هذا البلوك يلتقط أي فشل نهائي بعد استنفاد محاولات Tenacity
+        log(f"❌ PIPELINE CRASHED during generation phase: {e}")
+        log("❌ Aborting to prevent publishing bad content.")
+        return
+
     # =====================================================
-    # STEP 3: MULTIMEDIA GENERATION (VIDEO & IMAGE)
+    # STEP 3: MULTIMEDIA GENERATION
     # =====================================================
     log("   🧠 Generating Multimedia Assets...")
     
-    # 1. Social Metadata
-    yt_meta = try_parse_json(generate_step(model, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta"))
-    if not yt_meta: 
-        yt_meta = {"title": title, "description": f"Read full story: {main_link}", "tags": []}
-    
-    fb_dat = try_parse_json(generate_step(model, PROMPT_FACEBOOK_HOOK.format(title=title, category=category), "FB Hook"))
-    fb_cap = fb_dat.get('facebook', title ) if fb_dat else title
+    yt_meta = {}
+    fb_cap = title
+    vid_html = ""
+    vid_main = None
+    vid_short = None
+    fb_path = None
+    img_url = None
 
-    # 2. Video Generation (With Absolute Path Fix)
-    vid_html, vid_main, vid_short, fb_path = "", None, None, None
-    
     try:
-        # إصلاح المسار: استخدام مسار مطلق (Absolute Path) لتجنب أخطاء ffmpeg
-        base_output_dir = os.path.abspath("output")
-        os.makedirs(base_output_dir, exist_ok=True) # إنشاء المجلد إذا لم يكن موجوداً
+        # 1. Social Metadata
+        yt_meta = generate_step_strict(
+            model_name, 
+            PROMPT_YOUTUBE_METADATA.format(draft_title=title), 
+            "YT Meta",
+            required_keys=["title", "description", "tags"]
+        )
         
+        fb_dat = generate_step_strict(
+            model_name, 
+            PROMPT_FACEBOOK_HOOK.format(title=title), 
+            "FB Hook",
+            required_keys=["FB_Hook"]
+        )
+        fb_cap = fb_dat.get('FB_Hook', title)
+
+        # 2. Image Generation
+        img_url = generate_and_upload_image(img_prompt, img_overlay)
+
+        # 3. Video Generation
         # استخراج ملخص للنص لعمل السكربت
-        summ = re.sub('<[^<]+?>','', final.get('finalContent',''))[:2500]
+        summ = re.sub('<[^<]+?>','', content_html)[:2500]
         
-        # توليد السكربت
-        script = try_parse_json(generate_step(model, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script"))
+        # توليد السكربت بصيغة صارمة
+        script_json = generate_step_strict(
+            model_name, 
+            PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), 
+            "Video Script"
+        )
         
-        if script:
+        # التحقق من أن السكربت قائمة (List) كما هو مطلوب
+        if isinstance(script_json, list) and len(script_json) > 0:
             timestamp = int(time.time())
             rr = video_renderer.VideoRenderer()
+            base_output_dir = os.path.abspath("output")
+            os.makedirs(base_output_dir, exist_ok=True)
             
             # --- Main Video (Landscape) ---
-            main_video_filename = f"main_{timestamp}.mp4"
-            main_video_path = os.path.join(base_output_dir, main_video_filename)
-            
-            log(f"      🎬 Rendering Main Video to: {main_video_path}")
-            pm = rr.render_video(script, title, main_video_path)
+            main_video_path = os.path.join(base_output_dir, f"main_{timestamp}.mp4")
+            log(f"      🎬 Rendering Main Video...")
+            pm = rr.render_video(script_json, title, main_video_path)
             
             if pm and os.path.exists(pm):
-                # رفع الفيديو لليوتيوب
-                desc = f"{yt_meta.get('description','')}\n\n🚀 Full Article Link Coming Soon.\n\n#{category.replace(' ','')} #AI #TechNews"
+                desc = f"{yt_meta.get('description','')}\n\n🚀 Full Article Link Coming Soon.\n\n#{category.replace(' ','')} #AI"
                 vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
                 
                 if vid_main:
-                    # تضمين الفيديو في المقال
                     vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
-            else:
-                log("      ⚠️ Main video render returned None or file missing.")
 
-            # --- Short Video (Portrait/Reel) ---
+            # --- Short Video (Portrait) ---
             rs = video_renderer.VideoRenderer(width=1080, height=1920)
-            short_video_filename = f"short_{timestamp}.mp4"
-            short_video_path = os.path.join(base_output_dir, short_video_filename)
-            
-            log(f"      🎬 Rendering Short Video to: {short_video_path}")
-            ps = rs.render_video(script, title, short_video_path)
+            short_video_path = os.path.join(base_output_dir, f"short_{timestamp}.mp4")
+            log(f"      🎬 Rendering Short Video...")
+            ps = rs.render_video(script_json, title, short_video_path)
             
             if ps and os.path.exists(ps):
-                fb_path = ps # نحتفظ بالمسار للفيسبوك
-                # رفع الشورت لليوتيوب
+                fb_path = ps
                 vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
-            else:
-                log("      ⚠️ Short video render returned None or file missing.")
-                
-    except Exception as e: 
-        log(f"⚠️ Video Generation Logic Error: {e}")
-        # طباعة تتبع الخطأ في الكونسول للمساعدة في التصحيح
+
+    except Exception as e:
+        log(f"⚠️ Multimedia Error: {e}")
         import traceback
         traceback.print_exc()
-
-    # 3. Image Generation
-    img = generate_and_upload_image(final.get('imageGenPrompt', title), final.get('imageOverlayText', 'News'))
 
     # =====================================================
     # STEP 4: PUBLISHING
     # =====================================================
     log("   🚀 Publishing to Blogger...")
     
-    # تجميع جسم المقال (HTML)
-    body = ARTICLE_STYLE # الستايلات
+    # تجميع المقال النهائي
+    full_body = ARTICLE_STYLE
     
-    # إضافة الصورة البارزة
-    if img: 
-        alt_text = final.get("seo",{}).get("imageAltText","Tech News")
-        body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img}"><img src="{img}" alt="{alt_text}" /></a></div>'
+    # الصورة
+    if img_url: 
+        alt_text = seo_data.get("imageAltText", title)
+        full_body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}"><img src="{img_url}" alt="{alt_text}" /></a></div>'
     
-    # إضافة الفيديو (إذا وجد)
-    if vid_html: body += vid_html
+    # الفيديو
+    if vid_html: full_body += vid_html
     
-    # إضافة المحتوى النصي
-    body += final.get('finalContent', '')
+    # المحتوى
+    full_body += content_html
     
-    # إضافة Schema (JSON-LD)
+    # Schema Markup
     if 'schemaMarkup' in final:
         try: 
-            body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
+            full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
         except: pass
     
-    # النشر الفعلي
-    url = publish_post(title, body, [category])
+    # النشر
+    published_url = publish_post(title, full_body, [category, "Tech News", "AI"])
     
     # =====================================================
     # STEP 5: DISTRIBUTION & UPDATES
     # =====================================================
-    if url:
-        # تحديث قاعدة المعرفة
-        update_kg(title, url, category)
+    if published_url:
+        log(f"✅ PUBLISHED SUCCESSFULLY: {published_url}")
         
-        # تحديث وصف فيديوهات اليوتيوب بالرابط الجديد
-        upd_desc = f"{yt_meta.get('description','')}\n\n👇 READ THE FULL STORY HERE:\n{url}\n\n#AI #Technology #{category.replace(' ','')}"
-        if vid_main: youtube_manager.update_video_description(vid_main, upd_desc)
-        if vid_short: youtube_manager.update_video_description(vid_short, upd_desc)
+        # 1. تحديث قاعدة المعرفة
+        update_kg(title, published_url, category)
         
+        # 2. تحديث وصف اليوتيوب بالرابط
+        new_desc = f"{yt_meta.get('description','')}\n\n👇 READ THE FULL STORY HERE:\n{published_url}\n\n#AI #Technology"
+        if vid_main: youtube_manager.update_video_description(vid_main, new_desc)
+        if vid_short: youtube_manager.update_video_description(vid_short, new_desc)
+        
+        # 3. النشر على فيسبوك
         try:
-            # النشر على فيسبوك
-            log("   📢 Distributing to Social Media...")
-            
-            # الخيار الأول: نشر الفيديو القصير (Reel)
+            log("   📢 Distributing to Facebook...")
             if fb_path and os.path.exists(fb_path): 
-                fb_full_text = f"{fb_cap}\n\nRead more: {url}\n\n#AI #{category.replace(' ','')}"
-                social_manager.post_reel_to_facebook(fb_path, fb_full_text)
-                time.sleep(15) # انتظار للمعالجة
-            
-            # الخيار الثاني: نشر الصورة مع الرابط (إذا لم ينجح الفيديو)
-            elif img:
-                social_manager.distribute_content(f"{fb_cap}\n\n👇 Read Article:\n{url}", url, img)
-                
-        except Exception as e: 
-            log(f"   ⚠️ Social Distribution Error: {e}")
-# ==============================================================================
-# 5. CORE PIPELINE LOGIC (OFFLINE DECODER + JINA)
-# ==============================================================================
-
+                fb_text = f"{fb_cap}\n\nRead more: {published_url}\n\n#AI"
+                social_manager.post_reel_to_facebook(fb_path, fb_text)
+            elif img_url:
+                social_manager.distribute_content(f"{fb_cap}\n\n👇 Read Article:\n{published_url}", published_url, img_url)
+        except Exception as e:
+            log(f"   ⚠️ Social Dist Error: {e}")
+    else:
+        log("❌ Blogger Publish Failed.")
 
 # ==============================================================================
 # 7. MAIN
