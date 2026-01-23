@@ -268,16 +268,34 @@ Characters:
 1. You MUST use exactly these keys: "speaker", "type", "text".
 2. "type" must be either "send" (Right side) or "receive" (Left side).
 3. "text" is the dialogue.
-4. Keep sentences punchy and short.
+4. **MAXIMUM 10-12 WORDS PER MESSAGE:** Never write a long paragraph.
+5. **SPLIT LONG THOUGHTS:** If an explanation is long, break it into 2 or 3 separate message objects for the same speaker.
+   - *Bad:* "It allows you to paint with AI and also helps with writing text."
+   - *Good:* "It allows you to paint with AI." (Message 1)
+   - *Good:* "And it even helps with writing!" (Message 2)
+6. **Conversational Flow:** Use casual language ("Wait...", "No way!", "Check this out").
+
+**THE OUTRO (CRITICAL):**
+The dialogue MUST end with a Call to Action (CTA) sequence:
+- **User:** Asks where to find more info (e.g., "Where can I download this?", "Send me the link!", "I need the full list!").
+- **Pro:** Directs them to the Link in Bio/Description (e.g., "I wrote a full guide. Link in bio!", "Check the link in description!").
 
 **OUTPUT FORMAT RULES:**
 1. Return a JSON OBJECT with a single key: "video_script".
 2. The value of "video_script" must be a LIST of objects.
 3. Each object must have: "speaker", "type", "text".
 
-Example Output: {{ "video_script": [ {{"speaker": "User", "type": "receive", "text": "Wait, really?"}}, {{"speaker": "Pro", "type": "send", "text": "Yes, look at this..."}} ] }} 
+Example Output:
+{{
+  "video_script": [
+      {{"speaker": "User", "type": "receive", "text": "Did you see the new update?"}},
+      {{"speaker": "Pro", "type": "send", "text": "Yes! It is actually insane."}},
+      {{"speaker": "Pro", "type": "send", "text": "You can now generate images inside Paint!"}},
+      {{"speaker": "User", "type": "receive", "text": "I need to try this. Where is the link?"}},
+      {{"speaker": "Pro", "type": "send", "text": "Full guide is in the description! 👇"}}
+  ]
+}}
 
-]
 
 
 **CRITICAL OUTPUT RULES:**
