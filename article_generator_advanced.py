@@ -950,7 +950,7 @@ def run_pipeline(category, config, mode="trending"):
         return
 
 # =====================================================
-    # STEP 3: MULTIMEDIA GENERATION (SELF-HEALING)
+    # STEP 3: MULTIMEDIA GENERATION (KEY-BASED EXTRACTION)
     # =====================================================
     log("   🧠 Generating Multimedia Assets...")
     
@@ -982,80 +982,57 @@ def run_pipeline(category, config, mode="trending"):
         # 2. Image Generation
         img_url = generate_and_upload_image(img_prompt, img_overlay)
 
-        # 3. Video Generation (With Active Retry Loop)
+        # 3. Video Generation (Robust Key Search)
         summ_clean = re.sub('<[^<]+?>','', content_html)[:2500]
         
         script_json = None
         
-        # نحدد البرومبت الأساسي
-        current_script_prompt = PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean)
-        
-        # حلقة المحاولة (3 محاولات قصوى)
+        # حلقة المحاولة (3 محاولات)
         for attempt in range(1, 4):
             log(f"      🎬 Generating Script (Attempt {attempt}/3)...")
-            
             try:
-                # طلب التوليد
                 raw_result = generate_step_strict(
                     model_name, 
-                    current_script_prompt, 
+                    PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean), 
                     f"Video Script (Att {attempt})"
                 )
                 
-                # --- التحقق والاستخراج ---
-                
-                # الحالة 1: نجاح مباشر (قائمة)
-                if isinstance(raw_result, list) and len(raw_result) > 0:
-                    script_json = raw_result
-                    log("      ✅ Valid Script List received.")
-                    break # خروج من الحلقة
-                
-                # الحالة 2: النتيجة قاموس (نحاول الإصلاح محلياً)
-                elif isinstance(raw_result, dict):
-                    log("      ⚠️ Received Dict, trying extraction...")
-                    found_list = None
+                # استراتيجية الاستخراج الجديدة
+                if isinstance(raw_result, dict):
+                    # 1. البحث المباشر عن المفتاح الذي طلبناه
+                    if 'video_script' in raw_result and isinstance(raw_result['video_script'], list):
+                        script_json = raw_result['video_script']
+                        log("      ✅ Found 'video_script' key directly.")
+                        break
                     
-                    # البحث عن مفاتيح محتملة
-                    for key in ['script', 'dialogue', 'conversation', 'messages', 'scenes']:
+                    # 2. البحث عن مفاتيح بديلة محتملة
+                    for key in ['script', 'dialogue', 'conversation', 'scenes', 'content']:
                         if key in raw_result and isinstance(raw_result[key], list):
-                            found_list = raw_result[key]
+                            script_json = raw_result[key]
+                            log(f"      ✅ Found script under key: '{key}'")
                             break
                     
-                    # البحث عن أي قيمة هي قائمة
-                    if not found_list:
+                    # 3. إذا فشل، البحث عن أي قائمة داخل القيم
+                    if not script_json:
                         for val in raw_result.values():
                             if isinstance(val, list) and len(val) > 0:
                                 if isinstance(val[0], dict) and 'text' in val[0]:
-                                    found_list = val
+                                    script_json = val
+                                    log("      ✅ Found script hidden in values.")
                                     break
-                    
-                    if found_list:
-                        script_json = found_list
-                        log("      ✅ Successfully extracted list from dict.")
-                        break # خروج من الحلقة
-                    
-                    else:
-                        # الحالة 3: فشل الاستخراج -> نطلب إعادة التوليد مع توبيخ الموديل
-                        log("      ❌ Extraction failed. Forcing re-generation...")
-                        current_script_prompt = f"""
-                        SYSTEM ERROR: You returned a JSON OBJECT. I need a JSON ARRAY.
-                        
-                        REQUIREMENT:
-                        Output MUST be a list: [ {{"speaker": "...", "type": "...", "text": "..."}}, ... ]
-                        Do NOT wrap it in {{ "script": ... }}.
-                        
-                        Original Task:
-                        {PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean)}
-                        """
-                        # الحلقة ستعيد التشغيل الآن بالبرومبت الجديد
-                        continue 
+                
+                elif isinstance(raw_result, list):
+                    script_json = raw_result
+                    log("      ✅ Received List directly.")
+                    break
+                
+                if not script_json:
+                     log("      ❌ Attempt failed. Retrying...")
 
             except Exception as e:
-                log(f"      ⚠️ Error in script generation attempt {attempt}: {e}")
-        
-        # --- نهاية حلقة المحاولة ---
+                log(f"      ⚠️ Script Generation Error: {e}")
 
-        # إذا نجحنا في الحصول على السكربت، نبدأ الريندر
+        # بدء الريندر إذا وجدنا السكربت
         if script_json and len(script_json) > 0:
             timestamp = int(time.time())
             base_output_dir = os.path.abspath("output")
@@ -1094,7 +1071,7 @@ def run_pipeline(category, config, mode="trending"):
                 log(f"      ⚠️ Short Video Error: {e}")
 
         else:
-            log(f"      ❌ Failed to generate valid script after 3 attempts.")
+            log(f"      ❌ Failed to extract script after 3 attempts.")
 
     except Exception as e:
         log(f"⚠️ Multimedia Process Error: {e}")
