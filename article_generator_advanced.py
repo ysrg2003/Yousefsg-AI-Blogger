@@ -608,11 +608,7 @@ def publish_post(title, content, labels):
     except Exception as e:
         log(f"❌ Connection Fail: {e}")
         return None
-
-
-
-                
-               # تأكد من وجود هذه الاستيرادات في أعلى الملف (عادة هي موجودة لكن تأكد):
+        
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
     key = os.getenv('IMGBB_API_KEY')
@@ -1182,37 +1178,41 @@ def run_pipeline(category, config, mode="trending"):
     # =====================================================
     # STEP 4: PUBLISHING
     # =====================================================
-
-# ... داخل دالة run_pipeline قبل النشر ...
+    log("   🚀 Publishing to Blogger...")
     
-    # 1. حقن صندوق الكاتب يدوياً (Author Box Injection)
-    author_box_html = """
-    <div style="margin-top: 50px; padding: 20px; background-color: #f8f9fa; border-left: 5px solid #2c3e50; display: flex; align-items: center; border-radius: 5px;">
-        <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791" style="width: 80px; height: 80px; border-radius: 50%; margin-right: 20px;" alt="Editor">
+    # --- NEW: AUTHOR BOX INJECTION ---
+    # هذا الصندوق سيظهر في نهاية كل مقال
+    author_box = """
+    <div style="margin-top:40px; padding:25px; background:#f4f6f8; border-radius:12px; display:flex; align-items:center; border:1px solid #e1e4e8;">
+        <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791" 
+             style="width:70px; height:70px; border-radius:50%; margin-right:15px; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);" alt="Yousef Sameer">
         <div>
-            <h4 style="margin: 0 0 5px 0; color: #333;">Tech Reviewer</h4>
-            <p style="margin: 0; font-size: 14px; color: #666;">Obsessed with testing AI tools so you don't have to break your device. Brutally honest reviews.</p>
+            <h4 style="margin:0; font-size:18px; color:#2c3e50;">Tech Reviewer</h4>
+            <p style="margin:5px 0 0; font-size:14px; color:#666; line-height:1.4;">
+                I test AI tools so you don't have to break your device. 
+                <br><strong>Brutally honest reviews. No fluff.</strong>
+            </p>
         </div>
     </div>
     """
     
-    # دمج كل شيء
-    final_html_body = content_html + author_box_html 
-    
-    # ثم استخدم final_html_body في التجميع النهائي
-    # full_body = ARTICLE_STYLE + ... + final_html_body
-    
-    log("   🚀 Publishing to Blogger...")
-    
+    # دمج المحتوى: المقال + صندوق الكاتب + المصادر (المصادر موجودة أصلاً في content_html من البرومبت)
+    final_content_with_author = content_html + author_box
+    # ---------------------------------
+
     full_body = ARTICLE_STYLE
     
     if img_url: 
         alt_text = seo_data.get("imageAltText", title)
-        full_body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}"><img src="{img_url}" alt="{alt_text}" /></a></div>'
+        full_body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}"><img src="{img_url}" alt="{alt_text}" style="max-width:100%; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1);" /></a></div>'
     
     if vid_html: full_body += vid_html
     
-    full_body += ARTICLE_STYLE + ... + final_html_body
+    # نستخدم المتغير الجديد
+    full_body += final_content_with_author
+    
+    # ... (باقي كود النشر كما هو) ...
+ 
     
     if 'schemaMarkup' in final:
         try: full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
