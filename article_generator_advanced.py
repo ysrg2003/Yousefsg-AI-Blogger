@@ -827,11 +827,11 @@ def run_pipeline(category, config, mode="trending"):
     # =====================================================
     # STEP 1: MULTI-SOURCE RESEARCH (THE HUNTER)
     # =====================================================
-   # (Pseudo-code logic to add)
-reddit_query = f"{target_keyword} site:reddit.com"
-# قم بجلب أول نتيجة من ريديت واستخرج النص منها
-# أضف هذا النص إلى "Payload" المرسل للموديل تحت عنوان:
-# *** REAL USER OPINIONS (REDDIT) ***
+    # (Pseudo-code logic to add)
+    reddit_query = f"{target_keyword} site:reddit.com"
+    # قم بجلب أول نتيجة من ريديت واستخرج النص منها
+    # أضف هذا النص إلى "Payload" المرسل للموديل تحت عنوان:
+    # *** REAL USER OPINIONS (REDDIT) ***
     # البحث في أخبار جوجل
     rss_query = f"{target_keyword} when:3d"
     rss_items = get_real_news_rss(rss_query.replace("when:3d","").strip(), category)
