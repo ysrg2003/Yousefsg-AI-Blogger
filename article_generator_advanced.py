@@ -313,6 +313,7 @@ Characters:
 1. You MUST use exactly these keys: "speaker", "type", "text".
 2. "type" must be either "send" (Right side) or "receive" (Left side).
 3. "text" is the dialogue.
+4. The sentences must be short, and it's okay for the same person to have more than one message under each other.
 
 Example Output:
 [
