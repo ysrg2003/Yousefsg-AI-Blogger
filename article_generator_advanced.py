@@ -914,12 +914,18 @@ def run_pipeline(category, config, mode="trending"):
     # تحضير قائمة المصادر لاستخدامها لاحقاً في Step C
     sources_list_formatted = [{"title": s['title'], "url": s['url']} for s in collected_sources]
 
+# ... داخل run_pipeline ...
+
+    # إضافة تعليمات السياق الجديدة
     json_ctx = {
         "rss_headline": main_headline,
         "keyword_focus": target_keyword,
         "source_count": len(collected_sources),
-        "date": str(datetime.date.today())
+        "date": str(datetime.date.today()),
+        "style_guide": "Critical, First-Person, Beginner-Focused, Honest Review" # <-- إضافة هذا السطر
     }
+    
+    # ... الباقي كما هو ...
     
     payload = f"METADATA: {json.dumps(json_ctx)}\n\n*** RESEARCH DATA ***\n{combined_text}"
     
