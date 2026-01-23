@@ -237,7 +237,7 @@ ARTICLE_STYLE = """
     .Sources ul { list-style-type: disc; padding-left: 20px; }
 </style>
 <div class="author-box" style="background:#f0f2f5; padding:20px; border-radius:10px; margin-top:40px; display:flex; align-items:center;">
-    <img src="URL_TO_YOUR_REALISTIC_PHOTO" style="width:80px; height:80px; border-radius:50%; margin-right:15px;">
+    <img src="https://blogger.googleusercontent.com/img/a/AVvXsEixenfOUfJ8hB4zmLeKBmG7I3Ktv7_J4KIcWOiX0LJ9ok_FIUgWzx-ILY-6I72NWc51056aJSu4MxuGUEdo5jbocsel9UWusc0f4B3vq0I9THcNgI6dxbQDmtcSqwkv8ykAfh2D-nDMR6MG0pggxuuTiPcmv6vY894e5SaLVCZnF5XiyhtYwKZfA5mu3-c=s791" style="width:80px; height:80px; border-radius:50%; margin-right:15px;">
     <div>
         <h4 style="margin:0;">Yousef Sameer</h4> <!-- استخدم اسماً ثابتاً -->
         <p style="font-size:14px; margin:5px 0;">Senior Tech Editor dealing with AI since 2020. Obsessed with finding bugs in new updates.</p>
