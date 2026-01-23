@@ -16,3 +16,6 @@ feedparser
 selenium
 webdriver-manager
 trafilatura
+tenacity
+json_repair
+regex
