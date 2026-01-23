@@ -29,6 +29,9 @@ from selenium.webdriver.common.by import By
 import url_resolver
 import trafilatura
 import ast
+import json_repair # يجب تثبيتها: pip install json_repair
+import regex # يجب تثبيتها: pip install regex
+
 
 
 # ==============================================================================
@@ -408,137 +411,76 @@ key_manager = KeyManager()
 # UPDATED JSON UTILITIES (AUTO-REPAIR MODE v2.0)
 # ==============================================================================
 
-def clean_json(text):
-    """
-    Advanced cleaner: Removes Markdown, extracts the JSON array/object only.
-    """
-    if not text: return ""
-    text = text.strip()
-    
-    # 1. إزالة كود الماركدوان
-    match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
-    if match: text = match.group(1)
-    
-    # 2. البحث عن حدود الـ JSON بدقة
-    start_brace = text.find('{')
-    start_bracket = text.find('[')
-    
-    start_index = -1
-    if start_brace != -1 and start_bracket != -1:
-        start_index = min(start_brace, start_bracket)
-    elif start_brace != -1:
-        start_index = start_brace
-    elif start_bracket != -1:
-        start_index = start_bracket
-        
-    if start_index != -1:
-        text = text[start_index:]
-        
-    # البحث عن النهاية من الخلف
-    end_brace = text.rfind('}')
-    end_bracket = text.rfind(']')
-    
-    end_index = -1
-    if end_brace != -1 and end_bracket != -1:
-        end_index = max(end_brace, end_bracket)
-    elif end_brace != -1:
-        end_index = end_brace
-    elif end_bracket != -1:
-        end_index = end_bracket
-        
-    if end_index != -1:
-        text = text[:end_index+1]
-        
-    return text.strip()
+           # ==============================================================================
+# 5-LAYER ROBUST JSON PARSER (THE "UNBREAKABLE" ENGINE)
+# ==============================================================================
 
-def repair_json_with_ai(broken_json, error_msg, attempt_name):
+def master_json_parser(text, context=""):
     """
-    Emergency Function: Asks AI to fix its own syntax error.
-    """
-    log(f"      🔧 AI Repair initiated for {attempt_name}...")
-    
-    # نأخذ جزءاً من النص المعطوب لتوفير التوكنايز إذا كان ضخماً جداً
-    # لكن نحتاج البنية كاملة للإصلاح، لذا سنحاول إرساله كاملاً أولاً
-    
-    prompt = f"""
-    I have a JSON string that throws an error: {error_msg}
-    
-    TASK: Fix the JSON syntax errors (unescaped quotes, trailing commas, newlines).
-    DO NOT change the content logic. Just fix the FORMAT so it becomes valid JSON.
-    
-    BROKEN JSON:
-    {broken_json}
-    
-    OUTPUT: Valid JSON only. No markdown.
-    """
-    
-    try:
-        # نستخدم مفتاحاً جديداً لضمان عدم توقف الإصلاح بسبب الكوتا
-        key = key_manager.get_current_key()
-        if not key: return None
-        
-        # نستخدم موديل سريع للإصلاح
-        client = genai.Client(api_key=key)
-        r = client.models.generate_content(
-            model="gemini-2.5-flash", 
-            contents=prompt, 
-            config=types.GenerateContentConfig(response_mime_type="application/json")
-        )
-        return clean_json(r.text)
-    except Exception as e:
-        log(f"      ❌ Repair Failed: {e}")
-        return None
-
-def try_parse_json(text, context=""):
-    """
-    Robust parser with strict cleanup.
+    يحاول إصلاح الـ JSON بـ 5 طرق مختلفة متتالية.
+    إذا نجحت واحدة، يعيد النتيجة. إذا فشل الكل، يعيد None.
     """
     if not text: return None
     
-    # تنظيف أولي
-    cleaned = clean_json(text)
+    log(f"      🛡️ [Parser] analyzing output for {context}...")
+
+    # --- المستوى 1: التنظيف البسيط والتحويل المباشر ---
+    # إزالة علامات الماركداون ```json ... ```
+    cleaned = re.sub(r'```(?:json)?', '', text).strip()
+    cleaned = cleaned.replace('```', '')
     
-    # المحاولة 1: JSON قياسي
     try:
         return json.loads(cleaned)
-    except Exception as e_json:
+    except:
         pass
 
-    # المحاولة 2: Strict False + Control Char Fix
+    # --- المستوى 2: مكتبة json_repair (الحل السحري) ---
+    # هذه المكتبة مخصصة لإصلاح أخطاء LLMs مثل الأقواس الناقصة
     try:
-        # استبدال الأسطر الجديدة الحقيقية بـ \n لأن JSON لا يقبلها داخل النصوص
-        fixed_text = cleaned.replace('\n', '\\n').replace('\r', '')
-        return json.loads(fixed_text, strict=False)
-    except Exception as e_strict:
+        repaired_obj = json_repair.repair_json(cleaned, return_objects=True)
+        if repaired_obj:
+            log(f"      🔧 [Parser] json_repair fixed the data!")
+            return repaired_obj
+    except:
         pass
 
-    # المحاولة 3: Python Eval (خطرة لكنها تقبل ' بدلاً من " وأخطاء أخرى)
+    # --- المستوى 3: البحث عن JSON باستخدام Regex ---
+    # أحياناً يضع الذكاء الاصطناعي مقدمة نصية طويلة قبل الـ JSON
     try:
+        # البحث عن أول قوس { وآخر قوس }
+        match = regex.search(r'\{(?:[^{}]|(?R))*\}', text, regex.DOTALL)
+        if match:
+            potential_json = match.group(0)
+            return json_repair.repair_json(potential_json, return_objects=True)
+    except:
+        pass
+
+    # --- المستوى 4: Python AST (لتعامل مع Single Quotes) ---
+    # أحياناً يستخدم الموديل ' بدلاً من " وهذا خطأ في JSON لكنه صحيح في Python
+    try:
+        # خطير قليلاً لكنه فعال كحل أخير
         return ast.literal_eval(cleaned)
     except:
         pass
-    
-    # إذا وصلنا هنا، فالنص معطوب حقاً ولا يمكن قراءته برمجياً
-    log(f"      ⚠️ Parsing failed locally. Context: {context}")
-    return "None"
 
-def generate_step(model, prompt, step_name):
+    log(f"      ❌ [Parser] All local methods failed for {context}.")
+    return None
+
+def generate_step_robust(model, prompt, step_name):
     """
-    Generates content AND handles automatic JSON repairs via AI.
+    دالة التوليد الذكية مع خاصية الإصلاح الذاتي (Self-Correction)
     """
     log(f"   👉 Generating: {step_name}")
     
-    retries = 2
-    for attempt in range(retries):
+    # 3 محاولات للتوليد
+    for attempt in range(3):
         key = key_manager.get_current_key()
-        if not key: 
-            log("❌ FATAL: Keys exhausted.")
-            return None
-            
+        if not key: return None
+        
         client = genai.Client(api_key=key)
         
         try:
-            # 1. التوليد الأساسي
+            # 1. الطلب من API
             r = client.models.generate_content(
                 model=model, 
                 contents=prompt, 
@@ -546,37 +488,53 @@ def generate_step(model, prompt, step_name):
             )
             raw_text = r.text
             
-            # 2. محاولة القراءة (Parsing)
-            parsed = try_parse_json(raw_text, step_name)
+            # 2. محاولة التحليل باستخدام "المحرك الخماسي"
+            parsed_data = master_json_parser(raw_text, step_name)
             
-            # 3. التحقق مما إذا كان الفشل بسبب خطأ Syntax
-            if parsed == "FAILED":
-                log(f"      ⚠️ JSON Syntax Invalid. Triggering AI Auto-Repair...")
-                
-                # طلب الإصلاح من الذكاء الاصطناعي
-                repaired_text = repair_json_with_ai(raw_text, "Syntax Error", step_name)
-                
-                # محاولة قراءة النص المصلح
-                final_check = try_parse_json(repaired_text, f"{step_name}_REPAIRED")
-                
-                if final_check and final_check != "FAILED":
-                    log(f"      ✅ AI Repair Successful!")
-                    return repaired_text # نرجع النص الصحيح ليتم استخدامه
-                else:
-                    log(f"      ❌ AI Repair Failed. Retrying generation from scratch...")
-                    continue # إعادة المحاولة من الصفر
+            # 3. التحقق من النتيجة
+            if parsed_data and isinstance(parsed_data, (dict, list)):
+                return parsed_data # ✅ نجاح!
             
-            elif parsed:
-                # نجاح من المرة الأولى
-                return clean_json(raw_text)
+            # --- المستوى 5: الإصلاح عبر الذكاء الاصطناعي (AI Repair) ---
+            # إذا فشلت كل الطرق البرمجية، نطلب من الذكاء الاصطناعي إصلاح نفسه
+            log(f"      ⚠️ parsing failed. Triggering AI Self-Correction (Attempt {attempt+1}/3)...")
+            
+            repair_prompt = f"""
+            SYSTEM ALERT: You generated INVALID JSON.
+            Error Context: The parser could not read your previous output.
+            
+            YOUR TASK: Fix the syntax errors in the content below. 
+            RULES:
+            1. Output ONLY valid JSON.
+            2. Check for unescaped quotes inside strings.
+            3. Remove any trailing commas.
+            
+            BROKEN CONTENT:
+            {raw_text[:8000]}
+            """
+            
+            # محاولة الإصلاح بموديل سريع
+            r_fix = client.models.generate_content(
+                model="gemini-2.5-flash", 
+                contents=repair_prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json")
+            )
+            
+            # فحص نتيجة الإصلاح
+            fixed_data = master_json_parser(r_fix.text, f"{step_name}_FIX")
+            if fixed_data and isinstance(fixed_data, (dict, list)):
+                log("      ✅ AI successfully repaired the JSON!")
+                return fixed_data
                 
         except Exception as e:
-            if "429" in str(e) or "quota" in str(e).lower():
-                if not key_manager.switch_key(): return None
+            if "429" in str(e):
+                key_manager.switch_key()
             else:
-                log(f"❌ Error in generation: {e}")
+                log(f"❌ Error: {e}")
                 
-    return None
+    log(f"❌ FATAL: Could not generate valid JSON for {step_name} after all attempts.")
+    return None # نعيد None بدلاً من String لتجنب AttributeError     
+            
 
 def fetch_full_article(url):
     """
