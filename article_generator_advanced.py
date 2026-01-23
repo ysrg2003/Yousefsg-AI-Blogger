@@ -801,38 +801,40 @@ def draw_text_with_outline(draw, position, text, font, fill_color, outline_color
 
 def upload_to_github_cdn(image_bytes, filename):
     """
-    Uploads image bytes to the 'images' folder in the GitHub Repository.
+    Uploads image bytes to the PUBLIC 'images' repository.
     Returns a fast jsDelivr CDN URL.
     """
     try:
-        # 1. جلب البيانات من البيئة
-        gh_token = os.getenv('MY_GITHUB_TOKEN') # نفس التوكن المستخدم للتشغيل
-        repo_name = os.getenv('GITHUB_REPO_NAME') # اسم المستودع (user/repo)
+        # 1. جلب التوكن واسم مستودع الصور المخصص
+        gh_token = os.getenv('MY_GITHUB_TOKEN')
         
-        if not gh_token or not repo_name:
-            log("      ❌ GitHub Token or Repo Name missing for image upload.")
+        # الأولوية للمستودع المخصص للصور، إذا لم يوجد نستخدم المستودع الحالي
+        # لكن تذكر: يجب أن يكون المستودع عاماً لكي تعمل jsDelivr
+        image_repo_name = os.getenv('GITHUB_IMAGE_REPO') 
+        if not image_repo_name:
+            image_repo_name = os.getenv('GITHUB_REPO_NAME')
+
+        if not gh_token or not image_repo_name:
+            log("      ❌ GitHub Token or Image Repo Name missing.")
             return None
 
         g = Github(gh_token)
-        repo = g.get_repo(repo_name)
+        repo = g.get_repo(image_repo_name)
         
         # 2. تحديد المسار
-        # نضيف التاريخ لضمان عدم تكرار الأسماء وتنظيم المجلدات
         date_folder = datetime.datetime.now().strftime("%Y-%m")
         file_path = f"images/{date_folder}/{filename}"
         
         # 3. الرفع (Create or Update)
-        # نحاول الإنشاء، وإذا الملف موجود، نقوم بتغيير الاسم قليلاً
         try:
             repo.create_file(
                 path=file_path,
                 message=f"🤖 Auto-upload: {filename}",
-                content=image_bytes.getvalue(), # استخراج البايتات من الذاكرة
+                content=image_bytes.getvalue(),
                 branch="main" 
             )
         except Exception as e:
             if "already exists" in str(e):
-                # إذا الملف موجود، نضيف رقم عشوائي للاسم
                 filename = f"{random.randint(1000,9999)}_{filename}"
                 file_path = f"images/{date_folder}/{filename}"
                 repo.create_file(
@@ -844,15 +846,17 @@ def upload_to_github_cdn(image_bytes, filename):
             else:
                 raise e
 
-        # 4. تكوين رابط CDN السريع
-        # الصيغة: https://cdn.jsdelivr.net/gh/USER/REPO@main/PATH
-        cdn_url = f"https://cdn.jsdelivr.net/gh/{repo_name}@main/{file_path}"
+        # 4. تكوين رابط CDN (يعمل فقط إذا كان المستودع Public)
+        cdn_url = f"https://cdn.jsdelivr.net/gh/{image_repo_name}@main/{file_path}"
         
-        log(f"      ☁️ Hosted on GitHub CDN: {cdn_url}")
+        log(f"      ☁️ Hosted on Public CDN: {cdn_url}")
         return cdn_url
 
     except Exception as e:
         log(f"      ❌ GitHub Upload Error: {e}")
+        # محاولة طباعة تفاصيل الخطأ لمعرفة إذا كان السبب هو الصلاحيات
+        if "404" in str(e):
+            log("      ⚠️ Hint: Check if the Image Repo exists and Token has access.")
         return None
 
 # ==============================================================================
