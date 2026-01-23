@@ -153,6 +153,16 @@ You must return a JSON object with EXACTLY these 7 keys. Do NOT merge them.
 5) The model MUST output only the article HTML (no explanation). If table is missing or any <td> lacks data-label, output EXACT token: [MISSING_COMPARISON_TABLE] — do not output anything else.
 6) Example row format (for guidance only, follow exactly in output):
    <tr><td data-label="Feature">...</td><td data-label="New Update">...</td><td data-label="Old Version">...</td></tr>
+8. **MANDATORY SOURCE QUOTE (STRICT):**
+1) You MUST attempt to extract exactly ONE verbatim quote from the provided source(s) that reflects the company's official stance, a spokesperson, or CEO statement.
+2) The model MUST output only valid HTML snippet (no extra commentary) in this exact structure:
+
+<blockquote>“<EMPHASIZE_EXACT_VERBATIM_QUOTE_FROM_SOURCE>”</blockquote>
+<footer>— <strong>Speaker Name</strong><span>, Speaker Role (if known)</span>, <cite><a href="SOURCE_URL">Source Site Name</a></cite>, <time datetime="YYYY-MM-DD">YYYY-MM-DD</time></footer>
+
+3) If you cannot find any verbatim quote in the source(s), output the EXACT token: [NO_VERBATIM_QUOTE_FOUND] — nothing else.
+4) Quote length should be kept concise where possible (prefer ≤ 25 words). If the only available quote is longer, still include it but mark the first 25 words visually and ensure exact attribution.
+5) Do not fabricate speaker names, dates, or sources. If a speaker name or date is not provided in the source, use "Unknown" for role/date but still include the source link.
 
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ONLY.
