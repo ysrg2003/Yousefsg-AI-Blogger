@@ -960,7 +960,7 @@ def process_source_image(source_url, overlay_text, filename_title):
         headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(source_url, headers=headers, timeout=15, stream=True)
         if r.status_code != 200: 
-        return None
+            return None
         
         original_img = Image.open(BytesIO(r.content)).convert("RGBA")
         
