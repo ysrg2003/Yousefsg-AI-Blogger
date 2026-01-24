@@ -185,6 +185,50 @@ def generate_step_strict(model_name, prompt, step_name, required_keys=[]):
         log(f"      ❌ Attempt Failed for {step_name}: {str(e)[:200]}")
         raise e
 
+def get_gnews_api_sources(query_keywords, category):
+    """
+    Fetches news using GNews.io API.
+    Returns a list of dicts: {'title', 'link', 'date', 'source_image'}
+    """
+    api_key = os.getenv('GNEWS_API_KEY') # تأكد من إضافته في الإعدادات
+    if not api_key:
+        log("   ⚠️ GNews API Key missing. Skipping to fallback.")
+        return []
+
+    log(f"   📡 Querying GNews API for: '{query_keywords}'...")
+    
+    # تنظيف الكلمات المفتاحية للـ API
+    clean_query = query_keywords.replace(',', ' OR ')
+    url = f"https://gnews.io/api/v4/search?q={urllib.parse.quote(clean_query)}&lang=en&country=us&max=5&apikey={api_key}"
+
+    try:
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        
+        if r.status_code != 200 or 'articles' not in data:
+            log(f"   ⚠️ GNews API Error: {data.get('errors', 'Unknown Error')}")
+            return []
+
+        articles = data.get('articles', [])
+        if not articles:
+            return []
+
+        formatted_items = []
+        for art in articles:
+            formatted_items.append({
+                "title": art.get('title'),
+                "link": art.get('url'), # GNews يعطي الرابط الأصلي مباشرة! ميزة رائعة
+                "date": art.get('publishedAt', str(datetime.date.today())),
+                "image": art.get('image') # يمكننا استخدامه كصورة احتياطية
+            })
+        
+        log(f"   ✅ GNews found {len(formatted_items)} articles.")
+        return formatted_items
+
+    except Exception as e:
+        log(f"   ❌ GNews Connection Failed: {e}")
+        return []
+
 def get_real_news_rss(query_keywords, category):
     try:
         if "," in query_keywords:
@@ -683,14 +727,25 @@ def run_pipeline(category, config, forced_keyword=None):
         log("   🚫 ABORTING: This topic creates Keyword Cannibalization.")
         return False
 
-    # 3. SOURCE HUNTING
-    rss_query = f"{target_keyword} when:2d"
-    rss_items = get_real_news_rss(rss_query.replace("when:2d","").strip(), category)
+    # 3. SOURCE HUNTING (Hybrid Strategy)
+    rss_items = []
+    
+    # A. محاولة GNews أولاً (المصدر الرئيسي)
+    rss_items = get_gnews_api_sources(target_keyword, category)
+    
+    # B. إذا فشل GNews أو لم يجد نتائج، نستخدم الكود القديم (RSS)
     if not rss_items:
-        log(f"   ⚠️ No news found for '{target_keyword}'. Aborting.")
+        log("   🔄 GNews yielded no results. Switching to Legacy RSS Scraping...")
+        rss_query = f"{target_keyword} when:2d"
+        rss_items = get_real_news_rss(rss_query.replace("when:2d","").strip(), category)
+
+    if not rss_items:
+        log(f"   ⚠️ No news found via API or RSS for '{target_keyword}'. Aborting.")
         return False
 
     collected_sources = []
+    # ... (باقي الكود يبقى كما هو تماماً لأنه يعالج القائمة rss_items) ...
+
     main_headline = ""
     main_link = ""
     required_terms = target_keyword.lower().split()
