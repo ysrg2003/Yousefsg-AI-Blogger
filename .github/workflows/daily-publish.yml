@@ -53,6 +53,7 @@ jobs:
           GITHUB_REPO_NAME: ${{ github.repository }}
           GITHUB_IMAGE_REPO: "ysrg2003/latest-ai-assets" 
           YOUTUBE_CREDENTIALS_JSON: ${{ secrets.YOUTUBE_CREDENTIALS_JSON }}
+          GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }} 
         run: python -u article_generator_advanced.py
 
       # 2. تغيير التوقيت عشوائياً للغد
