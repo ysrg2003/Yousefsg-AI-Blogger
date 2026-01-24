@@ -898,8 +898,48 @@ def run_pipeline(category, config, forced_keyword=None):
 
         # Publishing
         log("   🚀 Publishing to Blogger...")
-        author_box = """<div style="margin-top:40px; padding:25px; background:#f4f6f8; border-radius:12px; display:flex; align-items:center; border:1px solid #e1e4e8;"><img src="https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791" style="width:70px; height:70px; border-radius:50%; margin-right:15px; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);" alt="Yousef Sameer"><div><h4 style="margin:0; font-size:18px; color:#2c3e50;">Yousef Sameer</h4><p style="margin:5px 0 0; font-size:14px; color:#666; line-height:1.4;">I test AI tools so you don't have to break your device. <br><strong>Brutally honest reviews. No fluff.</strong></p></div></div>"""
-        
+        # تحديث صندوق الكاتب ليشمل روابط السوشيال ميديا الخاصة بك
+        author_box = """
+        <div style="margin-top:50px; padding:25px; background:#f8f9fa; border-left: 5px solid #2ecc71; border-radius:8px; font-family:sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            <div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:20px;">
+                <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791" 
+                     style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:3px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);" 
+                     alt="Yousef Sameer">
+                
+                <div style="flex:1;">
+                    <h4 style="margin:0 0 5px; font-size:20px; color:#2c3e50; font-weight:700;">Yousef Sameer</h4>
+                    <span style="font-size:12px; background:#e8f6ef; color:#2ecc71; padding:3px 8px; border-radius:4px; font-weight:bold; letter-spacing:0.5px;">TECH EDITOR @ LATESTAI</span>
+                    
+                    <p style="margin:12px 0; font-size:15px; color:#555; line-height:1.6;">
+                        Testing AI tools so you don't break your workflow. Brutally honest reviews, simple explainers, and zero fluff.
+                    </p>
+                    
+                    <div style="display:flex; gap:15px; margin-top:10px;">
+                        <!-- YouTube -->
+                        <a href="https://m.youtube.com/@0latestai" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="YouTube">
+                            <img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24" height="24" alt="YouTube">
+                        </a>
+                        <!-- X (Twitter) -->
+                        <a href="https://x.com/latestaime" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="X (Twitter)">
+                            <img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24" height="24" alt="X">
+                        </a>
+                         <!-- Facebook -->
+                        <a href="https://www.facebook.com/share/1C9BHT4VZE/" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="Facebook">
+                            <img src="https://cdn-icons-png.flaticon.com/512/5968/5968764.png" width="24" height="24" alt="Facebook">
+                        </a>
+                        <!-- Instagram -->
+                        <a href="https://www.instagram.com/latestai.me" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="Instagram">
+                            <img src="https://cdn-icons-png.flaticon.com/512/3955/3955024.png" width="24" height="24" alt="Instagram">
+                        </a>
+                        <!-- Pinterest -->
+                        <a href="https://pinterest.com/latestaime" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="Pinterest">
+                            <img src="https://cdn-icons-png.flaticon.com/512/145/145808.png" width="24" height="24" alt="Pinterest">
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """
         content_html = content_html.replace('href=\\"', 'href="').replace('\\">', '">')
         content_html = content_html.replace('href=""', 'href="').replace('"" target', '" target')
         content_html = re.sub(r'href=["\']\\?["\']?(http[^"\']+)\\?["\']?["\']', r'href="\1"', content_html)
