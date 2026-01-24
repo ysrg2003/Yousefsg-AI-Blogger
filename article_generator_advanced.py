@@ -707,13 +707,204 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
     
     return images_list[0]['url']
 
+import cv2
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
 # ==============================================================================
-# IMAGE PROCESSING (PRIVACY BLUR + OVERLAY)
+# SMART IMAGE PROCESSING (FACE DETECTION & PRIVACY BLUR)
+# ==============================================================================
+
+def ensure_haarcascade_exists():
+    """
+    تأكد من وجود ملف نموذج اكتشاف الوجوه، وقم بتنزيله إذا لزم الأمر.
+    """
+    cascade_path = "haarcascade_frontalface_default.xml"
+    if not os.path.exists(cascade_path):
+        log("      📥 Downloading Face Detection Model (Haar Cascade)...")
+        url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+        try:
+            r = requests.get(url, timeout=30)
+            with open(cascade_path, 'wb') as f:
+                f.write(r.content)
+        except Exception as e:
+            log(f"      ⚠️ Failed to download Haar Cascade: {e}")
+            return None
+    return cascade_path
+
+def apply_smart_privacy_blur(pil_image):
+    """
+    تكتشف الوجوه وتطبق التمويه النووي (Nuclear Blur) عليها فقط.
+    يتم توسيع المنطقة لتغطية الرأس والرقبة، وزيادة قوة التمويه لطمس الملامح تماماً.
+    """
+    try:
+        # 1. تحويل الصورة من PIL إلى OpenCV (Numpy Array)
+        img_np = np.array(pil_image)
+        
+        # تحويل الألوان لضمان التوافق مع OpenCV
+        if img_np.shape[2] == 4: # RGBA
+            img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
+        else: # RGB
+            img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+
+        # 2. تحضير النموذج
+        cascade_path = ensure_haarcascade_exists()
+        if not cascade_path: 
+            log("      ⚠️ Haar Cascade missing. Skipping smart blur.")
+            return pil_image
+        
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
+
+        # 3. اكتشاف الوجوه (دقة عالية)
+        faces = face_cascade.detectMultiScale(
+            gray, 
+            scaleFactor=1.1, 
+            minNeighbors=5, 
+            minSize=(30, 30)
+        )
+
+        if len(faces) > 0:
+            log(f"      🕵️‍♂️ Detected {len(faces)} face(s). Applying NUCLEAR blur...")
+            
+            h_img, w_img, _ = img_np.shape
+            
+            for (x, y, w, h) in faces:
+                # 4. توسيع الحدود (Padding) بنسبة 60% لتغطية الشعر والأذنين والرقبة
+                pad_w = int(w * 0.6) 
+                pad_h = int(h * 0.6) # توسيع علوي وجانبي
+                pad_h_bottom = int(h * 0.8) # توسيع سفلي أكبر للرقبة
+                
+                # حساب الإحداثيات الجديدة مع التأكد من عدم الخروج عن الإطار
+                x1 = max(0, x - pad_w)
+                y1 = max(0, y - pad_h)
+                x2 = min(w_img, x + w + pad_w)
+                y2 = min(h_img, y + h + pad_h_bottom)
+                
+                # 5. استقطاع منطقة الوجه الموسعة
+                roi = img_np[y1:y2, x1:x2]
+                
+                # 6. حساب قوة التمويه (Kernel Size) ديناميكياً
+                # كلما كبر الوجه، زادت قوة التمويه لطمس التفاصيل
+                # نستخدم نصف عرض الوجه كقوة للتمويه!
+                k_size = (w // 2) 
+                if k_size % 2 == 0: k_size += 1 # يجب أن يكون الرقم فردياً
+                
+                # لضمان تمويه قوي جداً حتى للوجوه الصغيرة
+                k_size = max(k_size, 51) 
+                
+                # 7. تطبيق التمويه (Gaussian Blur)
+                try:
+                    blurred_roi = cv2.GaussianBlur(roi, (k_size, k_size), 0)
+                    # إعادة المنطقة المموهة للصورة الأصلية
+                    img_np[y1:y2, x1:x2] = blurred_roi
+                except Exception as blur_err:
+                    log(f"      ⚠️ Blur calculation error: {blur_err}")
+                    continue
+
+        else:
+            log("      🤖 No human faces detected. Keeping image sharp.")
+
+        # 8. تحويل الصورة مرة أخرى إلى PIL (RGB)
+        img_rgb = cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB)
+        return Image.fromarray(img_rgb)
+
+    except Exception as e:
+        log(f"      ⚠️ Smart Blur Error: {e}. Fallback to global blur.")
+        # في حال حدوث خطأ تقني، نعود للتمويه الكامل للأمان
+        return pil_image.filter(ImageFilter.GaussianBlur(radius=15))
+
+# ==============================================================================
+# SMART IMAGE SELECTOR (GEMINI VISION)
+# ==============================================================================
+
+def select_best_image_with_gemini(model_name, article_title, images_list):
+    """
+    يستخدم Gemini Vision لتحليل الصور واختيار الأفضل.
+    يتجنب الوجوه القريبة (Close-ups) قدر الإمكان.
+    """
+    if not images_list: return None
+
+    log(f"   🤖 Asking Gemini to select the best image from {len(images_list)} candidates...")
+
+    valid_images = []
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    # نفحص أول 4 صور فقط لتوفير الوقت والكوتا
+    for i, img_data in enumerate(images_list[:4]): 
+        try:
+            r = requests.get(img_data['url'], headers=headers, timeout=10)
+            if r.status_code == 200:
+                valid_images.append({
+                    "mime_type": "image/jpeg",
+                    "data": r.content,
+                    "original_url": img_data['url']
+                })
+        except: pass
+
+    if not valid_images: return None
+
+    # بناء البرومبت البصري الصارم
+    prompt = f"""
+    TASK: Photo Editor Selection.
+    ARTICLE TITLE: "{article_title}"
+    
+    CRITERIA FOR SELECTION:
+    1. **Relevance:** Image must match the specific tech topic (e.g., if title says 'Robot', find a robot).
+    2. **PRIVACY & AESTHETICS:** 
+       - **PREFER:** Images of gadgets, screens, code, wide shots of offices, or robots.
+       - **AVOID:** Close-up portraits of specific people faces if an alternative exists.
+       - **AVOID:** Low quality or blurry images.
+    
+    OUTPUT INSTRUCTIONS:
+    - Return ONLY the integer index (0, 1, 2...) of the best image.
+    - If ALL images are completely irrelevant or unsafe, return -1.
+    """
+
+    try:
+        key = key_manager.get_current_key()
+        client = genai.Client(api_key=key)
+        
+        # نرسل الصور مع النص
+        inputs = [prompt]
+        for img in valid_images:
+            inputs.append(types.Part.from_bytes(data=img['data'], mime_type="image/jpeg"))
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash", 
+            contents=inputs
+        )
+        
+        result = response.text.strip()
+        
+        if "-1" in result or "NONE" in result:
+            log("      🤖 Gemini rejected all source images (Safety/Quality).")
+            return None
+            
+        # استخراج الرقم
+        import re
+        match = re.search(r'\d+', result)
+        if match:
+            idx = int(match.group())
+            if 0 <= idx < len(valid_images):
+                selected_url = valid_images[idx]['original_url']
+                log(f"      ✅ Gemini selected Image #{idx+1} as the best match.")
+                return selected_url
+                
+    except Exception as e:
+        log(f"      ⚠️ Gemini Vision Error: {e}")
+    
+    # في حال الفشل، نعود للصورة الأولى كاحتياطي
+    return images_list[0]['url']
+
+# ==============================================================================
+# MAIN PROCESSING FUNCTION (INTEGRATION)
 # ==============================================================================
 
 def process_source_image(source_url, overlay_text, filename_title):
     log(f"   🖼️ Processing Source Image: {source_url[:60]}...")
     try:
+        # 1. Download
         headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(source_url, headers=headers, timeout=15, stream=True)
         if r.status_code != 200: 
@@ -721,6 +912,7 @@ def process_source_image(source_url, overlay_text, filename_title):
         
         original_img = Image.open(BytesIO(r.content)).convert("RGBA")
         
+        # 2. Resize & Crop (1200x630) - Standard Social Media Size
         target_w, target_h = 1200, 630
         img_ratio = original_img.width / original_img.height
         target_ratio = target_w / target_h
@@ -734,55 +926,73 @@ def process_source_image(source_url, overlay_text, filename_title):
             
         original_img = original_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
         
+        # Center Crop
         left = (new_width - target_w) / 2
         top = (new_height - target_h) / 2
         right = (new_width + target_w) / 2
         bottom = (new_height + target_h) / 2
         base_img = original_img.crop((left, top, right, bottom))
         
-        base_img = base_img.filter(ImageFilter.GaussianBlur(radius=8))
+        # ==================================================================
+        # 🛡️ SMART PRIVACY FILTER EXECUTION
+        # ==================================================================
+        # تحويل لـ RGB للمعالجة ثم العودة لـ RGBA
+        base_img_rgb = base_img.convert("RGB")
+        base_img_rgb = apply_smart_privacy_blur(base_img_rgb)
+        base_img = base_img_rgb.convert("RGBA")
+        # ==================================================================
 
-        overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 110))
+        # 3. Dark Overlay (تعتيم متوسط لرؤية التفاصيل + وضوح النص)
+        # 90/255 يعطي تعتيماً بنسبة 35% تقريباً
+        overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 90))
         base_img = Image.alpha_composite(base_img, overlay)
         
+        # 4. Text Overlay
         if overlay_text:
             draw = ImageDraw.Draw(base_img)
             W, H = base_img.size
             try:
                 font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
                 if not os.path.exists(font_path): font_path = "arialbd.ttf"
-                font = ImageFont.truetype(font_path, 80) 
+                font = ImageFont.truetype(font_path, 80) # خط عريض
             except: font = ImageFont.load_default()
             
+            # Word Wrap Logic
             words = overlay_text.upper().split()
             lines = []
             current_line = []
             for word in words:
                 test_line = ' '.join(current_line + [word])
                 bbox = draw.textbbox((0, 0), test_line, font=font)
-                if bbox[2] < W - 80: current_line.append(word)
+                if bbox[2] < W - 80: # هامش جانبي
+                    current_line.append(word)
                 else:
                     lines.append(' '.join(current_line))
                     current_line = [word]
             lines.append(' '.join(current_line))
             
+            # توسيط النص عمودياً وأفقياً
             text_y = H / 2 - (len(lines) * 90 / 2)
             for line in lines:
                 bbox = draw.textbbox((0, 0), line, font=font)
                 line_x = (W - (bbox[2] - bbox[0])) / 2
+                
+                # رسم النص باللون الأصفر مع حدود سوداء سميكة
                 draw_text_with_outline(draw, (line_x, text_y), line, font, "#FFD700", "black", 5)
                 text_y += 95
 
+        # 5. Upload to GitHub
         img_byte_arr = BytesIO()
         base_img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
         
+        # تنظيف اسم الملف
         safe_filename = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50]
         safe_filename += ".jpg"
         
         return upload_to_github_cdn(img_byte_arr, safe_filename)
             
     except Exception as e:
-        log(f"      ⚠️ Source Image Error: {e}")
+        log(f"      ⚠️ Image Processing Error: {e}")
         return None
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
