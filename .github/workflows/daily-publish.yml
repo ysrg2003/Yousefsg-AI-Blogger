@@ -58,6 +58,7 @@ jobs:
 
       # 2. تغيير التوقيت عشوائياً للغد
       - name: Randomize Schedule
+        if: always()
         run: python update_schedule.py
 
       # 3. حفظ التغييرات ورفعها (الطريقة الصحيحة لتجنب الأخطاء)
