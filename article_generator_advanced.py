@@ -42,6 +42,8 @@ from tenacity import (
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from io import BytesIO
 from github import Github, InputGitTreeElement # تأكد من وجود هذا الاستيراد
+import cv2
+import numpy as np
 from prompts import *
 
 # ==============================================================================
