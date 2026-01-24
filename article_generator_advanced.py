@@ -41,6 +41,7 @@ from github import Github, InputGitTreeElement
 import cv2
 import numpy as np
 import content_validator_pro
+import reddit_manager
 from prompts import *
 
 # ==============================================================================
@@ -791,13 +792,28 @@ def run_pipeline(category, config, forced_keyword=None):
     if not collected_sources:
         log(f"   ❌ No valid sources found for '{target_keyword}'.")
         return False
-
+        
+    # =========================================================
+    # 🧠 REDDIT INTEL LAYER (SMART CITATION)
+    # =========================================================
+    reddit_context = ""
+    try:
+        # استدعاء المدير الجديد للبحث عن آراء المجتمع
+        reddit_context = reddit_manager.get_community_intel(target_keyword)
+        if reddit_context:
+            log(f"   ✅ Acquired smart community insights from Reddit.")
+    except Exception as re:
+        log(f"   ⚠️ Reddit Intel skipped: {re}")
+    # =========================================================
+    
     # 4. EXECUTION
     try:
         log(f"\n✍️ Synthesizing Content from {len(collected_sources)} sources...")
         combined_text = ""
         for i, src in enumerate(collected_sources):
             combined_text += f"\n--- SOURCE {i+1}: {src['domain']} ---\nTitle: {src['title']}\nDate: {src['date']}\nCONTENT:\n{src['text'][:9000]}\n"
+            # حقن بيانات ريديت في النص الذي سيقرأه الذكاء الاصطناعي
+            combined_text += f"\n\n{reddit_context}\n"
         
         sources_list_formatted = [{"title": s['title'], "url": s['url']} for s in collected_sources]
         json_ctx = {"rss_headline": main_headline, "keyword_focus": target_keyword, "source_count": len(collected_sources), "date": str(datetime.date.today()), "style_guide": "Critical, First-Person, Beginner-Focused, Honest Review"}
