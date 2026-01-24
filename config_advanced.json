@@ -1,17 +1,17 @@
 {
   "categories": {
     "AI Tools & Apps": {
-      "trending_focus": "Best free AI apps 2026, ChatGPT hidden features, Midjourney vs DALL-E 3 comparison, Secret AI websites for students, how to detect deepfakes, text to video AI generators free, AI photo editing hacks"
+      "trending_focus": "ChatGPT latest update features, Google Gemini AI news, Claude AI new capabilities, Midjourney update news, Microsoft Copilot hidden tricks, best new AI video generators, AI music tools review"
     },
     "AI Income & Hustles": {
-      "trending_focus": "how to make money with AI tutorials, best AI tools for freelancers, passive income AI 2026, automation for beginners, chatgpt prompts for writing, midjourney business ideas"
-  },
+      "trending_focus": "how to make money with ChatGPT, AI freelance jobs trends, selling AI generated art guide, YouTube automation with AI tools, monetize AI newsletters, writing eBooks with AI assistance, Fiverr AI services"
+    },
     "Future & Robotics": {
-      "trending_focus": "Robots cleaning houses 2026, Figure 01 robot doing chores, Tesla Optimus price and release date, smart home gadgets 2026, wearable AI pins reviews, scary AI robot capabilities"
+      "trending_focus": "Tesla Optimus robot news, Boston Dynamics robot update, Figure AI robot progress, smart home robots latest, NVIDIA robotics news, humane AI pin reviews, embodied AI developments"
     }
   },
   "settings": {
-    "date_range_query": "when:1d",
+    "date_range_query": "when:3d",
     "model_name": "models/gemini-2.5-flash",
     "adsense_optimization": true
   }
