@@ -39,7 +39,7 @@ from tenacity import (
     retry_if_exception_type, 
     before_sleep_log
 )
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from io import BytesIO
 from github import Github, InputGitTreeElement # تأكد من وجود هذا الاستيراد
 from prompts import *
@@ -248,13 +248,6 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 2. PROMPTS (PASTE HERE)
-# ==============================================================================
-
-# 🛑 تاكد من كتابة from prompts import *"Beast Mode" هنا 🛑
-# (تأكد من أن PROMPT_B يطلب استخدام Source Text)
-
-# ==============================================================================
 # 3. HELPER UTILITIES
 # ==============================================================================
 
@@ -286,44 +279,18 @@ key_manager = KeyManager()
 
 
 # ==============================================================================
-# UPDATED JSON UTILITIES (AUTO-REPAIR MODE)
-# ==============================================================================
-
-
-# ==============================================================================
 # 5. ADVANCED AI ENGINE: THE "UNBREAKABLE" PIPELINE
 # ==============================================================================
 import logging
-import json
-import json_repair  # pip install json_repair
-import regex        # pip install regex
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log
-)
-from google import genai
-from google.genai import types
-
-# إعداد اللوجر الخاص بمكتبة Tenacity لمراقبة المحاولات في الخلفية
 logger = logging.getLogger("RetryEngine")
 logger.setLevel(logging.INFO)
 
-# ==============================================================================
-# A. CUSTOM EXCEPTIONS & STRICT INSTRUCTIONS
-# ==============================================================================
-
 class JSONValidationError(Exception):
-    """يُثار هذا الخطأ عندما يكون الـ JSON صالحاً نحوياً ولكن تنقصه مفاتيح أساسية."""
     pass
 
 class JSONParsingError(Exception):
-    """يُثار هذا الخطأ عندما يفشل تحليل النص إلى JSON تماماً حتى بعد محاولات الإصلاح."""
     pass
 
-# البرومبت الصارم الذي يجبر الموديل على الصمت والالتزام بالتنسيق فقط
 STRICT_SYSTEM_PROMPT = """
 You are an assistant that MUST return ONLY the exact output requested. 
 No explanations, no headings, no extra text, no apologies. 
@@ -332,31 +299,16 @@ If the user requests JSON, return PURE JSON.
 Obey safety policy.
 """
 
-# ==============================================================================
-# B. HELPER PARSERS & VALIDATORS
-# ==============================================================================
-
 def master_json_parser(text):
-    """
-    محرك تحليل JSON شامل يستخدم Regex و json_repair لاستخراج البيانات من أي نص فوضوي.
-    """
     if not text: return None
-    
-    # 1. Regex Extraction: استخراج ما بين الأقواس المعقوفة {}
-    # هذا يزيل أي نصوص قبل أو بعد الـ JSON
     match = regex.search(r'\{(?:[^{}]|(?R))*\}', text, regex.DOTALL)
     candidate = match.group(0) if match else text
-    
-    # 2. json_repair: المحاولة الأولى والأقوى للإصلاح
     try:
         decoded = json_repair.repair_json(candidate, return_objects=True)
-        # التأكد من أن النتيجة هي قاموس أو قائمة وليست نصاً
         if isinstance(decoded, (dict, list)):
             return decoded
     except Exception:
         pass
-
-    # 3. Fallback: محاولة تنظيف بسيطة واستخدام json القياسي
     try:
         clean = candidate.replace("```json", "").replace("```", "").strip()
         return json.loads(clean)
@@ -364,192 +316,80 @@ def master_json_parser(text):
         return None
 
 def validate_structure(data, required_keys):
-    """
-    التحقق من صحة هيكل البيانات (Validation).
-    يرفع استثناء إذا كانت البيانات ناقصة ليجبر Tenacity على إعادة المحاولة.
-    """
     if not isinstance(data, dict):
         raise JSONValidationError(f"Expected Dictionary output, but got type: {type(data)}")
-    
     missing_keys = [key for key in required_keys if key not in data]
-    
     if missing_keys:
-        # هذا الخطأ سيتم التقاطه بواسطة Tenacity لإعادة المحاولة
         raise JSONValidationError(f"JSON is valid but missing required keys: {missing_keys}")
-    
     return True
 
-# ==============================================================================
-# C. THE MAIN STRICT GENERATION FUNCTION
-# ==============================================================================
-
 @retry(
-    # التوقف بعد 5 محاولات فاشلة
     stop=stop_after_attempt(5),
-    
-    # الانتظار الأسي: يبدأ بـ 4 ثواني، ثم يتضاعف حتى يصل لأقصى حد 15 ثانية
     wait=wait_exponential(multiplier=1, min=4, max=15),
-    
-    # إعادة المحاولة فقط في حالة هذه الأخطاء المحددة
     retry=retry_if_exception_type((JSONParsingError, JSONValidationError, Exception)),
-    
-    # تسجيل رسالة في اللوج قبل الانتظار للمحاولة التالية
     before_sleep=before_sleep_log(logger, logging.WARNING)
 )
 def generate_step_strict(model_name, prompt, step_name, required_keys=[]):
-    """
-    الدالة النهائية لتوليد المحتوى.
-    - تستخدم System Instructions لضمان النتيجة.
-    - تستخدم Tenacity لإعادة المحاولة عند الفشل.
-    - تستخدم AI Repair لإصلاح الأخطاء النحوية ذاتياً.
-    - تدير تبديل المفاتيح (Key Rotation) عند انتهاء الكوتا.
-    """
     log(f"   🔄 [Tenacity] Executing: {step_name}...")
-    
-    # 1. جلب مفتاح API الحالي
     key = key_manager.get_current_key()
     if not key:
-        # إذا نفدت المفاتيح، نرفع خطأ قاتلاً لا يمكن إعادة المحاولة معه
         raise RuntimeError("FATAL: All API Keys exhausted.")
     
     client = genai.Client(api_key=key)
     
     try:
-        # 2. إعداد الكونفيج الصارم
         generation_config = types.GenerateContentConfig(
-            response_mime_type="application/json",  # إجبار الموديل على JSON
-            system_instruction=STRICT_SYSTEM_PROMPT,  # التعليمات الصارمة
-            temperature=0.3,  # تقليل العشوائية للدقة
+            response_mime_type="application/json", 
+            system_instruction=STRICT_SYSTEM_PROMPT, 
+            temperature=0.3, 
             top_p=0.8
         )
-
-        # 3. الطلب الأساسي من الموديل
         response = client.models.generate_content(
             model=model_name, 
             contents=prompt, 
             config=generation_config
         )
-        
         raw_text = response.text
-        
-        # 4. محاولة التحليل الأولى
         parsed_data = master_json_parser(raw_text)
         
-        # 5. منطق الإصلاح الذاتي (AI Self-Correction)
-        # إذا فشل التحليل، نطلب من الذكاء الاصطناعي إصلاح ما أفسده
         if not parsed_data:
             log(f"      ⚠️ Parsing failed locally for {step_name}. Triggering AI Repair...")
-            
             repair_prompt = f"""
             SYSTEM ALERT: You generated INVALID JSON in the previous step.
             Your output could not be parsed.
-            
             TASK: Fix the syntax errors in the content below.
-            RULES:
-            1. Return ONLY the valid JSON object.
-            2. Do NOT add markdown blocks.
-            3. Fix unescaped quotes and trailing commas.
-            
+            RULES: Return ONLY the valid JSON object.
             BROKEN CONTENT:
             {raw_text[:10000]}
             """
-            
-            # نستخدم موديل سريع (Flash) لعملية الإصلاح لتوفير الوقت
             repair_response = client.models.generate_content(
                 model="gemini-2.5-flash", 
                 contents=repair_prompt,
-                config=generation_config # نستخدم نفس الكونفيج الصارم
+                config=generation_config
             )
-            
-            # محاولة تحليل النص المصلح
             parsed_data = master_json_parser(repair_response.text)
-            
-            # إذا استمر الفشل، نرفع خطأ Parsing ليقوم Tenacity بإعادة المحاولة من الصفر
             if not parsed_data:
                 raise JSONParsingError(f"Failed to parse JSON even after AI repair for step: {step_name}")
             else:
                 log(f"      ✅ AI Repair Successful for {step_name}!")
 
-        # 6. التحقق من صحة الهيكل (Validation)
-        # هل المفاتيح المطلوبة موجودة؟
         if required_keys:
             validate_structure(parsed_data, required_keys)
             
-        # إذا وصلنا هنا، فالبيانات سليمة 100%
         log(f"      ✅ Success: {step_name} completed.")
         return parsed_data
 
     except Exception as e:
-        # التعامل مع أخطاء الكوتا (429) بشكل خاص
         error_msg = str(e).lower()
         if "429" in error_msg or "quota" in error_msg or "resource exhausted" in error_msg:
             log("      ⚠️ Quota Exceeded (429). Switching Key & Retrying immediately...")
             if key_manager.switch_key():
-                # نرفع الخطأ مرة أخرى ليقوم Tenacity بالتقاطه وإعادة المحاولة بالمفتاح الجديد
                 raise e 
             else:
                 raise RuntimeError("FATAL: All keys exhausted during retry.")
-        
-        # تسجيل الخطأ ورفعه لإعادة المحاولة
         log(f"      ❌ Attempt Failed for {step_name}: {str(e)[:200]}")
         raise e
             
-
-def fetch_full_article(url):
-    """
-    🚀 SCRAPER v11: 100% Local (Selenium + Trafilatura).
-    No 3rd party APIs like Jina. High success rate.
-    """
-    # 1. جلب الـ HTML والرابط الحقيقي باستخدام Selenium
-    data = url_resolver.get_page_html(url)
-    
-    if not data or not data.get('html'):
-        log(f"      ⚠️ Selenium failed to get page source.")
-        return None
-        
-    real_url = data['url']
-    html_content = data['html']
-    
-    log(f"      🧩 Extracting content locally from: {real_url[:50]}...")
-    
-    try:
-        # 2. استخدام Trafilatura لاستخراج نص المقالة من الـ HTML
-        # include_comments=False: لإزالة التعليقات
-        # include_tables=True: للاحتفاظ بالجداول المهمة
-        extracted_text = trafilatura.extract(
-            html_content, 
-            include_comments=False, 
-            include_tables=True,
-            favor_precision=True # التركيز على دقة النص وليس كثرته
-        )
-        
-        if extracted_text and len(extracted_text) > 500:
-            log(f"      ✅ Extraction Success! {len(extracted_text)} chars found.")
-            return extracted_text[:12000]
-        else:
-            log("      ⚠️ Trafilatura found very little text. Trying fallback...")
-            
-            # Fallback: محاولة بسيطة في حال فشل المكتبة المتخصصة
-            soup = BeautifulSoup(html_content, 'html.parser')
-            # حذف العناصر المزعجة يدوياً
-            for script in soup(["script", "style", "nav", "footer", "header", "aside"]):
-                script.extract()
-            text = soup.get_text(separator='\n')
-            
-            # تنظيف الفراغات
-            lines = [line.strip() for line in text.splitlines() if line.strip()]
-            clean_text = '\n'.join(lines)
-            
-            if len(clean_text) > 500:
-                log(f"      ✅ Fallback Success (BS4): {len(clean_text)} chars.")
-                return clean_text[:12000]
-
-    except Exception as e:
-        log(f"      ❌ Extraction Error: {e}")
-        
-    return None
-
-
 def get_real_news_rss(query_keywords, category):
     try:
         if "," in query_keywords:
@@ -615,9 +455,6 @@ def publish_post(title, content, labels):
     except Exception as e:
         log(f"❌ Connection Fail: {e}")
         return None
-        
-
-
 
 def load_kg():
     try:
@@ -626,29 +463,15 @@ def load_kg():
     return []
 
 def get_recent_titles_string(category=None, limit=100):
-    """
-    تقرأ ملف knowledge_graph.json وتعيد قائمة بالعناوين السابقة.
-    التحسين: تقوم بفلترة العناوين حسب الفئة الحالية لزيادة دقة منع التكرار.
-    """
     kg = load_kg()
     if not kg: return "No previous articles found."
-    
-    # تصفية النتائج: نأخذ فقط المقالات التي تنتمي لنفس الفئة الحالية
-    # أو نأخذ الكل إذا لم نحدد فئة
     if category:
         relevant_items = [i for i in kg if i.get('section') == category]
     else:
         relevant_items = kg
-
-    # نأخذ آخر 'limit' عنصر (الأحدث)
     recent_items = relevant_items[-limit:]
-    
-    # ندمجها في نص واحد مفصول بـ " | " ليسهل على الموديل قراءته
     titles = [f"- {i.get('title','Unknown')}" for i in recent_items]
-    
-    if not titles:
-        return "No previous articles in this category."
-        
+    if not titles: return "No previous articles in this category."
     return "\n".join(titles)
     
 def get_relevant_kg_for_linking(category, limit=60):
@@ -672,68 +495,38 @@ def perform_maintenance_cleanup():
             if len(d)>800: json.dump(d[-400:], open('knowledge_graph.json','w'), indent=2)
     except: pass
 
-def generate_step(model, prompt, step):
-    log(f"   👉 Generating: {step}")
-    while True:
-        key = key_manager.get_current_key()
-        if not key: 
-            log("❌ FATAL: Keys exhausted.")
-            return None
-        client = genai.Client(api_key=key)
-        try:
-            r = client.models.generate_content(
-                model=model, contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json")
-            )
-            return clean_json(r.text)
-        except Exception as e:
-            if "429" in str(e) or "quota" in str(e).lower():
-                if not key_manager.switch_key(): return None
-            else: return None
-        
 # ==============================================================================
 # 4. ADVANCED SCRAPING (UPDATED FOR HIGH QUALITY & LOGGING)
 # ==============================================================================
 def resolve_and_scrape(google_url):
-    """
-    Open Google URL -> Resolve -> Get Page Source -> Extract Text.
-    Returns: (final_url, page_title, text_content)
-    """
     log(f"      🕵️‍♂️ Selenium: Opening & Resolving: {google_url[:60]}...")
-    
-    # خيارات المتصفح
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    # انتحال شخصية متصفح حقيقي لتجنب الحظر
     chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-    chrome_options.add_argument("--mute-audio") # كتم الصوت لتسريع التحميل
+    chrome_options.add_argument("--mute-audio") 
 
     driver = None
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(25) # مهلة تحميل 25 ثانية
+        driver.set_page_load_timeout(25) 
         
         driver.get(google_url)
-        
-        # حلقة انتظار للخروج من جوجل
         start_wait = time.time()
         final_url = google_url
         
-        while time.time() - start_wait < 15: # انتظار 15 ثانية كحد أقصى للتحويل
+        while time.time() - start_wait < 15: 
             current = driver.current_url
             if "news.google.com" not in current and "google.com" not in current:
                 final_url = current
                 break
-            time.sleep(1) # فحص كل ثانية
+            time.sleep(1) 
         
-        # التقاط العنوان الحقيقي للصفحة
         final_title = driver.title
         page_source = driver.page_source
         
-        # التحقق من الروابط غير المرغوبة (فيديو، معارض صور)
-        # هذا يمنع مشكلة "Washington Post Video" التي واجهتها
         bad_segments = ["/video/", "/watch", "/gallery/", "/photos/", "youtube.com"]
         if any(seg in final_url.lower() for seg in bad_segments):
             log(f"      ⚠️ Skipped Video/Gallery URL: {final_url}")
@@ -742,7 +535,6 @@ def resolve_and_scrape(google_url):
         log(f"      🔗 Resolved URL: {final_url[:70]}...")
         log(f"      🏷️ Real Page Title: {final_title[:70]}...")
 
-        # استخراج النص باستخدام Trafilatura
         extracted_text = trafilatura.extract(
             page_source, 
             include_comments=False, 
@@ -753,7 +545,6 @@ def resolve_and_scrape(google_url):
         if extracted_text and len(extracted_text) > 1000:
             return final_url, final_title, extracted_text
 
-        # Fallback (BS4) إذا فشل Trafilatura
         soup = BeautifulSoup(page_source, 'html.parser')
         for script in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
             script.extract()
@@ -773,13 +564,10 @@ def resolve_and_scrape(google_url):
 # ==============================================================================
 
 def extract_og_image(html_content):
-    """استخراج رابط الصورة البارزة من كود HTML"""
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
-        # الأولوية 1: Open Graph
         meta = soup.find('meta', property='og:image')
         if meta and meta.get('content'): return meta['content']
-        # الأولوية 2: Twitter Card
         meta = soup.find('meta', name='twitter:image')
         if meta and meta.get('content'): return meta['content']
         return None
@@ -787,7 +575,6 @@ def extract_og_image(html_content):
         return None
 
 def draw_text_with_outline(draw, position, text, font, fill_color, outline_color, outline_width):
-    """رسم نص مع حدود خارجية لزيادة الوضوح"""
     x, y = position
     for dx in range(-outline_width, outline_width + 1):
         for dy in range(-outline_width, outline_width + 1):
@@ -800,16 +587,8 @@ def draw_text_with_outline(draw, position, text, font, fill_color, outline_color
 # ==============================================================================
 
 def upload_to_github_cdn(image_bytes, filename):
-    """
-    Uploads image bytes to the PUBLIC 'images' repository.
-    Returns a fast jsDelivr CDN URL.
-    """
     try:
-        # 1. جلب التوكن واسم مستودع الصور المخصص
         gh_token = os.getenv('MY_GITHUB_TOKEN')
-        
-        # الأولوية للمستودع المخصص للصور، إذا لم يوجد نستخدم المستودع الحالي
-        # لكن تذكر: يجب أن يكون المستودع عاماً لكي تعمل jsDelivr
         image_repo_name = os.getenv('GITHUB_IMAGE_REPO') 
         if not image_repo_name:
             image_repo_name = os.getenv('GITHUB_REPO_NAME')
@@ -821,11 +600,9 @@ def upload_to_github_cdn(image_bytes, filename):
         g = Github(gh_token)
         repo = g.get_repo(image_repo_name)
         
-        # 2. تحديد المسار
         date_folder = datetime.datetime.now().strftime("%Y-%m")
         file_path = f"images/{date_folder}/{filename}"
         
-        # 3. الرفع (Create or Update)
         try:
             repo.create_file(
                 path=file_path,
@@ -846,47 +623,32 @@ def upload_to_github_cdn(image_bytes, filename):
             else:
                 raise e
 
-        # 4. تكوين رابط CDN (يعمل فقط إذا كان المستودع Public)
         cdn_url = f"https://cdn.jsdelivr.net/gh/{image_repo_name}@main/{file_path}"
-        
         log(f"      ☁️ Hosted on Public CDN: {cdn_url}")
         return cdn_url
 
     except Exception as e:
         log(f"      ❌ GitHub Upload Error: {e}")
-        # محاولة طباعة تفاصيل الخطأ لمعرفة إذا كان السبب هو الصلاحيات
         if "404" in str(e):
             log("      ⚠️ Hint: Check if the Image Repo exists and Token has access.")
         return None
-
-# ==============================================================================
-# IMAGE PROCESSING (SOURCE -> GITHUB)
-# ==============================================================================
-
-from PIL import Image, ImageDraw, ImageFont, ImageFilter # تأكد من استيراد ImageFilter
 
 # ==============================================================================
 # SMART IMAGE SELECTOR (GEMINI VISION)
 # ==============================================================================
 
 def select_best_image_with_gemini(model_name, article_title, images_list):
-    """
-    يستخدم Gemini Vision لتحليل الصور واختيار الأفضل والأكثر أماناً.
-    images_list: قائمة قواميس تحتوي على {url, domain}
-    """
     if not images_list: return None
 
     log(f"   🤖 Asking Gemini to select the best image from {len(images_list)} candidates...")
 
-    # نجهز الصور لإرسالها للموديل (نحتاج تحميلها كبيانات Bytes أولاً)
     valid_images = []
     headers = {'User-Agent': 'Mozilla/5.0'}
     
-    for i, img_data in enumerate(images_list[:4]): # نكتفي بفحص أول 4 صور لتوفير الوقت
+    for i, img_data in enumerate(images_list[:4]): 
         try:
             r = requests.get(img_data['url'], headers=headers, timeout=10)
             if r.status_code == 200:
-                # نحفظ الصورة مؤقتاً في الذاكرة بصيغة يفهمها Gemini
                 img_bytes = r.content
                 valid_images.append({
                     "mime_type": "image/jpeg",
@@ -897,7 +659,6 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
 
     if not valid_images: return None
 
-    # بناء البرومبت البصري
     prompt = f"""
     TASK: You are a strict photo editor for a tech blog.
     ARTICLE TITLE: "{article_title}"
@@ -917,13 +678,12 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
         key = key_manager.get_current_key()
         client = genai.Client(api_key=key)
         
-        # نرسل الصور مع النص
         inputs = [prompt]
         for img in valid_images:
             inputs.append(types.Part.from_bytes(data=img['data'], mime_type="image/jpeg"))
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash", # نستخدم موديل سريع يدعم الصور
+            model="gemini-2.5-flash", 
             contents=inputs
         )
         
@@ -933,7 +693,6 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
             log("      🤖 Gemini rejected all source images (Safety/Quality).")
             return None
             
-        # استخراج الرقم
         import re
         match = re.search(r'\d+', result)
         if match:
@@ -946,7 +705,6 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
     except Exception as e:
         log(f"      ⚠️ Gemini Vision Error: {e}")
     
-    # في حال الفشل، نعود للطريقة التقليدية (الأولى)
     return images_list[0]['url']
 
 # ==============================================================================
@@ -956,7 +714,6 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
 def process_source_image(source_url, overlay_text, filename_title):
     log(f"   🖼️ Processing Source Image: {source_url[:60]}...")
     try:
-        # 1. Download
         headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(source_url, headers=headers, timeout=15, stream=True)
         if r.status_code != 200: 
@@ -964,7 +721,6 @@ def process_source_image(source_url, overlay_text, filename_title):
         
         original_img = Image.open(BytesIO(r.content)).convert("RGBA")
         
-        # 2. Resize & Crop (1200x630)
         target_w, target_h = 1200, 630
         img_ratio = original_img.width / original_img.height
         target_ratio = target_w / target_h
@@ -978,36 +734,24 @@ def process_source_image(source_url, overlay_text, filename_title):
             
         original_img = original_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
         
-        # Center Crop
         left = (new_width - target_w) / 2
         top = (new_height - target_h) / 2
         right = (new_width + target_w) / 2
         bottom = (new_height + target_h) / 2
         base_img = original_img.crop((left, top, right, bottom))
         
-        # ==================================================================
-        # 🛡️ PRIVACY & MODESTY FILTER (THE BLUR EFFECT)
-        # ==================================================================
-        # نقوم بعمل تمويه قوي للخلفية.
-        # هذا يخفي ملامح الوجوه وتفاصيل الجلد تماماً، ويحول الصورة لخلفية جمالية
-        # Radius = 10 (تمويه قوي)، Radius = 5 (تمويه متوسط)
-        # سنستخدم 8 لضمان الستر الكامل مع بقاء الألوان واضحة.
         base_img = base_img.filter(ImageFilter.GaussianBlur(radius=8))
-        # ==================================================================
 
-        # 3. Dark Overlay (زيادة التعتيم قليلاً لتباين النص)
-        # رفعنا التعتيم من 90 إلى 110 لأن الصورة مموهة وتحتاج لتباين أعلى
         overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 110))
         base_img = Image.alpha_composite(base_img, overlay)
         
-        # 4. Text Overlay (نفس الكود السابق)
         if overlay_text:
             draw = ImageDraw.Draw(base_img)
             W, H = base_img.size
             try:
                 font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
                 if not os.path.exists(font_path): font_path = "arialbd.ttf"
-                font = ImageFont.truetype(font_path, 80) # تكبير الخط قليلاً
+                font = ImageFont.truetype(font_path, 80) 
             except: font = ImageFont.load_default()
             
             words = overlay_text.upper().split()
@@ -1029,7 +773,6 @@ def process_source_image(source_url, overlay_text, filename_title):
                 draw_text_with_outline(draw, (line_x, text_y), line, font, "#FFD700", "black", 5)
                 text_y += 95
 
-        # 5. Upload to GitHub
         img_byte_arr = BytesIO()
         base_img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
         
@@ -1041,9 +784,6 @@ def process_source_image(source_url, overlay_text, filename_title):
     except Exception as e:
         log(f"      ⚠️ Source Image Error: {e}")
         return None
-# ==============================================================================
-# AI IMAGE GENERATION (AI -> GITHUB)
-# ==============================================================================
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
     log(f"   🎨 Generating Thumbnail (Flux + GitHub Host)...")
@@ -1075,13 +815,11 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
             x = (W - text_w) / 2
             y = H - text_h - 50
             
-            # Draw Outline
             for dx in range(-4, 5):
                 for dy in range(-4, 5):
                     draw.text((x+dx, y+dy), text, font=font, fill="black")
             draw.text((x, y), text, font=font, fill="yellow")
 
-        # Prepare upload
         img_byte_arr = BytesIO()
         img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
         
@@ -1093,177 +831,152 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
         log(f"      ⚠️ AI Image Error: {e}")
     
     return None
-    
-def run_pipeline(category, config, mode="trending"):
+
+def run_pipeline(category, config, forced_keyword=None):
     """
-    The Master Pipeline v14.0 (Viral B2C + Strict Integration + Robust Multimedia).
-    Integrates social_manager, video_renderer, and youtube_manager flawlessly.
+    The Master Pipeline v15.0 (Failover & Rotation Support)
+    Returns: True (Success/Published), False (Failed/No Sources)
     """
-    # 1. إعداد المتغيرات الأساسية
     model_name = config['settings'].get('model_name')
-    cat_conf = config['categories'][category]
     
-    log(f"\n🚀 INIT PIPELINE: {category} (Viral Explainer Mode ⚡)")
-    
-    # تحميل قاعدة المعرفة لتجنب التكرار
-    # تحميل قاعدة المعرفة لتجنب التكرار
-    # نمرر الـ category لنحصل على تاريخ هذا القسم فقط
-    recent_titles = get_recent_titles_string(category=category, limit=100)
-    
-    # طباعة للتأكد من أن النظام يرى التاريخ
-    # log(f"   📚 Knowledge Graph Loaded: Found {len(recent_titles.split(' | '))} previous articles in '{category}'.")
-
-    # =====================================================
-    # STEP 0: SEO STRATEGY (THE BRAIN)
-    # =====================================================
-    log("   🧠 Consulting SEO Strategist for a winning keyword...")
-    
+    # تحديد الكلمة المستهدفة
     target_keyword = ""
-
-    try:
-        # طلب كلمة مفتاحية ذكية
-        seo_prompt = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today())
-        
-        seo_plan = generate_step_strict(
-            model_name, 
-            seo_prompt, 
-            "Step 0 (SEO Strategy)", 
-            required_keys=["target_keyword"]
-        )
-        
-        target_keyword = seo_plan.get('target_keyword')
-        log(f"   🎯 Strategy Defined: Targeting keyword '{target_keyword}'")
-        
-    except Exception as e:
-        log(f"   ⚠️ SEO Step failed. Using fallback.")
-        target_keyword = cat_conf.get('trending_focus', category)
-        if "," in target_keyword:
-            target_keyword = random.choice([t.strip() for t in target_keyword.split(',')])
-
-    # =====================================================
-    # STEP 1: MULTI-SOURCE RESEARCH (THE HUNTER)
-    # =====================================================
-    # (Pseudo-code logic to add)
-    reddit_query = f"{target_keyword} site:reddit.com"
-    # قم بجلب أول نتيجة من ريديت واستخرج النص منها
-    # أضف هذا النص إلى "Payload" المرسل للموديل تحت عنوان:
-    # *** REAL USER OPINIONS (REDDIT) ***
-    # البحث في أخبار جوجل
-    rss_query = f"{target_keyword} when:3d"
-    rss_items = get_real_news_rss(rss_query.replace("when:3d","").strip(), category)
     
+    if forced_keyword:
+        log(f"\n🔄 RETRY MODE: Trying fallback keyword in '{category}': '{forced_keyword}'")
+        target_keyword = forced_keyword
+    else:
+        log(f"\n🚀 INIT PIPELINE: {category} (AI Strategist Mode)")
+        # =====================================================
+        # STEP 0: SEO STRATEGY (THE BRAIN)
+        # =====================================================
+        try:
+            recent_titles = get_recent_titles_string(category=category, limit=100)
+            seo_prompt = PROMPT_ZERO_SEO.format(
+                category=category, 
+                date=datetime.date.today(),
+                history=recent_titles
+            )
+            seo_plan = generate_step_strict(
+                model_name, 
+                seo_prompt, 
+                "Step 0 (SEO Strategy)", 
+                required_keys=["target_keyword"]
+            )
+            target_keyword = seo_plan.get('target_keyword')
+            log(f"   🎯 Strategy Defined: Targeting '{target_keyword}'")
+        except:
+            log("   ⚠️ SEO Strategy failed. Returning False to trigger fallback.")
+            return False
+
+    # =====================================================
+    # STEP 1: MULTI-SOURCE RESEARCH (STRICT FILTER)
+    # =====================================================
+    
+    # البحث عن الكلمة بدقة
+    rss_query = f"{target_keyword} when:2d"
+    rss_items = get_real_news_rss(rss_query.replace("when:2d","").strip(), category)
+    
+    # إذا لم نجد نتائج للكلمة المحددة، نفشل فوراً لننتقل للكلمة التالية
     if not rss_items:
-        log("   ⚠️ No specific news found. Retrying broad search...")
-        rss_items = get_real_news_rss(category, category)
-        if not rss_items:
-            log("❌ FATAL: No RSS items found. Aborting.")
-            return
+        log(f"   ⚠️ No news found for '{target_keyword}'. Aborting this keyword.")
+        return False
 
     collected_sources = []
     main_headline = ""
     main_link = ""
     
-    log(f"   🕵️‍♂️ Investigating sources for: '{target_keyword}'...")
+    # استخراج الكلمة الأهم للفلترة (مثلاً من "Devin AI" نأخذ "Devin")
+    required_terms = target_keyword.lower().split()
+    significant_keyword = max(required_terms, key=len) if required_terms else ""
     
-    for item in rss_items[:6]:
+    log(f"   🕵️‍♂️ Investigating sources for: '{target_keyword}'...")
+
+    for item in rss_items[:8]:
+        # الفلاتر (التكرار + الكلمات المملة)
+        recent_titles = get_recent_titles_string(category=None, limit=200) # تحميل الكل للفحص
         if item['title'][:20] in recent_titles: continue
-            # --- NEW BLOCKER ---
-        # إذا كان العنوان يحتوي على كلمات مملة، تجاوزه فوراً
-        if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
-            log(f"         ⛔ Skipped Boring Corporate Topic: {item['title']}")
-            continue
-        # -------------------
+        
+        if hasattr(sys.modules[__name__], 'BORING_KEYWORDS'):
+             if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
+                log(f"         ⛔ Skipped Boring Corporate Topic: {item['title']}")
+                continue
+
+        # --- الفلتر الصارم (Strict Relevance) ---
+        # يجب أن يحتوي العنوان على الكلمة المفتاحية
+        if significant_keyword and len(significant_keyword) > 3:
+            if significant_keyword not in item['title'].lower():
+                log(f"         ⚠️ Skipped Irrelevant: '{item['title']}' (Missing '{significant_keyword}')")
+                continue
+        # ----------------------------------------
+
         if any(src['domain'] in item['link'] for src in collected_sources): continue
 
-        log(f"      📌 Checking Source: {item['title'][:40]}...")
-        
-        # استخدام دالة url_resolver التي أرفقتها
+        # جلب وتحليل
         data = url_resolver.get_page_html(item['link'])
-        
         if data and data.get('html'):
-            r_url = data['url']
             html_content = data['html']
-            
-            # استخراج النص باستخدام Trafilatura
             text = trafilatura.extract(html_content, include_comments=False, include_tables=True)
             
-            # Fallback إذا فشل Trafilatura
+            # Fallback text extraction
             if not text:
                 soup = BeautifulSoup(html_content, 'html.parser')
                 for script in soup(["script", "style", "nav", "footer"]): script.extract()
                 text = soup.get_text(" ", strip=True)
-
-
-                # ... (داخل حلقة فحص المصادر) ...
             
-            # استخراج الصورة الأصلية من الـ HTML الذي جلبناه
             og_image = extract_og_image(html_content)
 
-            # قبول المقالات ذات الطول المناسب
             if text and len(text) >= 800:
-                log(f"         ✅ Accepted Source! ({len(text)} chars). Has Image? {'Yes' if og_image else 'No'}")
-                domain = urllib.parse.urlparse(r_url).netloc
-                r_title = item['title']
+                # تحقق إضافي في النص
+                if significant_keyword and significant_keyword not in text.lower():
+                     continue
 
+                log(f"         ✅ Accepted Source! ({len(text)} chars).")
                 collected_sources.append({
-                    "title": r_title,
+                    "title": item['title'],
                     "text": text,
-                    "domain": domain,
-                    "url": r_url,
+                    "domain": urllib.parse.urlparse(data['url']).netloc,
+                    "url": data['url'],
                     "date": item['date'],
-                    "source_image": og_image  # <-- نحفظ رابط الصورة هنا
+                    "source_image": og_image
                 })
-                
-                
                 
                 if not main_headline:
                     main_headline = item['title']
                     main_link = item['link']
                 
                 if len(collected_sources) >= 3: break
-            else:
-                log("         ⚠️ Content too short or extraction failed.")
-        else:
-             log("         ⚠️ Selenium failed to resolve URL.")
-             
-        time.sleep(2) # راحة لتجنب الحظر
+            
+        time.sleep(1.5)
 
     if not collected_sources:
-        log("❌ FATAL: No valid sources found. Skipping.")
-        return
+        log(f"   ❌ No valid sources found for '{target_keyword}'.")
+        return False # نرجع False لنخبر النظام بتجربة الكلمة التالية
 
     # =====================================================
-    # STEP 2: DRAFTING & SYNTHESIS (THE STRICT CHAIN)
+    # STEP 2: DRAFTING & SYNTHESIS
     # =====================================================
     log(f"\n✍️ Synthesizing Content from {len(collected_sources)} sources...")
     
-    # تحضير النص للموديل
     combined_text = ""
     for i, src in enumerate(collected_sources):
         combined_text += f"\n--- SOURCE {i+1}: {src['domain']} ---\nTitle: {src['title']}\nDate: {src['date']}\nCONTENT:\n{src['text'][:9000]}\n"
 
-    # تحضير قائمة المصادر لاستخدامها لاحقاً في Step C
     sources_list_formatted = [{"title": s['title'], "url": s['url']} for s in collected_sources]
 
-# ... داخل run_pipeline ...
-
-    # إضافة تعليمات السياق الجديدة
     json_ctx = {
         "rss_headline": main_headline,
         "keyword_focus": target_keyword,
         "source_count": len(collected_sources),
         "date": str(datetime.date.today()),
-        "style_guide": "Critical, First-Person, Beginner-Focused, Honest Review" # <-- إضافة هذا السطر
+        "style_guide": "Critical, First-Person, Beginner-Focused, Honest Review"
     }
-    
-    # ... الباقي كما هو ...
     
     payload = f"METADATA: {json.dumps(json_ctx)}\n\n*** RESEARCH DATA ***\n{combined_text}"
     
     try:
-        # --- Step B: Writer (B2C Style) ---
+        # Step B
         required_b = ["headline", "hook", "article_body", "verdict"]
-        
         json_b = generate_step_strict(
             model_name, 
             PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), 
@@ -1271,76 +984,43 @@ def run_pipeline(category, config, mode="trending"):
             required_keys=required_b
         )
 
-        # --- Step C: SEO & Style ---
+        # Step C
         kg_links = get_relevant_kg_for_linking(category)
-        
-        input_for_c = {
-            "draft_content": json_b,
-            "sources_data": sources_list_formatted 
-        }
-        
+        input_for_c = {"draft_content": json_b, "sources_data": sources_list_formatted}
         required_c = ["finalTitle", "finalContent", "seo", "imageGenPrompt"]
         prompt_c = PROMPT_C_TEMPLATE.format(json_input=json.dumps(input_for_c), knowledge_graph=kg_links)
-        
-        json_c = generate_step_strict(
-            model_name, 
-            prompt_c, 
-            "Step C (SEO & Style)", 
-            required_keys=required_c
-        )
+        json_c = generate_step_strict(model_name, prompt_c, "Step C (SEO & Style)", required_keys=required_c)
 
-        # --- Step D: Humanizer ---
+        # Step D
         required_d = ["finalTitle", "finalContent"]
         prompt_d = PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c))
-        
-        json_d = generate_step_strict(
-            model_name, 
-            prompt_d, 
-            "Step D (Humanizer)", 
-            required_keys=required_d
-        )
+        json_d = generate_step_strict(model_name, prompt_d, "Step D (Humanizer)", required_keys=required_d)
 
-        # --- Step E: Final Polish ---
+        # Step E
         required_e = ["finalTitle", "finalContent", "imageGenPrompt", "seo"]
         prompt_e = PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d))
+        final = generate_step_strict(model_name, prompt_e, "Step E (Final Polish)", required_keys=required_e)
         
-        final = generate_step_strict(
-            model_name, 
-            prompt_e, 
-            "Step E (Final Polish)", 
-            required_keys=required_e
-        )
-        
-        # استخراج النتائج النهائية
         title = final['finalTitle']
         content_html = final['finalContent']
         seo_data = final.get('seo', {})
         img_prompt = final.get('imageGenPrompt', title)
         img_overlay = final.get('imageOverlayText', 'News')
 
-    except Exception as e:
-        log(f"❌ PIPELINE CRASHED during generation: {e}")
-        import traceback
-        traceback.print_exc()
-        return
+        # =====================================================
+        # STEP 3: MULTIMEDIA GENERATION
+        # =====================================================
+        log("   🧠 Generating Multimedia Assets...")
+        
+        yt_meta = {}
+        fb_cap = title
+        vid_html = ""
+        vid_main = None
+        vid_short = None
+        fb_path = None
+        img_url = None
 
-    
-    # =====================================================
-    # STEP 3: MULTIMEDIA GENERATION (Priority: Real -> AI)
-    # =====================================================
-    log("   🧠 Generating Multimedia Assets...")
-    
-    # تعريف المتغيرات خارج try لضمان وجودها في الذاكرة
-    yt_meta = {}
-    fb_cap = title
-    vid_html = ""
-    vid_main = None
-    vid_short = None
-    fb_path = None
-    img_url = None
-
-    try:
-        # 1. Social Metadata & Hooks
+        # 1. Social Metadata
         yt_meta = generate_step_strict(
             model_name, 
             PROMPT_YOUTUBE_METADATA.format(draft_title=title), 
@@ -1356,49 +1036,30 @@ def run_pipeline(category, config, mode="trending"):
         )
         fb_cap = fb_dat.get('FB_Hook', title)
     
-        # -----------------------------------------------------
-        # INTELLIGENT IMAGE STRATEGY
-        # -----------------------------------------------------
+        # 2. Image Strategy
         log("   🖼️ Starting Intelligent Image Strategy...")
-        
-        # أ. تجميع كل الصور المتاحة من المصادر
         candidate_images = []
         for src in collected_sources:
             if src.get('source_image'):
                 candidate_images.append({'url': src['source_image'], 'domain': src['domain']})
         
         selected_source_image = None
-        
-        # ب. إذا وجدت صور، دع Gemini يختار الأفضل
         if candidate_images:
             selected_source_image = select_best_image_with_gemini(model_name, title, candidate_images)
         
-        # ج. معالجة الصورة المختارة (تطبيق الفلتر والرفع)
         overlay_text_clean = img_overlay if img_overlay else "LATEST NEWS"
-        
         if selected_source_image:
             log(f"      🎯 Processing selected image...")
-            # هنا سيتم تطبيق الفلتر الضبابي (Privacy Blur)
             img_url = process_source_image(selected_source_image, overlay_text_clean, title)
         
-        # د. Fallback: إذا لم نجد صوراً أو فشلت المعالجة، نولد صورة "آمنة"
         if not img_url:
             log("      🎨 No suitable source image found. Generating Abstract AI Art...")
-            # نضيف تعليمات لضمان عدم ظهور بشر في التوليد
             safe_prompt = f"{img_prompt}, abstract technology, blurred background, no people, no skin, no faces, futuristic, 3d render"
             img_url = generate_and_upload_image(safe_prompt, overlay_text_clean)
 
-
-        # -----------------------------------------------------
-        # VIDEO GENERATION STRATEGY
-        # -----------------------------------------------------
-        
-        # تنظيف الملخص للفيديو
+        # 3. Video Strategy
         summ_clean = re.sub('<[^<]+?>','', content_html)[:2500]
-        
         script_json = None
-        
-        # حلقة المحاولة (3 محاولات) لتوليد السكربت
         for attempt in range(1, 4):
             log(f"      🎬 Generating Script (Attempt {attempt}/3)...")
             try:
@@ -1407,55 +1068,36 @@ def run_pipeline(category, config, mode="trending"):
                     PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean), 
                     f"Video Script (Att {attempt})"
                 )
-                
-                # استراتيجية الاستخراج الجديدة (Robust Key Search)
                 if isinstance(raw_result, dict):
-                    # 1. البحث المباشر عن المفتاح
                     if 'video_script' in raw_result and isinstance(raw_result['video_script'], list):
                         script_json = raw_result['video_script']
-                        log("      ✅ Found 'video_script' key directly.")
                         break
-                    
-                    # 2. البحث عن مفاتيح بديلة
                     for key in ['script', 'dialogue', 'conversation', 'scenes', 'content']:
                         if key in raw_result and isinstance(raw_result[key], list):
                             script_json = raw_result[key]
-                            log(f"      ✅ Found script under key: '{key}'")
                             break
-                    
-                    # 3. البحث في القيم
                     if not script_json:
                         for val in raw_result.values():
                             if isinstance(val, list) and len(val) > 0:
                                 if isinstance(val[0], dict) and 'text' in val[0]:
                                     script_json = val
-                                    log("      ✅ Found script hidden in values.")
                                     break
-                
                 elif isinstance(raw_result, list):
                     script_json = raw_result
-                    log("      ✅ Received List directly.")
                     break
-                
-                if not script_json:
-                     log("      ❌ Attempt failed. Retrying...")
-
             except Exception as e:
                 log(f"      ⚠️ Script Generation Error: {e}")
 
-        # بدء الريندر والرفع إذا وجدنا السكربت
         if script_json and len(script_json) > 0:
             timestamp = int(time.time())
             base_output_dir = os.path.abspath("output")
             os.makedirs(base_output_dir, exist_ok=True)
             
-            # --- Main Video ---
             log(f"      🎬 Rendering Main Video...")
             try:
                 rr = video_renderer.VideoRenderer(output_dir=base_output_dir, width=1920, height=1080)
                 main_video_path = os.path.join(base_output_dir, f"main_{timestamp}.mp4")
                 pm = rr.render_video(script_json, title, main_video_path)
-                
                 if pm and os.path.exists(pm):
                     desc = f"{yt_meta.get('description','')}\n\n🚀 Full Story: {main_link}\n\n#{category.replace(' ','')}"
                     vid_main, _ = youtube_manager.upload_video_to_youtube(
@@ -1466,13 +1108,11 @@ def run_pipeline(category, config, mode="trending"):
             except Exception as e:
                 log(f"      ⚠️ Main Video Error: {e}")
 
-            # --- Short Video ---
             log(f"      🎬 Rendering Short Video...")
             try:
                 rs = video_renderer.VideoRenderer(output_dir=base_output_dir, width=1080, height=1920)
                 short_video_path = os.path.join(base_output_dir, f"short_{timestamp}.mp4")
                 ps = rs.render_video(script_json, title, short_video_path)
-                
                 if ps and os.path.exists(ps):
                     fb_path = ps
                     vid_short, _ = youtube_manager.upload_video_to_youtube(
@@ -1480,117 +1120,73 @@ def run_pipeline(category, config, mode="trending"):
                     )
             except Exception as e:
                 log(f"      ⚠️ Short Video Error: {e}")
-
         else:
             log(f"      ❌ Failed to extract script after 3 attempts.")
 
+        # =====================================================
+        # STEP 4: PUBLISHING
+        # =====================================================
+        log("   🚀 Publishing to Blogger...")
+        author_box = """
+        <div style="margin-top:40px; padding:25px; background:#f4f6f8; border-radius:12px; display:flex; align-items:center; border:1px solid #e1e4e8;">
+            <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791" 
+                 style="width:70px; height:70px; border-radius:50%; margin-right:15px; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);" alt="Yousef Sameer">
+            <div>
+                <h4 style="margin:0; font-size:18px; color:#2c3e50;">Yousef Sameer</h4>
+                <p style="margin:5px 0 0; font-size:14px; color:#666; line-height:1.4;">
+                    I test AI tools so you don't have to break your device. 
+                    <br><strong>Brutally honest reviews. No fluff.</strong>
+                </p>
+            </div>
+        </div>
+        """
+        
+        content_html = content_html.replace('href=\\"', 'href="').replace('\\">', '">')
+        content_html = content_html.replace('href=""', 'href="').replace('"" target', '" target')
+        content_html = re.sub(r'href=["\']\\?["\']?(http[^"\']+)\\?["\']?["\']', r'href="\1"', content_html)
+        
+        final_content_with_author = content_html + author_box
+        
+        full_body = ARTICLE_STYLE
+        if img_url: 
+            alt_text = seo_data.get("imageAltText", title)
+            full_body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}"><img src="{img_url}" alt="{alt_text}" style="max-width:100%; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1);" /></a></div>'
+        if vid_html: full_body += vid_html
+        full_body += final_content_with_author
+        
+        if 'schemaMarkup' in final:
+            try: full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
+            except: pass
+        
+        published_url = publish_post(title, full_body, [category, "Tech News", "Explainers"])
+        
+        if published_url:
+            log(f"✅ PUBLISHED: {published_url}")
+            update_kg(title, published_url, category)
+            
+            new_desc = f"{yt_meta.get('description','')}\n\n👇 READ THE FULL ARTICLE HERE:\n{published_url}\n\n#AI #TechNews"
+            if vid_main: youtube_manager.update_video_description(vid_main, new_desc)
+            if vid_short: youtube_manager.update_video_description(vid_short, new_desc)
+            
+            try:
+                log("   📢 Distributing to Facebook...")
+                if fb_path and os.path.exists(fb_path): 
+                    fb_text = f"{fb_cap}\n\nRead more: {published_url}\n\n#AI"
+                    social_manager.post_reel_to_facebook(fb_path, fb_text)
+                elif img_url:
+                    social_manager.distribute_content(f"{fb_cap}\n\n👇 Read Article:\n{published_url}", published_url, img_url)
+            except Exception as e:
+                log(f"   ⚠️ Social Distribution Error: {e}")
+            
+            return True # Success
+
     except Exception as e:
-        log(f"⚠️ Multimedia Process Error: {e}")
+        log(f"❌ PIPELINE CRASHED during generation: {e}")
         import traceback
         traceback.print_exc()
-    # =====================================================
-    # STEP 4: PUBLISHING
-    # =====================================================
-    log("   🚀 Publishing to Blogger...")
-    
-    # --- NEW: AUTHOR BOX INJECTION ---
-    # هذا الصندوق سيظهر في نهاية كل مقال
-    author_box = """
-    <div style="margin-top:40px; padding:25px; background:#f4f6f8; border-radius:12px; display:flex; align-items:center; border:1px solid #e1e4e8;">
-        <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791" 
-             style="width:70px; height:70px; border-radius:50%; margin-right:15px; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);" alt="Yousef Sameer">
-        <div>
-            <h4 style="margin:0; font-size:18px; color:#2c3e50;">Yousef Sameer</h4>
-            <p style="margin:5px 0 0; font-size:14px; color:#666; line-height:1.4;">
-                I test AI tools so you don't have to break your device. 
-                <br><strong>Brutally honest reviews. No fluff.</strong>
-            </p>
-        </div>
-    </div>
-    """
-    
-    # دمج المحتوى: المقال + صندوق الكاتب + المصادر (المصادر موجودة أصلاً في content_html من البرومبت)
-    # ... (داخل run_pipeline) ...
-
-    # =====================================================
-    # 🛠️ FIX BROKEN LINKS (CRITICAL)
-    # =====================================================
-    log("   🔧 Sanitizing HTML links...")
-    
-    # 1. إزالة الهروب الخاطئ (Escaped Quotes) الذي يضعه Gemini أحياناً
-    # يحول href=\"https...\" إلى href="https..."
-    content_html = content_html.replace('href=\\"', 'href="').replace('\\">', '">')
-    
-    # 2. إزالة علامات التنصيص المزدوجة (Double Quotes) التي تسبب خطأ 404
-    # يحول href=""https..."" إلى href="https..."
-    content_html = content_html.replace('href=""', 'href="').replace('"" target', '" target')
-    
-    # 3. تنظيف قوي باستخدام Regex لأي حالات معقدة أخرى
-    # يبحث عن أي رابط يبدأ بـ http ويحاصره علامات تنصيص فوضوية
-    content_html = re.sub(r'href=["\']\\?["\']?(http[^"\']+)\\?["\']?["\']', r'href="\1"', content_html)
-    
-    # =====================================================
-
-    # الآن ندمج المحتوى النظيف مع صندوق الكاتب
-    final_content_with_author = content_html + author_box
-    
-
-    # ---------------------------------
-
-    full_body = ARTICLE_STYLE
-    
-    if img_url: 
-        alt_text = seo_data.get("imageAltText", title)
-        full_body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}"><img src="{img_url}" alt="{alt_text}" style="max-width:100%; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1);" /></a></div>'
-    
-    if vid_html: full_body += vid_html
-    
-    # نستخدم المتغير الجديد
-    full_body += final_content_with_author
-    
-    # ... (باقي كود النشر كما هو) ...
- 
-    
-    if 'schemaMarkup' in final:
-        try: full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
-        except: pass
-    
-    published_url = publish_post(title, full_body, [category, "Tech News", "Explainers"])
-    
-    # =====================================================
-    # STEP 5: DISTRIBUTION & UPDATES
-    # =====================================================
-    if published_url:
-        log(f"✅ PUBLISHED: {published_url}")
-        update_kg(title, published_url, category)
+        return False
         
-        # 1. تحديث الوصف في يوتيوب
-        new_desc = f"{yt_meta.get('description','')}\n\n👇 READ THE FULL ARTICLE HERE:\n{published_url}\n\n#AI #TechNews"
-        if vid_main: youtube_manager.update_video_description(vid_main, new_desc)
-        if vid_short: youtube_manager.update_video_description(vid_short, new_desc)
-        
-        # 2. النشر على فيسبوك باستخدام social_manager
-        try:
-            log("   📢 Distributing to Facebook...")
-            
-            # الأولوية للريلز (Reels) لأنها تجلب تفاعلاً أكبر
-            if fb_path and os.path.exists(fb_path): 
-                fb_text = f"{fb_cap}\n\nRead more: {published_url}\n\n#AI"
-                # استدعاء الدالة من social_manager
-                social_manager.post_reel_to_facebook(fb_path, fb_text)
-            
-            # إذا لم يوجد فيديو، ننشر الصورة والمقال
-            elif img_url:
-                social_manager.distribute_content(f"{fb_cap}\n\n👇 Read Article:\n{published_url}", published_url, img_url)
-                
-        except Exception as e:
-            log(f"   ⚠️ Social Distribution Error: {e}")
-    else:
-        log("❌ Blogger Publish Failed.")
-
-# ==============================================================================
-# 7. MAIN
-# ==============================================================================
+    return False
 
 def main():
     try:
@@ -1599,10 +1195,40 @@ def main():
         log("❌ No Config.")
         return
     
-    cat = random.choice(list(cfg['categories'].keys()))
-    run_pipeline(cat, cfg, mode="trending")
-    perform_maintenance_cleanup()
-    log("✅ Finished.")
+    all_categories = list(cfg['categories'].keys())
+    random.shuffle(all_categories)
+    
+    log(f"🎲 Session Categories Priority: {all_categories}")
+    
+    success = False
+    
+    for category in all_categories:
+        log(f"\n📁 SWITCHING TO CATEGORY: {category}")
+        
+        if run_pipeline(category, cfg, forced_keyword=None):
+            success = True
+            break 
+            
+        log(f"   ⚠️ AI Strategy failed for {category}. Switching to Manual List...")
+        
+        trending_text = cfg['categories'][category].get('trending_focus', '')
+        if trending_text:
+            manual_topics = [t.strip() for t in trending_text.split(',') if t.strip()]
+            random.shuffle(manual_topics)
+            
+            for topic in manual_topics:
+                log(f"   👉 Trying Manual Topic: '{topic}'")
+                if run_pipeline(category, cfg, forced_keyword=topic):
+                    success = True
+                    break 
+            
+            if success: break 
+            
+    if success:
+        log("\n✅ MISSION ACCOMPLISHED. Article Published.")
+        perform_maintenance_cleanup()
+    else:
+        log("\n❌ MISSION FAILED. Exhausted all categories and all keywords.")
 
 if __name__ == "__main__":
     main()
