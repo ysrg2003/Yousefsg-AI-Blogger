@@ -14,11 +14,11 @@ def search_reddit_threads(keyword):
     يبحث عن نقاشات حقيقية (ليست أخباراً) باستخدام فلاتر جوجل الذكية.
     """
     # البحث عن كلمات تدل على تجربة حقيقية
+    # نستخدم -giveaway لاستبعاد المسابقات
     search_query = f"site:reddit.com {keyword} (review OR 'after using' OR 'problem with' OR 'my thoughts') -giveaway"
     encoded = urllib.parse.quote(search_query)
-    # نستخدم بحث جوجل العام بصيغة RSS لأنه أدق من بحث Reddit الداخلي
-    url = f"https://services.google.com/feed/cse/json?q={encoded}" 
-    # ملاحظة: سنستخدم RSS القياسي لأنه أكثر استقراراً
+    
+    # نستخدم بحث جوجل العام بصيغة RSS لأنه أدق وأسرع من API ريديت ولا يحتاج مفاتيح
     url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
     
     try:
@@ -26,10 +26,8 @@ def search_reddit_threads(keyword):
         threads = []
         if feed.entries:
             for entry in feed.entries[:4]: 
-                # تنظيف الرابط من إضافات جوجل
+                # تنظيف الرابط
                 real_link = entry.link
-                # في بعض الأحيان روابط RSS تحتوي على google redirection، نحاول استخلاص الرابط الأصلي
-                # لكن غالباً RSS Search يعطي المباشر.
                 threads.append({
                     "title": entry.title,
                     "link": real_link
@@ -41,7 +39,7 @@ def search_reddit_threads(keyword):
 
 def extract_smart_opinions(reddit_url):
     """
-    يسحب التعليقات ويحلل محتواها لاستخراج 'الذهب' فقط.
+    يسحب التعليقات ويحلل محتواها لاستخراج 'الذهب' فقط (JSON Trick).
     """
     try:
         clean_url = reddit_url.split("?")[0]
@@ -50,6 +48,7 @@ def extract_smart_opinions(reddit_url):
         else:
             json_url = clean_url
 
+        # User-Agent ضروري جداً لتجنب خطأ 429
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0'
         }
@@ -59,11 +58,11 @@ def extract_smart_opinions(reddit_url):
 
         data = r.json()
         
-        # استخراج اسم المجتمع (Subreddit)
+        # محاولة استخراج اسم المجتمع (Subreddit) لإعطاء مصداقية
         try:
             subreddit = data[0]['data']['children'][0]['data']['subreddit_name_prefixed'] # ex: r/Android
         except:
-            subreddit = "Reddit"
+            subreddit = "Reddit Discussion"
 
         comments_data = data[1]['data']['children']
         insights = []
@@ -75,25 +74,27 @@ def extract_smart_opinions(reddit_url):
             permalink = c_data.get('permalink', '')
             author = c_data.get('author', 'User')
             
-            # 1. فلتر الجودة (الطول + كلمات التجربة)
+            # فلتر الجودة:
+            # 1. الطول مناسب (ليس كلمة واحدة وليس مقالاً طويلاً جداً)
+            # 2. يحتوي على كلمات تدل على التجربة
             if len(body) > 60 and body not in ["[deleted]", "[removed]"]:
-                markers = ["i noticed", "in my experience", "battery life", "bug", "glitch", "crash", "actually", "worth it"]
+                markers = ["i noticed", "in my experience", "battery", "bug", "glitch", "crash", "actually", "worth it", "slow", "fast", "update"]
                 if any(m in body.lower() for m in markers) or score > 5:
                     
-                    # بناء رابط ذكي للتعليق
+                    # بناء رابط دقيق للتعليق نفسه
                     full_link = f"https://www.reddit.com{permalink}"
                     
                     insights.append({
-                        "source_name": subreddit, # r/Tech
+                        "source_name": subreddit,
                         "author": author,
-                        "text": body[:400].replace("\n", " "), # تنظيف النص
+                        "text": body[:500].replace("\n", " "), # تنظيف
                         "url": full_link,
                         "score": score
                     })
         
         # نرتب حسب الأهمية (Score)
         insights.sort(key=lambda x: x['score'], reverse=True)
-        return insights[:3] # نأخذ أفضل 3 فقط من كل خيط
+        return insights[:3] # نأخذ أفضل 3 من كل خيط
 
     except Exception as e:
         # logger.error(f"Extraction error: {e}")
@@ -123,13 +124,13 @@ def get_community_intel(keyword):
     report += "INSTRUCTIONS: Use these real user quotes to validate or criticize the news. \n"
     report += "CRITICAL: When citing, you MUST hyperlink the text 'community discussion' or the Subreddit name (e.g., r/Gadgets) to the provided URL.\n\n"
     
-    # نختار أفضل 4 آراء متنوعة
+    # نختار أفضل 4 آراء متنوعة وفريدة
     unique_insights = list({v['text']:v for v in all_insights}.values())[:4]
     
     for i, item in enumerate(unique_insights):
         report += f"--- INSIGHT {i+1} ---\n"
-        report += f"SOURCE: {item['source_name']} (Use this name)\n"
-        report += f"LINK: {item['url']} (Link to this)\n"
+        report += f"SOURCE: {item['source_name']} (Use this specific name)\n"
+        report += f"LINK: {item['url']} (Link strictly to this)\n"
         report += f"USER SAID: \"{item['text']}\"\n"
         
     return report
