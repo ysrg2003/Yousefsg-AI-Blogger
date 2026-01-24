@@ -984,12 +984,65 @@ def run_pipeline(category, config, forced_keyword=None):
         content_html = content_html.replace('href=""', 'href="').replace('"" target', '" target')
         content_html = re.sub(r'href=["\']\\?["\']?(http[^"\']+)\\?["\']?["\']', r'href="\1"', content_html)
         
-        full_body = ARTICLE_STYLE
+        # ... (بعد تعريف author_box وتنظيف الروابط) ...
+
+        # -----------------------------------------------------------
+        # JETHEME OPTIMIZATION BLOCK
+        # -----------------------------------------------------------
+        
+        # 1. تحسين الفيديو (YouTube):
+        # نستخدم loading="lazy" لكي لا يثقل الصفحة
+        # نضيف width/height لتجنب اهتزاز التصميم (CLS)
+        if vid_main:
+            vid_html = f'''
+            <div class="video-container" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                <iframe 
+                    style="position:absolute;top:0;left:0;width:100%;height:100%;" 
+                    src="https://www.youtube.com/embed/{vid_main}" 
+                    frameborder="0" 
+                    allowfullscreen 
+                    loading="lazy"
+                    width="1280" 
+                    height="720"
+                    title="{title}">
+                </iframe>
+            </div>
+            '''
+        else:
+            vid_html = ""
+
+        # 2. تحسين الصورة (Featured Image):
+        # نستخدم class="separator" لأن بلوجر وقالب JeTheme يحبان هذا الكلاس للتنسيق
+        # الخاصية الأهم: data-src و src. بعض نسخ JeTheme تستخدم data-src للتحميل المؤجل.
+        # لكننا هنا نريد العكس: نريد التحميل الفوري.
+        # نضع loading="eager" و fetchpriority="high" لإخبار المتصفح: "حمل هذه الصورة قبل أي شيء!"
         if img_url: 
             alt_text = seo_data.get("imageAltText", title)
-            full_body += f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}"><img src="{img_url}" alt="{alt_text}" style="max-width:100%; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1);" /></a></div>'
-        if vid_html: full_body += vid_html
-        full_body += content_html + author_box
+            # لاحظ: وضعنا الصورة داخل رابط للصورة نفسها (سلوك بلوجر القياسي)
+            img_html = f'''
+            <div class="separator" style="clear:both;text-align:center;margin-bottom:30px;">
+                <a href="{img_url}" style="margin-left:1em; margin-right:1em;">
+                    <img border="0" 
+                         src="{img_url}" 
+                         alt="{alt_text}" 
+                         width="1200" 
+                         height="630" 
+                         fetchpriority="high" 
+                         loading="eager" 
+                         style="max-width:100%; height:auto; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1);" 
+                         data-original-width="1200" 
+                         data-original-height="630" />
+                </a>
+            </div>
+            '''
+        else:
+            img_html = ""
+
+        # 3. تجميع المقال
+        # الترتيب: الصورة أولاً -> الفيديو -> المحتوى -> الكاتب
+        full_body = ARTICLE_STYLE + img_html + vid_html + final_content_with_author
+        
+        # -----------------------------------------------------------
         
         if 'schemaMarkup' in final:
             try: full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
