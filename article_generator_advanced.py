@@ -1350,30 +1350,40 @@ def run_pipeline(category, config, mode="trending"):
             required_keys=["FB_Hook"]
         )
         fb_cap = fb_dat.get('FB_Hook', title)
+    
+    # -----------------------------------------------------
+    # INTELLIGENT IMAGE STRATEGY
+    # -----------------------------------------------------
+    img_url = None
+    
+    # 1. تجميع كل الصور المتاحة من المصادر
+    candidate_images = []
+    for src in collected_sources:
+        if src.get('source_image'):
+            candidate_images.append({'url': src['source_image'], 'domain': src['domain']})
+    
+    selected_source_image = None
+    
+    # 2. إذا وجدت صور، دع Gemini يختار الأفضل
+    if candidate_images:
+        selected_source_image = select_best_image_with_gemini(model_name, title, candidate_images)
+    
+    # 3. معالجة الصورة المختارة (أو التوليد بالذكاء الاصطناعي إذا فشل الاختيار)
+    overlay_text_clean = img_overlay if img_overlay else "LATEST NEWS"
+    
+    if selected_source_image:
+        log(f"      🎯 Processing selected image...")
+        # هنا سيتم تطبيق الفلتر الضبابي (Privacy Blur)
+        img_url = process_source_image(selected_source_image, overlay_text_clean, title)
+    
+    # 4. Fallback: إذا لم نجد صوراً أو فشلت المعالجة، نولد صورة "آمنة"
+    if not img_url:
+        log("      🎨 No suitable source image found. Generating Abstract AI Art...")
+        # نضيف تعليمات لضمان عدم ظهور بشر في التوليد
+        safe_prompt = f"{img_prompt}, abstract technology, blurred background, no people, no skin, no faces, futuristic, 3d render"
+        img_url = generate_and_upload_image(safe_prompt, overlay_text_clean)
 
-        # 2. Image Strategy: Try Sources First, Then AI
-        overlay_text_clean = img_overlay if img_overlay else "NEWS UPDATE"
-        
-        log("   🖼️ Starting Image Strategy (Real Sources First)...")
-        
-        # الحلقة الذكية: نحاول المصدر الأول، ثم الثاني، وهكذا
-        for src in collected_sources:
-            raw_img_url = src.get('source_image')
-            if raw_img_url:
-                log(f"      🎯 Trying image from source: {src['domain']}...")
-                # محاولة المعالجة
-                img_url = process_source_image(raw_img_url, overlay_text_clean, title)
-                
-                if img_url:
-                    log("      ✅ Success! Real source image processed & uploaded.")
-                    break # وجدنا صورة، نخرج من الحلقة
-                else:
-                    log("      ⚠️ Failed to process this source image. Trying next...")
-        
-        # إذا انتهت الحلقة ولم نجد صورة (img_url لا يزال None)
-        if not img_url:
-            log("      🎨 No valid source images found/processed. Fallback to AI Generation...")
-            img_url = generate_and_upload_image(img_prompt, img_overlay)
+    # ... (Continue to Video Generation) ...
 
         # 3. Video Generation (كما هو بدون تغيير...)
         # ...
