@@ -730,7 +730,9 @@ def run_pipeline(category, config, forced_keyword=None):
         payload = f"METADATA: {json.dumps(json_ctx)}\n\n*** RESEARCH DATA ***\n{combined_text}"
         
         json_b = generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Step B (Writer)", required_keys=["headline", "hook", "article_body", "verdict"])
-        kg_links = get_relevant_kg_for_linking(category)
+        # نستخرج العنوان المقترح من الخطوة B ونرسله لدالة الربط
+        current_headline = json_b.get('headline', target_keyword)
+        kg_links = get_relevant_kg_for_linking(current_headline, category)
         input_c = {"draft_content": json_b, "sources_data": sources_list_formatted}
         json_c = generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(input_c), knowledge_graph=kg_links), "Step C (SEO)", required_keys=["finalTitle", "finalContent", "seo", "imageGenPrompt"])
         json_d = generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), "Step D (Humanizer)", required_keys=["finalContent"])
