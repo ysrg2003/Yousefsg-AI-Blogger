@@ -424,10 +424,30 @@ def get_recent_titles_string(category=None, limit=100):
     if not titles: return "No previous articles in this category."
     return "\n".join(titles)
     
-def get_relevant_kg_for_linking(category, limit=60):
+def get_relevant_kg_for_linking(current_title, current_category, limit=60):
     kg = load_kg()
-    links = [{"title":i['title'],"url":i['url']} for i in kg if i.get('section')==category][:limit]
-    return json.dumps(links)
+    links = []
+    
+    # 1. الأولوية: مقالات من نفس القسم (لتقوية التخصص)
+    same_cat = [i for i in kg if i.get('section') == current_category]
+    
+    # 2. الثانوية: مقالات من أقسام أخرى ولكنها ذات صلة (بحث بالكلمات المفتاحية)
+    # حيلة بسيطة: هل هناك كلمات مشتركة في العنوان؟
+    other_cat = [i for i in kg if i.get('section') != current_category]
+    relevant_others = []
+    
+    current_keywords = set(current_title.lower().split())
+    for item in other_cat:
+        item_keywords = set(item['title'].lower().split())
+        # إذا تطابقت كلمتان أو أكثر (غير حروف الجر)، اعتبره ذا صلة
+        if len(current_keywords.intersection(item_keywords)) >= 2:
+            relevant_others.append(item)
+
+    # ادمج القائمتين مع إعطاء الأولوية للقسم الحالي
+    final_list = same_cat[:4] + relevant_others[:2] 
+    
+    output = [{"title": i['title'], "url": i['url']} for i in final_list]
+    return json.dumps(output)
 
 def update_kg(title, url, section):
     try:
