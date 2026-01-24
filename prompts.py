@@ -155,7 +155,12 @@ You must return a JSON object with EXACTLY these 7 keys. Do NOT merge them.
    - Do NOT include the Verdict here."
 4. "verdict": "<h2>The Verdict (My Take)</h2><p>Your expert opinion on whether the user should care about this update (200+ words).</p>"
 
-5. **Sources Section (Critical Requirement):**
+5. **CONTEXTUAL CITATIONS (SEO GOLD):**
+   - Do NOT dump all links at the bottom.
+   - When you mention a specific claim (e.g., "Apple stated that..."), you MUST hyperlink the text "Apple stated" to the source URL provided in the input.
+   - Format: `According to <a href="SOURCE_URL" target="_blank">TechCrunch</a>, the device costs $500.`
+   - Try to include at least 2-3 in-text contextual links to the strongest sources provided.
+   - Keep the "Sources" section at the end as a backup, but prioritize in-text linking.
    - Add a section at the VERY END titled `<h3>Sources</h3>`.
    - Create a `<div class="Sources">` container.
    - Inside it, create a `<ul>` list where each list item is a link to the sources provided in the input, using the format: `<li><a href="URL" target="_blank" rel="nofollow">Source Title</a></li>`.
