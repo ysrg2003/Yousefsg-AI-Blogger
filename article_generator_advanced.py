@@ -863,13 +863,104 @@ def upload_to_github_cdn(image_bytes, filename):
 # IMAGE PROCESSING (SOURCE -> GITHUB)
 # ==============================================================================
 
+from PIL import Image, ImageDraw, ImageFont, ImageFilter # تأكد من استيراد ImageFilter
+
+# ==============================================================================
+# SMART IMAGE SELECTOR (GEMINI VISION)
+# ==============================================================================
+
+def select_best_image_with_gemini(model_name, article_title, images_list):
+    """
+    يستخدم Gemini Vision لتحليل الصور واختيار الأفضل والأكثر أماناً.
+    images_list: قائمة قواميس تحتوي على {url, domain}
+    """
+    if not images_list: return None
+
+    log(f"   🤖 Asking Gemini to select the best image from {len(images_list)} candidates...")
+
+    # نجهز الصور لإرسالها للموديل (نحتاج تحميلها كبيانات Bytes أولاً)
+    valid_images = []
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    for i, img_data in enumerate(images_list[:4]): # نكتفي بفحص أول 4 صور لتوفير الوقت
+        try:
+            r = requests.get(img_data['url'], headers=headers, timeout=10)
+            if r.status_code == 200:
+                # نحفظ الصورة مؤقتاً في الذاكرة بصيغة يفهمها Gemini
+                img_bytes = r.content
+                valid_images.append({
+                    "mime_type": "image/jpeg",
+                    "data": img_bytes,
+                    "original_url": img_data['url']
+                })
+        except: pass
+
+    if not valid_images: return None
+
+    # بناء البرومبت البصري
+    prompt = f"""
+    TASK: You are a strict photo editor for a tech blog.
+    ARTICLE TITLE: "{article_title}"
+    
+    INSTRUCTIONS:
+    1. Look at the provided images.
+    2. Select the ONE image that best matches the title.
+    3. **SAFETY CHECK:** Avoid images with revealing skin, swimsuits, or overly casual people if possible. Prefer tech devices, robots, or professional settings.
+    4. If ALL images are bad quality, irrelevant, or unsafe, return "NONE".
+    
+    OUTPUT:
+    Return ONLY the integer index (0, 1, 2...) of the best image.
+    If none are good, return -1.
+    """
+
+    try:
+        key = key_manager.get_current_key()
+        client = genai.Client(api_key=key)
+        
+        # نرسل الصور مع النص
+        inputs = [prompt]
+        for img in valid_images:
+            inputs.append(types.Part.from_bytes(data=img['data'], mime_type="image/jpeg"))
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash", # نستخدم موديل سريع يدعم الصور
+            contents=inputs
+        )
+        
+        result = response.text.strip()
+        
+        if "-1" in result or "NONE" in result:
+            log("      🤖 Gemini rejected all source images (Safety/Quality).")
+            return None
+            
+        # استخراج الرقم
+        import re
+        match = re.search(r'\d+', result)
+        if match:
+            idx = int(match.group())
+            if 0 <= idx < len(valid_images):
+                selected_url = valid_images[idx]['original_url']
+                log(f"      ✅ Gemini selected Image #{idx+1} as the best match.")
+                return selected_url
+                
+    except Exception as e:
+        log(f"      ⚠️ Gemini Vision Error: {e}")
+    
+    # في حال الفشل، نعود للطريقة التقليدية (الأولى)
+    return images_list[0]['url']
+
+# ==============================================================================
+# IMAGE PROCESSING (PRIVACY BLUR + OVERLAY)
+# ==============================================================================
+
 def process_source_image(source_url, overlay_text, filename_title):
     log(f"   🖼️ Processing Source Image: {source_url[:60]}...")
     try:
         # 1. Download
         headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(source_url, headers=headers, timeout=15, stream=True)
-        if r.status_code != 200: return None
+        if r.status_code != 200: 
+        return None
         
         original_img = Image.open(BytesIO(r.content)).convert("RGBA")
         
@@ -894,18 +985,29 @@ def process_source_image(source_url, overlay_text, filename_title):
         bottom = (new_height + target_h) / 2
         base_img = original_img.crop((left, top, right, bottom))
         
-        # 3. Dark Overlay
-        overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 90))
+        # ==================================================================
+        # 🛡️ PRIVACY & MODESTY FILTER (THE BLUR EFFECT)
+        # ==================================================================
+        # نقوم بعمل تمويه قوي للخلفية.
+        # هذا يخفي ملامح الوجوه وتفاصيل الجلد تماماً، ويحول الصورة لخلفية جمالية
+        # Radius = 10 (تمويه قوي)، Radius = 5 (تمويه متوسط)
+        # سنستخدم 8 لضمان الستر الكامل مع بقاء الألوان واضحة.
+        base_img = base_img.filter(ImageFilter.GaussianBlur(radius=8))
+        # ==================================================================
+
+        # 3. Dark Overlay (زيادة التعتيم قليلاً لتباين النص)
+        # رفعنا التعتيم من 90 إلى 110 لأن الصورة مموهة وتحتاج لتباين أعلى
+        overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 110))
         base_img = Image.alpha_composite(base_img, overlay)
         
-        # 4. Text Overlay
+        # 4. Text Overlay (نفس الكود السابق)
         if overlay_text:
             draw = ImageDraw.Draw(base_img)
             W, H = base_img.size
             try:
                 font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
                 if not os.path.exists(font_path): font_path = "arialbd.ttf"
-                font = ImageFont.truetype(font_path, 70)
+                font = ImageFont.truetype(font_path, 80) # تكبير الخط قليلاً
             except: font = ImageFont.load_default()
             
             words = overlay_text.upper().split()
@@ -914,34 +1016,31 @@ def process_source_image(source_url, overlay_text, filename_title):
             for word in words:
                 test_line = ' '.join(current_line + [word])
                 bbox = draw.textbbox((0, 0), test_line, font=font)
-                if bbox[2] < W - 100: current_line.append(word)
+                if bbox[2] < W - 80: current_line.append(word)
                 else:
                     lines.append(' '.join(current_line))
                     current_line = [word]
             lines.append(' '.join(current_line))
             
-            text_y = H / 2 - (len(lines) * 85 / 2)
+            text_y = H / 2 - (len(lines) * 90 / 2)
             for line in lines:
                 bbox = draw.textbbox((0, 0), line, font=font)
                 line_x = (W - (bbox[2] - bbox[0])) / 2
-                draw_text_with_outline(draw, (line_x, text_y), line, font, "#FFD700", "black", 4)
-                text_y += 85
+                draw_text_with_outline(draw, (line_x, text_y), line, font, "#FFD700", "black", 5)
+                text_y += 95
 
-        # 5. Prepare for GitHub Upload
+        # 5. Upload to GitHub
         img_byte_arr = BytesIO()
-        base_img.convert("RGB").save(img_byte_arr, format='JPEG', quality=92)
+        base_img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
         
-        # Clean filename
         safe_filename = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50]
         safe_filename += ".jpg"
         
-        # 6. Upload to GitHub
         return upload_to_github_cdn(img_byte_arr, safe_filename)
             
     except Exception as e:
         log(f"      ⚠️ Source Image Error: {e}")
         return None
-
 # ==============================================================================
 # AI IMAGE GENERATION (AI -> GITHUB)
 # ==============================================================================
