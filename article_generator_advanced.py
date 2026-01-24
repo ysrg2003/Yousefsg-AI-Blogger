@@ -649,29 +649,31 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
         try:
             r = requests.get(img_data['url'], headers=headers, timeout=10)
             if r.status_code == 200:
-                img_bytes = r.content
                 valid_images.append({
                     "mime_type": "image/jpeg",
-                    "data": img_bytes,
+                    "data": r.content,
                     "original_url": img_data['url']
                 })
         except: pass
 
     if not valid_images: return None
 
+    # تحديث البرومبت ليكون صارماً بشأن الخصوصية
     prompt = f"""
-    TASK: You are a strict photo editor for a tech blog.
-    ARTICLE TITLE: "{article_title}"
+    TASK: Photo Editor Selection.
+    ARTICLE: "{article_title}"
     
-    INSTRUCTIONS:
-    1. Look at the provided images.
-    2. Select the ONE image that best matches the title.
-    3. **SAFETY CHECK:** Avoid images with revealing skin, swimsuits, or overly casual people if possible. Prefer tech devices, robots, or professional settings.
-    4. If ALL images are bad quality, irrelevant, or unsafe, return "NONE".
+    CRITERIA:
+    1. Relevance: Must match the tech topic.
+    2. **PRIVACY PRIORITY:** 
+       - PREFER images of objects, robots, screens, or code.
+       - AVOID close-up portraits of specific humans if possible.
+       - Long shots (crowds/distance) are okay.
+    3. Quality: High resolution, no text overlay.
     
     OUTPUT:
-    Return ONLY the integer index (0, 1, 2...) of the best image.
-    If none are good, return -1.
+    Return ONLY the integer index (0, 1...) of the best image.
+    If all images are bad/unsafe, return -1.
     """
 
     try:
@@ -690,7 +692,6 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
         result = response.text.strip()
         
         if "-1" in result or "NONE" in result:
-            log("      🤖 Gemini rejected all source images (Safety/Quality).")
             return None
             
         import re
@@ -698,9 +699,8 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
         if match:
             idx = int(match.group())
             if 0 <= idx < len(valid_images):
-                selected_url = valid_images[idx]['original_url']
-                log(f"      ✅ Gemini selected Image #{idx+1} as the best match.")
-                return selected_url
+                log(f"      ✅ Gemini selected Image #{idx+1}.")
+                return valid_images[idx]['original_url']
                 
     except Exception as e:
         log(f"      ⚠️ Gemini Vision Error: {e}")
