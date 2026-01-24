@@ -40,6 +40,7 @@ from io import BytesIO
 from github import Github, InputGitTreeElement
 import cv2
 import numpy as np
+import content_validator_pro
 from prompts import *
 
 # ==============================================================================
@@ -894,6 +895,36 @@ def run_pipeline(category, config, forced_keyword=None):
                     fb_path = ps
                     vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
             except Exception as e: log(f"      ⚠️ Short Video Error: {e}")
+
+
+
+
+        title = final['finalTitle']
+        content_html = final['finalContent']
+        
+        # --- START PROFESSIONAL VALIDATION ---
+        log("   🛡️ Initiating Self-Healing Validation...")
+        try:
+            # إعداد المدقق
+            val_client = genai.Client(api_key=key_manager.get_current_key())
+            healer = content_validator_pro.AdvancedContentValidator(val_client)
+            
+            # تجميع النص المصدري الكامل
+            full_text = "\n".join([s['text'] for s in collected_sources])
+            
+            # تشغيل المعالجة
+            content_html = healer.run_professional_validation(
+                content_html, 
+                full_text, 
+                collected_sources # نمرر القائمة كاملة لإصلاح الروابط
+            )
+            
+        except Exception as e:
+            log(f"   ⚠️ Validation Error (Non-Fatal): {e}")
+            # في أسوأ الأحوال، ننشر المحتوى الأصلي دون توقف
+        # --- END VALIDATION ---
+
+        
 
         # Publishing
         log("   🚀 Publishing to Blogger...")
