@@ -85,161 +85,26 @@ def log(msg):
 # ==============================================================================
 ARTICLE_STYLE = """
 <style>
-    /* Global Settings */
-    .post-body { 
-        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-        line-height: 1.8; 
-        color: #333; 
-        font-size: 18px; 
-        max-width: 100%;
-        overflow-x: hidden; 
-    }
-    
-    /* Headers */
-    h2 { 
-        color: #111; 
-        font-weight: 800; 
-        margin-top: 60px; 
-        margin-bottom: 25px; 
-        border-bottom: 3px solid #f1c40f; 
-        padding-bottom: 10px; 
-        font-size: 28px; 
-        clear: both; 
-        display: block; 
-    }
-    h3 { 
-        color: #2980b9; 
-        font-weight: 700; 
-        margin-top: 40px; 
-        margin-bottom: 20px;
-        font-size: 24px; 
-        clear: both;
-    }
-    
-    /* Table of Contents */
-    .toc-box { 
-        background: #fdfdfd; 
-        border: 1px solid #e1e4e8; 
-        padding: 25px; 
-        margin: 30px 0 50px 0; 
-        border-radius: 12px; 
-        display: block; 
-        width: 100%; 
-        box-sizing: border-box;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
-    }
-    .toc-box h3 { 
-        margin-top: 0; 
-        font-size: 22px; 
-        border-bottom: 2px solid #3498db; 
-        padding-bottom: 10px; 
-        margin-bottom: 20px; 
-        color: #2c3e50;
-        display: inline-block;
-    }
-    .toc-box ul { 
-        list-style: none !important; 
-        padding: 0 !important; 
-        margin: 0 !important; 
-    }
-    .toc-box li { 
-        margin-bottom: 12px; 
-        border-bottom: 1px dashed #eee; 
-        padding-bottom: 8px; 
-        padding-left: 0; 
-        position: relative; 
-    }
-    .toc-box a { 
-        color: #444; 
-        font-weight: 600; 
-        font-size: 18px; 
-        text-decoration: none; 
-        transition: 0.2s; 
-        display: flex; 
-        align-items: center;
-        border: none;
-    }
-    .toc-box a:before { 
-        content: "👉"; 
-        margin-right: 10px; 
-        font-size: 16px; 
-    }
-    .toc-box a:hover { 
-        color: #3498db; 
-        padding-left: 5px; 
-        background: none;
-    }
-
-    /* Takeaways Box */
-    .takeaways-box { 
-        background: linear-gradient(135deg, #fffcf5 0%, #fff 100%); 
-        border-left: 6px solid #e67e22; 
-        padding: 25px; 
-        margin: 40px 0; 
-        border-radius: 8px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.03); 
-    }
-    
-    /* Tables */
-    .table-wrapper { 
-        overflow-x: auto; 
-        margin: 40px 0; 
-        border-radius: 8px; 
-        border: 1px solid #eee; 
-    }
-    table { 
-        width: 100%; 
-        border-collapse: collapse; 
-        background: #fff; 
-        font-size: 17px; 
-    }
-    th { 
-        background: #2c3e50; 
-        color: #fff; 
-        padding: 15px; 
-        text-align: left; 
-    }
-    td { 
-        padding: 15px; 
-        border-bottom: 1px solid #eee; 
-        color: #444; 
-    }
-
-    /* Quote/Verdict */
-    blockquote { 
-        background: #f8f9fa; 
-        border-left: 5px solid #27ae60; 
-        margin: 40px 0; 
-        padding: 20px 30px; 
-        font-style: italic; 
-        color: #555; 
-        font-size: 1.2em; 
-    }
-
-    /* Links */
-    a { 
-        color: #2980b9; 
-        text-decoration: none; 
-        font-weight: 600; 
-        border-bottom: 2px dotted #2980b9; 
-        transition: all 0.3s; 
-    }
-    a:hover { 
-        color: #e67e22; 
-        border-bottom: 2px solid #e67e22; 
-    }
-    
-    /* FAQ */
-    .faq-section { 
-        margin-top: 60px; 
-        background: #fdfdfd; 
-        padding: 30px; 
-        border-radius: 15px; 
-        border: 1px solid #eee; 
-    }
+    .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.8; color: #333; font-size: 18px; max-width: 100%; overflow-x: hidden; }
+    h2 { color: #111; font-weight: 800; margin-top: 60px; margin-bottom: 25px; border-bottom: 3px solid #f1c40f; padding-bottom: 10px; font-size: 28px; clear: both; display: block; }
+    h3 { color: #2980b9; font-weight: 700; margin-top: 40px; margin-bottom: 20px; font-size: 24px; clear: both; }
+    .toc-box { background: #fdfdfd; border: 1px solid #e1e4e8; padding: 25px; margin: 30px 0 50px 0; border-radius: 12px; display: block; width: 100%; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .toc-box h3 { margin-top: 0; font-size: 22px; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px; color: #2c3e50; display: inline-block; }
+    .toc-box ul { list-style: none !important; padding: 0 !important; margin: 0 !important; }
+    .toc-box li { margin-bottom: 12px; border-bottom: 1px dashed #eee; padding-bottom: 8px; padding-left: 0; position: relative; }
+    .toc-box a { color: #444; font-weight: 600; font-size: 18px; text-decoration: none; transition: 0.2s; display: flex; align-items: center; border: none; }
+    .toc-box a:before { content: "👉"; margin-right: 10px; font-size: 16px; }
+    .toc-box a:hover { color: #3498db; padding-left: 5px; background: none; }
+    .takeaways-box { background: linear-gradient(135deg, #fffcf5 0%, #fff 100%); border-left: 6px solid #e67e22; padding: 25px; margin: 40px 0; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.03); }
+    .table-wrapper { overflow-x: auto; margin: 40px 0; border-radius: 8px; border: 1px solid #eee; }
+    table { width: 100%; border-collapse: collapse; background: #fff; font-size: 17px; }
+    th { background: #2c3e50; color: #fff; padding: 15px; text-align: left; }
+    td { padding: 15px; border-bottom: 1px solid #eee; color: #444; }
+    blockquote { background: #f8f9fa; border-left: 5px solid #27ae60; margin: 40px 0; padding: 20px 30px; font-style: italic; color: #555; font-size: 1.2em; }
+    a { color: #2980b9; text-decoration: none; font-weight: 600; border-bottom: 2px dotted #2980b9; transition: all 0.3s; }
+    a:hover { color: #e67e22; border-bottom: 2px solid #e67e22; }
+    .faq-section { margin-top: 60px; background: #fdfdfd; padding: 30px; border-radius: 15px; border: 1px solid #eee; }
     .faq-q { color: #d35400; font-weight: bold; font-size: 20px; display: block; margin-bottom: 10px; }
-    
-    /* Sources */
     .Sources { font-size: 0.9em; color: #777; margin-top: 50px; border-top: 1px solid #eee; padding-top: 20px; }
     .Sources ul { list-style-type: disc; padding-left: 20px; }
 </style>
@@ -446,7 +311,7 @@ def perform_maintenance_cleanup():
     except: pass
 
 # ==============================================================================
-# 4. SCRAPING
+# 4. SCRAPING (Optimized)
 # ==============================================================================
 def resolve_and_scrape(google_url):
     log(f"      🕵️‍♂️ Selenium: Opening & Resolving: {google_url[:60]}...")
@@ -454,6 +319,8 @@ def resolve_and_scrape(google_url):
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    # IMPROVEMENT: Block images to save bandwidth and speed up loading
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false") 
     chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     chrome_options.add_argument("--mute-audio") 
 
@@ -461,7 +328,8 @@ def resolve_and_scrape(google_url):
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(25) 
+        driver.set_page_load_timeout(15) # Reduced timeout to avoid hanging
+        
         driver.get(google_url)
         start_wait = time.time()
         final_url = google_url
@@ -560,85 +428,44 @@ def ensure_haarcascade_exists():
     return cascade_path
 
 def apply_smart_privacy_blur(pil_image):
-    """
-    تكتشف الوجوه وتطبق التمويه النووي (Nuclear Blur) عليها فقط.
-    يتم توسيع المنطقة لتغطية الرأس والرقبة، وزيادة قوة التمويه لطمس الملامح تماماً.
-    """
     try:
-        # 1. تحويل الصورة من PIL إلى OpenCV (Numpy Array)
         img_np = np.array(pil_image)
-        
-        # تحويل الألوان لضمان التوافق مع OpenCV
-        if img_np.shape[2] == 4: # RGBA
-            img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
-        else: # RGB
-            img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        if img_np.shape[2] == 4: img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
+        else: img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
 
-        # 2. تحضير النموذج
         cascade_path = ensure_haarcascade_exists()
-        if not cascade_path: 
-            log("      ⚠️ Haar Cascade missing. Skipping smart blur.")
-            return pil_image
+        if not cascade_path: return pil_image
         
         face_cascade = cv2.CascadeClassifier(cascade_path)
         gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
-
-        # 3. اكتشاف الوجوه (دقة عالية)
-        faces = face_cascade.detectMultiScale(
-            gray, 
-            scaleFactor=1.1, 
-            minNeighbors=5, 
-            minSize=(30, 30)
-        )
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
         if len(faces) > 0:
             log(f"      🕵️‍♂️ Detected {len(faces)} face(s). Applying NUCLEAR blur...")
-            
             h_img, w_img, _ = img_np.shape
-            
             for (x, y, w, h) in faces:
-                # 4. توسيع الحدود (Padding) بنسبة 60% لتغطية الشعر والأذنين والرقبة
                 pad_w = int(w * 0.6) 
-                pad_h = int(h * 0.6) # توسيع علوي وجانبي
-                pad_h_bottom = int(h * 0.8) # توسيع سفلي أكبر للرقبة
-                
-                # حساب الإحداثيات الجديدة مع التأكد من عدم الخروج عن الإطار
+                pad_h = int(h * 0.6)
+                pad_h_bottom = int(h * 0.8)
                 x1 = max(0, x - pad_w)
                 y1 = max(0, y - pad_h)
                 x2 = min(w_img, x + w + pad_w)
                 y2 = min(h_img, y + h + pad_h_bottom)
-                
-                # 5. استقطاع منطقة الوجه الموسعة
                 roi = img_np[y1:y2, x1:x2]
-                
-                # 6. حساب قوة التمويه (Kernel Size) ديناميكياً
-                # كلما كبر الوجه، زادت قوة التمويه لطمس التفاصيل
-                # نستخدم نصف عرض الوجه كقوة للتمويه!
                 k_size = (w // 2) 
-                if k_size % 2 == 0: k_size += 1 # يجب أن يكون الرقم فردياً
-                
-                # لضمان تمويه قوي جداً حتى للوجوه الصغيرة
-                k_size = max(k_size, 51) 
-                
-                # 7. تطبيق التمويه (Gaussian Blur)
+                if k_size % 2 == 0: k_size += 1
+                k_size = max(k_size, 51)
                 try:
                     blurred_roi = cv2.GaussianBlur(roi, (k_size, k_size), 0)
-                    # إعادة المنطقة المموهة للصورة الأصلية
                     img_np[y1:y2, x1:x2] = blurred_roi
-                except Exception as blur_err:
-                    log(f"      ⚠️ Blur calculation error: {blur_err}")
-                    continue
-
+                except: continue
         else:
             log("      🤖 No human faces detected. Keeping image sharp.")
 
-        # 8. تحويل الصورة مرة أخرى إلى PIL (RGB)
         img_rgb = cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB)
         return Image.fromarray(img_rgb)
-
     except Exception as e:
         log(f"      ⚠️ Smart Blur Error: {e}. Fallback to global blur.")
-        # في حال حدوث خطأ تقني، نعود للتمويه الكامل للأمان
         return pil_image.filter(ImageFilter.GaussianBlur(radius=15))
 
 def select_best_image_with_gemini(model_name, article_title, images_list):
@@ -741,10 +568,11 @@ def process_source_image(source_url, overlay_text, filename_title):
                 draw_text_with_outline(draw, (line_x, text_y), line, font, "#FFD700", "black", 5)
                 text_y += 95
 
+        # Save as WebP
         img_byte_arr = BytesIO()
-        base_img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
+        base_img.convert("RGB").save(img_byte_arr, format='WEBP', quality=85)
         safe_filename = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50]
-        safe_filename += ".jpg"
+        safe_filename += ".webp"
         return upload_to_github_cdn(img_byte_arr, safe_filename)
     except Exception as e:
         log(f"      ⚠️ Source Image Error: {e}")
@@ -777,9 +605,10 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
             for dx in range(-4, 5):
                 for dy in range(-4, 5): draw.text((x+dx, y+dy), text, font=font, fill="black")
             draw.text((x, y), text, font=font, fill="yellow")
+        
         img_byte_arr = BytesIO()
-        img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
-        filename = f"ai_gen_{seed}.jpg"
+        img.convert("RGB").save(img_byte_arr, format='WEBP', quality=85)
+        filename = f"ai_gen_{seed}.webp"
         return upload_to_github_cdn(img_byte_arr, filename)
     except Exception as e:
         log(f"      ⚠️ AI Image Error: {e}")
@@ -883,7 +712,7 @@ def run_pipeline(category, config, forced_keyword=None):
                     main_headline = item['title']
                     main_link = item['link']
                 if len(collected_sources) >= 3: break
-        time.sleep(1.5)
+        time.sleep(5) # INCREASED SLEEP TO AVOID QUOTA LIMITS
 
     if not collected_sources:
         log(f"   ❌ No valid sources found for '{target_keyword}'.")
@@ -963,7 +792,22 @@ def run_pipeline(category, config, forced_keyword=None):
                 if pm and os.path.exists(pm):
                     desc = f"{yt_meta.get('description','')}\n\n🚀 Full Story: {main_link}\n\n#{category.replace(' ','')}"
                     vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
-                    if vid_main: vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
+                    if vid_main: 
+                        # JE THEME OPTIMIZED VIDEO
+                        vid_html = f'''
+                        <div class="video-container" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                            <iframe 
+                                style="position:absolute;top:0;left:0;width:100%;height:100%;" 
+                                src="https://www.youtube.com/embed/{vid_main}" 
+                                frameborder="0" 
+                                allowfullscreen 
+                                loading="lazy"
+                                width="1280" 
+                                height="720"
+                                title="{title}">
+                            </iframe>
+                        </div>
+                        '''
             except Exception as e: log(f"      ⚠️ Main Video Error: {e}")
 
             log(f"      🎬 Rendering Short Video...")
@@ -984,41 +828,13 @@ def run_pipeline(category, config, forced_keyword=None):
         content_html = content_html.replace('href=""', 'href="').replace('"" target', '" target')
         content_html = re.sub(r'href=["\']\\?["\']?(http[^"\']+)\\?["\']?["\']', r'href="\1"', content_html)
         
-        # ... (بعد تعريف author_box وتنظيف الروابط) ...
-
-        # -----------------------------------------------------------
-        # JETHEME OPTIMIZATION BLOCK
-        # -----------------------------------------------------------
+        # FIX: Define the variable clearly
+        final_content_with_author = content_html + author_box
         
-        # 1. تحسين الفيديو (YouTube):
-        # نستخدم loading="lazy" لكي لا يثقل الصفحة
-        # نضيف width/height لتجنب اهتزاز التصميم (CLS)
-        if vid_main:
-            vid_html = f'''
-            <div class="video-container" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-                <iframe 
-                    style="position:absolute;top:0;left:0;width:100%;height:100%;" 
-                    src="https://www.youtube.com/embed/{vid_main}" 
-                    frameborder="0" 
-                    allowfullscreen 
-                    loading="lazy"
-                    width="1280" 
-                    height="720"
-                    title="{title}">
-                </iframe>
-            </div>
-            '''
-        else:
-            vid_html = ""
-
-        # 2. تحسين الصورة (Featured Image):
-        # نستخدم class="separator" لأن بلوجر وقالب JeTheme يحبان هذا الكلاس للتنسيق
-        # الخاصية الأهم: data-src و src. بعض نسخ JeTheme تستخدم data-src للتحميل المؤجل.
-        # لكننا هنا نريد العكس: نريد التحميل الفوري.
-        # نضع loading="eager" و fetchpriority="high" لإخبار المتصفح: "حمل هذه الصورة قبل أي شيء!"
+        # JeTheme Optimized Image Block
+        img_html = ""
         if img_url: 
             alt_text = seo_data.get("imageAltText", title)
-            # لاحظ: وضعنا الصورة داخل رابط للصورة نفسها (سلوك بلوجر القياسي)
             img_html = f'''
             <div class="separator" style="clear:both;text-align:center;margin-bottom:30px;">
                 <a href="{img_url}" style="margin-left:1em; margin-right:1em;">
@@ -1035,19 +851,21 @@ def run_pipeline(category, config, forced_keyword=None):
                 </a>
             </div>
             '''
-        else:
-            img_html = ""
 
-        # 3. تجميع المقال
-        # الترتيب: الصورة أولاً -> الفيديو -> المحتوى -> الكاتب
         full_body = ARTICLE_STYLE + img_html + vid_html + final_content_with_author
-        
-        # -----------------------------------------------------------
         
         if 'schemaMarkup' in final:
             try: full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
             except: pass
         
+        # -----------------------------------------------------------
+        # 🛑 FINAL SAFETY CHECK (PRE-FLIGHT)
+        # -----------------------------------------------------------
+        log("   🛡️ Performing Final Semantic Check on Generated Title...")
+        if check_semantic_duplication(title, all_history):
+            log(f"   🚫 ABORTING PUBLISH: The generated title '{title}' is a duplicate of existing content!")
+            return False 
+
         published_url = publish_post(title, full_body, [category, "Tech News", "Explainers"])
         
         if published_url:
