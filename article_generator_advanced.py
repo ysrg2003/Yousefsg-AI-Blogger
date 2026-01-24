@@ -735,8 +735,8 @@ def run_pipeline(category, config, forced_keyword=None):
         kg_links = get_relevant_kg_for_linking(current_headline, category)
         input_c = {"draft_content": json_b, "sources_data": sources_list_formatted}
         json_c = generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(input_c), knowledge_graph=kg_links), "Step C (SEO)", required_keys=["finalTitle", "finalContent", "seo", "imageGenPrompt"])
-        json_d = generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), "Step D (Humanizer)", required_keys=["finalContent"])
-        final = generate_step_strict(model_name, PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), "Step E (Final Polish)", required_keys=["finalTitle", "finalContent"])
+        json_d = generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), "Step D (Humanizer)", required_keys=["finalTitle", "finalContent", "seo", "imageGenPrompt"])
+        final = generate_step_strict(model_name, PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), "Step E (Final Polish)", required_keys=["finalTitle", "finalContent", "seo", "imageGenPrompt"])
         
         title = final['finalTitle']
         content_html = final['finalContent']
