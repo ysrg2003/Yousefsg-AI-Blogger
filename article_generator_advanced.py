@@ -510,6 +510,21 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
     return images_list[0]['url']
 
 def process_source_image(source_url, overlay_text, filename_title):
+
+    if not source_url: return None
+    
+    # --- إصلاح الروابط النسبية ---
+    if source_url.startswith('//'):
+        source_url = 'https:' + source_url
+    elif source_url.startswith('/'):
+        # هنا نفترض أننا لا نعرف الدومين الأصلي بسهولة داخل هذه الدالة
+        # لذا الأفضل تجاهل الصورة النسبية لتجنب التعقيد أو الكراش
+        log(f"      ⚠️ Skipped Relative Image URL: {source_url}")
+        return None
+    # -----------------------------
+
+    
+    
     log(f"   🖼️ Processing Source Image: {source_url[:60]}...")
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
