@@ -1387,7 +1387,7 @@ def run_pipeline(category, config, mode="trending"):
         <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791" 
              style="width:70px; height:70px; border-radius:50%; margin-right:15px; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);" alt="Yousef Sameer">
         <div>
-            <h4 style="margin:0; font-size:18px; color:#2c3e50;">Tech Reviewer</h4>
+            <h4 style="margin:0; font-size:18px; color:#2c3e50;">Yousef Sameer</h4>
             <p style="margin:5px 0 0; font-size:14px; color:#666; line-height:1.4;">
                 I test AI tools so you don't have to break your device. 
                 <br><strong>Brutally honest reviews. No fluff.</strong>
