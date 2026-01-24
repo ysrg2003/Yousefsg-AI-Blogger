@@ -1044,6 +1044,55 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
     
     return None
 
+def check_semantic_duplication(new_keyword, history_string):
+    """
+    Uses Gemini Flash to check if the new keyword has the SAME Search Intent
+    as any article in the history.
+    Returns: True (Duplicate found), False (Safe to proceed).
+    """
+    if not history_string or len(history_string) < 10:
+        return False # No history, so no duplication
+        
+    log(f"   🧠 Checking for Semantic Cannibalization: '{new_keyword}'...")
+    
+    prompt = f"""
+    TASK: SEO Cannibalization Check.
+    
+    NEW KEYWORD: "{new_keyword}"
+    
+    EXISTING ARTICLES:
+    {history_string}
+    
+    QUESTION: Does the "NEW KEYWORD" target the **same search intent** as any of the "EXISTING ARTICLES"? 
+    - "ChatGPT for writing" AND "Is ChatGPT making you a bad writer" = YES (Same intent/topic).
+    - "ChatGPT for writing" AND "ChatGPT for coding" = NO (Different intent).
+    - "Tesla Optimus" AND "Figure 01 Robot" = NO.
+    
+    OUTPUT:
+    Return ONLY JSON: {{"is_duplicate": true}} OR {{"is_duplicate": false}}
+    """
+    
+    try:
+        # استخدام موديل سريع جداً ورخيص
+        result = generate_step_strict(
+            "models/gemini-2.5-flash", 
+            prompt, 
+            "Semantic Check",
+            required_keys=["is_duplicate"]
+        )
+        
+        is_dup = result.get('is_duplicate', False)
+        if is_dup:
+            log(f"      ⛔ BLOCKED: Semantic Duplicate Detected! ('{new_keyword}' is too similar to history).")
+        else:
+            log(f"      ✅ PASSED: Topic appears semantically unique.")
+            
+        return is_dup
+        
+    except Exception as e:
+        log(f"      ⚠️ Semantic Check Error: {e}. Assuming safe.")
+        return False
+                
 def run_pipeline(category, config, forced_keyword=None):
     """
     The Master Pipeline v15.0 (Failover & Rotation Support)
