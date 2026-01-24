@@ -87,9 +87,18 @@ def log(msg):
 # ==============================================================================
 ARTICLE_STYLE = ""
 
+
 # ==============================================================================
-# 3. HELPER UTILITIES
+# 3. HELPER UTILITIES (ULTR-SAFE MODE & SMART RECOVERY)
 # ==============================================================================
+
+# --- CONFIGURATION FOR SAFETY ---
+# الوقت بالثواني للانتظار قبل أي طلب (لضمان عدم تجاوز RPM)
+PRE_REQUEST_COOLING = 20  
+# الوقت بالثواني للانتظار بعد تبديل المفتاح
+KEY_SWITCH_COOLING = 10   
+# الوقت بالثواني للانتظار عند البحث عن موديل جديد (قيلولة النظام)
+SYSTEM_RESET_COOLING = 60 
 
 class KeyManager:
     def __init__(self):
@@ -108,14 +117,20 @@ class KeyManager:
         return self.keys[self.current_index]
 
     def switch_key(self):
+        """ينتقل للمفتاح التالي. يعيد True إذا نجح، و False إذا انتهت القائمة."""
         if self.current_index < len(self.keys) - 1:
             self.current_index += 1
-            log(f"🔄 Switching Key #{self.current_index + 1}...")
+            log(f"   🔄 Switching to Key #{self.current_index + 1}...")
             return True
-        log("❌ ALL KEYS EXHAUSTED.")  
         return False
 
+    def reset_keys(self):
+        """يعيد المؤشر للمفتاح الأول لبدء دورة جديدة"""
+        log("   ♻️ Resetting Key Index to 0 (Fresh Start)...")
+        self.current_index = 0
+
 key_manager = KeyManager()
+TRIED_MODELS = set()
 
 import logging
 logger = logging.getLogger("RetryEngine")
@@ -132,6 +147,167 @@ If the user requests JSON, return PURE JSON.
 Obey safety policy.
 """
 
+def master_json_parser(text):
+    if not text: return None
+    match = regex.search(r'\{(?:[^{}]|(?R))*\}', text, regex.DOTALL)
+    candidate = match.group(0) if match else text
+    try:
+        decoded = json_repair.repair_json(candidate, return_objects=True)
+        if isinstance(decoded, (dict, list)): return decoded
+    except: pass
+    try:
+        clean = candidate.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean)
+    except: return None
+
+def validate_structure(data, required_keys):
+    if not isinstance(data, dict):
+        raise JSONValidationError(f"Expected Dictionary, got {type(data)}")
+    missing_keys = [key for key in required_keys if key not in data]
+    if missing_keys:
+        raise JSONValidationError(f"Missing keys: {missing_keys}")
+    return True
+
+def discover_next_best_model(current_failed_model):
+    """يكتشف موديل جديد لم يتم استخدامه من قبل"""
+    log("   🕵️‍♂️ Discovery Mode: Searching for a fresh AI model...")
+    TRIED_MODELS.add(current_failed_model)
+    
+    # نستخدم المفتاح الحالي للبحث
+    key = key_manager.get_current_key()
+    client = genai.Client(api_key=key)
+    
+    try:
+        all_models = list(client.models.list())
+        candidates = []
+        for m in all_models:
+            if 'generateContent' in m.supported_generation_methods:
+                name = m.name.replace('models/', '')
+                if name not in TRIED_MODELS:
+                    candidates.append(name)
+        
+        # الترتيب حسب الأحدث والأسرع
+        priority = ['2.0', 'flash', 'pro', '1.5', 'latest']
+        candidates.sort(key=lambda x: sum(2 for k in priority if k in x), reverse=True)
+        
+        if candidates:
+            new_model = candidates[0]
+            log(f"   💡 Found Fresh Model: {new_model}")
+            return f"models/{new_model}" if "models/" not in new_model else new_model
+            
+    except Exception as e:
+        log(f"   ⚠️ Discovery Error: {e}")
+    
+    # قائمة احتياطية يدوية في حال فشل البحث التلقائي
+    backups = [
+        "models/gemini-2.0-flash", 
+        "models/gemini-2.0-flash-exp",
+        "models/gemini-1.5-flash",
+        "models/gemini-1.5-pro",
+        "models/gemini-1.5-flash-8b"
+    ]
+    for b in backups:
+        if b not in TRIED_MODELS:
+            log(f"   💡 Using Backup Model: {b}")
+            return b
+            
+    return None
+
+# --- THE ULTRA-SAFE GENERATOR ---
+def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]):
+    current_model = initial_model_name
+    
+    # الحلقة الكبرى: تدير تغيير الموديلات
+    while True:
+        log(f"   🚀 [SafeEngine] Step: {step_name} | Model: {current_model}")
+        
+        # الحلقة الصغرى: تدير المفاتيح لنفس الموديل
+        while True:
+            key = key_manager.get_current_key()
+            if not key: raise RuntimeError("FATAL: No API keys loaded.")
+
+            # 1. PRE-EMPTIVE COOLING (الوقاية خير من العلاج)
+            # ننام إجبارياً قبل الطلب لضمان تصفير عداد الـ Requests Per Minute
+            log(f"      ☕ Cooling down for {PRE_REQUEST_COOLING}s to prevent 429...")
+            time.sleep(PRE_REQUEST_COOLING)
+
+            client = genai.Client(api_key=key)
+            try:
+                generation_config = types.GenerateContentConfig(
+                    response_mime_type="application/json", 
+                    system_instruction=STRICT_SYSTEM_PROMPT, 
+                    temperature=0.3
+                )
+                
+                response = client.models.generate_content(
+                    model=current_model, 
+                    contents=prompt, 
+                    config=generation_config
+                )
+                
+                # Parsing
+                parsed_data = master_json_parser(response.text)
+                if not parsed_data:
+                    log("      ⚠️ JSON Repair needed...")
+                    # ننام قليلاً قبل طلب الإصلاح أيضاً
+                    time.sleep(5)
+                    repair_resp = client.models.generate_content(
+                        model=current_model, 
+                        contents=f"Fix invalid JSON:\n{response.text[:5000]}", 
+                        config=generation_config
+                    )
+                    parsed_data = master_json_parser(repair_resp.text)
+
+                if not parsed_data: raise JSONParsingError("Failed to parse JSON")
+                if required_keys: validate_structure(parsed_data, required_keys)
+                
+                log(f"      ✅ Success: {step_name} completed.")
+                return parsed_data
+
+            except Exception as e:
+                error_msg = str(e).lower()
+                
+                # التعامل مع 429 أو 503 (Overloaded)
+                if "429" in error_msg or "quota" in error_msg or "resource exhausted" in error_msg or "overloaded" in error_msg:
+                    log(f"      ⚠️ High Traffic/Quota Error on Key #{key_manager.current_index + 1}.")
+                    
+                    # نحاول تبديل المفتاح
+                    if not key_manager.switch_key():
+                        log(f"      ⛔ All keys exhausted for {current_model}.")
+                        break # نكسر حلقة المفاتيح لنبحث عن موديل جديد
+                    
+                    # إذا بدلنا المفتاح، ننتظر وقتاً إضافياً قبل المحاولة
+                    log(f"      ⏳ Key switched. Waiting {KEY_SWITCH_COOLING}s...")
+                    time.sleep(KEY_SWITCH_COOLING)
+                    continue 
+                
+                elif "not found" in error_msg or "404" in error_msg:
+                     log(f"      ❌ Model {current_model} not available/found.")
+                     break # نغير الموديل فوراً
+                
+                else:
+                    log(f"      ❌ General Error: {str(e)[:100]}. Waiting 10s and retrying same key...")
+                    time.sleep(10)
+                    continue
+
+        # --- منطقة تبديل الموديل (System Reset) ---
+        log(f"      🔄 Initiating SYSTEM RESET & Model Switch...")
+        
+        # ننام دقيقة كاملة لتهدئة السيرفرات تماماً (Smart Cooling Extreme)
+        log(f"      💤 System Sleeping for {SYSTEM_RESET_COOLING}s...")
+        time.sleep(SYSTEM_RESET_COOLING)
+        
+        next_model = discover_next_best_model(current_model)
+        
+        if next_model:
+            log(f"      ✅ Recovery: Switching to {next_model}")
+            current_model = next_model
+            key_manager.reset_keys() # إعادة تدوير المفاتيح من الصفر للموديل الجديد
+            # ستعود الحلقة للبداية مع الموديل الجديد والمفاتيح من 1
+        else:
+            log("      ❌ FATAL: No more models available to try.")
+            raise RuntimeError("Mission Failed: All models and keys exhausted.")
+            
 def master_json_parser(text):
     if not text: return None
     match = regex.search(r'\{(?:[^{}]|(?R))*\}', text, regex.DOTALL)
