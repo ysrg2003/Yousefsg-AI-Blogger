@@ -1094,14 +1094,10 @@ def check_semantic_duplication(new_keyword, history_string):
         return False
                 
 def run_pipeline(category, config, forced_keyword=None):
-    """
-    The Master Pipeline v15.0 (Failover & Rotation Support)
-    Returns: True (Success/Published), False (Failed/No Sources)
-    """
-    model_name = config['settings'].get('model_name')
-    
-    # تحديد الكلمة المستهدفة
-    target_keyword = ""
+
+
+                    # ... (داخل run_pipeline) ...
+    # ...
     
     if forced_keyword:
         log(f"\n🔄 RETRY MODE: Trying fallback keyword in '{category}': '{forced_keyword}'")
@@ -1126,10 +1122,25 @@ def run_pipeline(category, config, forced_keyword=None):
             )
             target_keyword = seo_plan.get('target_keyword')
             log(f"   🎯 Strategy Defined: Targeting '{target_keyword}'")
+            
         except:
             log("   ⚠️ SEO Strategy failed. Returning False to trigger fallback.")
             return False
 
+    # =====================================================
+    # 🛑 SEMANTIC GUARD (NEW FEATURE)
+    # =====================================================
+    # تحميل كل العناوين (وليس فقط الفئة الحالية) للتأكد من عدم التكرار عبر الموقع
+    all_history = get_recent_titles_string(category=None, limit=200)
+    
+    if check_semantic_duplication(target_keyword, all_history):
+        log("   🚫 ABORTING: This topic creates Keyword Cannibalization.")
+        return False # نعود لـ main لتجربة كلمة أخرى أو فئة أخرى
+
+    # =====================================================
+    # STEP 1: MULTI-SOURCE RESEARCH (STRICT FILTER)
+    # =====================================================
+    # ... (باقي الكود كما هو) ...
     # =====================================================
     # STEP 1: MULTI-SOURCE RESEARCH (STRICT FILTER)
     # =====================================================
