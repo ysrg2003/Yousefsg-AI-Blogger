@@ -219,9 +219,6 @@ The input JSON contains separate parts of an article: 'headline', 'hook', 'artic
    - Wrap Table in: `<div class="table-wrapper">...</div>`.
    - Find the "Verdict" section and wrap it in: `<blockquote>...</blockquote>`.
 
-3. **FAQ for Beginners:**
-   - Add `<div class="faq-section">` at the very end.
-   - Questions must be basic: "Is it free?", "Is it safe?", "When can I get it?".
 
 4. **Smart Internal Linking (CRITICAL):**
    - Review the 'KG LINKS' list provided.
