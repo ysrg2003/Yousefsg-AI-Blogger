@@ -20,3 +20,5 @@ tenacity
 json_repair
 regex
 pydantic
+opencv-python-headless
+numpy
