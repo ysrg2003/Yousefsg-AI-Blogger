@@ -1326,6 +1326,169 @@ def run_pipeline(category, config, mode="trending"):
 
     
     # =====================================================
+    # STEP 3: MULTIMEDIA GENERATION (Priority: Real -> AI)
+    # =====================================================
+    log("   🧠 Generating Multimedia Assets...")
+    
+    # تعريف المتغيرات خارج try لضمان وجودها في الذاكرة
+    yt_meta = {}
+    fb_cap = title
+    vid_html = ""
+    vid_main = None
+    vid_short = None
+    fb_path = None
+    img_url = None
+
+    try:
+        # 1. Social Metadata & Hooks
+        yt_meta = generate_step_strict(
+            model_name, 
+            PROMPT_YOUTUBE_METADATA.format(draft_title=title), 
+            "YT Meta",
+            required_keys=["title", "description", "tags"]
+        )
+        
+        fb_dat = generate_step_strict(
+            model_name, 
+            PROMPT_FACEBOOK_HOOK.format(title=title), 
+            "FB Hook",
+            required_keys=["FB_Hook"]
+        )
+        fb_cap = fb_dat.get('FB_Hook', title)
+    
+        # -----------------------------------------------------
+        # INTELLIGENT IMAGE STRATEGY
+        # -----------------------------------------------------
+        log("   🖼️ Starting Intelligent Image Strategy...")
+        
+        # أ. تجميع كل الصور المتاحة من المصادر
+        candidate_images = []
+        for src in collected_sources:
+            if src.get('source_image'):
+                candidate_images.append({'url': src['source_image'], 'domain': src['domain']})
+        
+        selected_source_image = None
+        
+        # ب. إذا وجدت صور، دع Gemini يختار الأفضل
+        if candidate_images:
+            selected_source_image = select_best_image_with_gemini(model_name, title, candidate_images)
+        
+        # ج. معالجة الصورة المختارة (تطبيق الفلتر والرفع)
+        overlay_text_clean = img_overlay if img_overlay else "LATEST NEWS"
+        
+        if selected_source_image:
+            log(f"      🎯 Processing selected image...")
+            # هنا سيتم تطبيق الفلتر الضبابي (Privacy Blur)
+            img_url = process_source_image(selected_source_image, overlay_text_clean, title)
+        
+        # د. Fallback: إذا لم نجد صوراً أو فشلت المعالجة، نولد صورة "آمنة"
+        if not img_url:
+            log("      🎨 No suitable source image found. Generating Abstract AI Art...")
+            # نضيف تعليمات لضمان عدم ظهور بشر في التوليد
+            safe_prompt = f"{img_prompt}, abstract technology, blurred background, no people, no skin, no faces, futuristic, 3d render"
+            img_url = generate_and_upload_image(safe_prompt, overlay_text_clean)
+
+
+        # -----------------------------------------------------
+        # VIDEO GENERATION STRATEGY
+        # -----------------------------------------------------
+        
+        # تنظيف الملخص للفيديو
+        summ_clean = re.sub('<[^<]+?>','', content_html)[:2500]
+        
+        script_json = None
+        
+        # حلقة المحاولة (3 محاولات) لتوليد السكربت
+        for attempt in range(1, 4):
+            log(f"      🎬 Generating Script (Attempt {attempt}/3)...")
+            try:
+                raw_result = generate_step_strict(
+                    model_name, 
+                    PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean), 
+                    f"Video Script (Att {attempt})"
+                )
+                
+                # استراتيجية الاستخراج الجديدة (Robust Key Search)
+                if isinstance(raw_result, dict):
+                    # 1. البحث المباشر عن المفتاح
+                    if 'video_script' in raw_result and isinstance(raw_result['video_script'], list):
+                        script_json = raw_result['video_script']
+                        log("      ✅ Found 'video_script' key directly.")
+                        break
+                    
+                    # 2. البحث عن مفاتيح بديلة
+                    for key in ['script', 'dialogue', 'conversation', 'scenes', 'content']:
+                        if key in raw_result and isinstance(raw_result[key], list):
+                            script_json = raw_result[key]
+                            log(f"      ✅ Found script under key: '{key}'")
+                            break
+                    
+                    # 3. البحث في القيم
+                    if not script_json:
+                        for val in raw_result.values():
+                            if isinstance(val, list) and len(val) > 0:
+                                if isinstance(val[0], dict) and 'text' in val[0]:
+                                    script_json = val
+                                    log("      ✅ Found script hidden in values.")
+                                    break
+                
+                elif isinstance(raw_result, list):
+                    script_json = raw_result
+                    log("      ✅ Received List directly.")
+                    break
+                
+                if not script_json:
+                     log("      ❌ Attempt failed. Retrying...")
+
+            except Exception as e:
+                log(f"      ⚠️ Script Generation Error: {e}")
+
+        # بدء الريندر والرفع إذا وجدنا السكربت
+        if script_json and len(script_json) > 0:
+            timestamp = int(time.time())
+            base_output_dir = os.path.abspath("output")
+            os.makedirs(base_output_dir, exist_ok=True)
+            
+            # --- Main Video ---
+            log(f"      🎬 Rendering Main Video...")
+            try:
+                rr = video_renderer.VideoRenderer(output_dir=base_output_dir, width=1920, height=1080)
+                main_video_path = os.path.join(base_output_dir, f"main_{timestamp}.mp4")
+                pm = rr.render_video(script_json, title, main_video_path)
+                
+                if pm and os.path.exists(pm):
+                    desc = f"{yt_meta.get('description','')}\n\n🚀 Full Story: {main_link}\n\n#{category.replace(' ','')}"
+                    vid_main, _ = youtube_manager.upload_video_to_youtube(
+                        pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[])
+                    )
+                    if vid_main:
+                        vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;margin:35px 0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
+            except Exception as e:
+                log(f"      ⚠️ Main Video Error: {e}")
+
+            # --- Short Video ---
+            log(f"      🎬 Rendering Short Video...")
+            try:
+                rs = video_renderer.VideoRenderer(output_dir=base_output_dir, width=1080, height=1920)
+                short_video_path = os.path.join(base_output_dir, f"short_{timestamp}.mp4")
+                ps = rs.render_video(script_json, title, short_video_path)
+                
+                if ps and os.path.exists(ps):
+                    fb_path = ps
+                    vid_short, _ = youtube_manager.upload_video_to_youtube(
+                        ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts']
+                    )
+            except Exception as e:
+                log(f"      ⚠️ Short Video Error: {e}")
+
+        else:
+            log(f"      ❌ Failed to extract script after 3 attempts.")
+
+    except Exception as e:
+        log(f"⚠️ Multimedia Process Error: {e}")
+        import traceback
+        traceback.print_exc()
+    # =====================================================
     # STEP 4: PUBLISHING
     # =====================================================
     log("   🚀 Publishing to Blogger...")
