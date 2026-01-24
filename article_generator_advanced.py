@@ -1354,7 +1354,7 @@ def run_pipeline(category, config, mode="trending"):
     # -----------------------------------------------------
     # INTELLIGENT IMAGE STRATEGY
     # -----------------------------------------------------
-    img_url = None
+    
     
     # 1. تجميع كل الصور المتاحة من المصادر
     candidate_images = []
