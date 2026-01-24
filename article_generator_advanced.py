@@ -602,7 +602,11 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
     try:
         r = requests.get(image_url, timeout=60)
         if r.status_code != 200: return None
-        img = Image.open(BytesIO(r.content)).convert("RGBA")
+        try:
+            img = Image.open(BytesIO(r.content)).convert("RGBA")
+        except Exception as img_err:
+            log(f"      ⚠️ Valid Image Check Failed: {img_err}")
+            return None
         if overlay_text:
             draw = ImageDraw.Draw(img)
             W, H = img.size
