@@ -219,6 +219,12 @@ The input JSON contains separate parts of an article: 'headline', 'hook', 'artic
    - Wrap Table in: `<div class="table-wrapper">...</div>`.
    - Find the "Verdict" section and wrap it in: `<blockquote>...</blockquote>`.
 
+3. **Contextual FAQ (Not Generic):**
+   - Add `<div class="faq-section">` at the end.
+   - Generate 3 questions that are SPECIFIC to the article's unique angle.
+   - *Bad:* "What is ChatGPT?" (Too generic).
+   - *Good:* "Does using ChatGPT make me a lazy writer?", "Can clients tell I used AI?", "How do I edit AI text to sound human?".
+   - The questions must address the *doubts* raised in the article.
 
 4. **Smart Internal Linking (CRITICAL):**
    - Review the 'KG LINKS' list provided.
