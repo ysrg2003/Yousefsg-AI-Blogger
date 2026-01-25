@@ -1,4 +1,4 @@
-د{
+{
   "categories": {
     "AI Tools & Apps": {
       "trending_focus": "DeepSeek, OpenAI, Google Gemini, Microsoft Copilot, Anthropic Claude, Perplexity, Midjourney, Grok, AI Coding, LLM Performance"
@@ -16,8 +16,6 @@
   "settings": {
     "date_range_query": "when:2d",
     "model_name": "gemini-3-flash-preview",
-    "fallback_model": "gemini-2.5-flash",
-    "min_sources_required": 3,
-    "scraping_timeout": 30
+    "adsense_optimization": true
   }
 }
