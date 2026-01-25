@@ -456,6 +456,48 @@ def check_semantic_duplication(target, history):
         return res.get('is_duplicate', False)
     except: return False
 
+# ==============================================================================
+# BLOGGER PUBLISHING ENGINE
+# ==============================================================================
+
+def get_blogger_token():
+    """Generates a fresh access token for Blogger API."""
+    payload = {
+        'client_id': os.getenv('BLOGGER_CLIENT_ID'),
+        'client_secret': os.getenv('BLOGGER_CLIENT_SECRET'),
+        'refresh_token': os.getenv('BLOGGER_REFRESH_TOKEN'),
+        'grant_type': 'refresh_token'
+    }
+    try:
+        r = requests.post('https://oauth2.googleapis.com/token', data=payload, timeout=10)
+        return r.json().get('access_token') if r.status_code == 200 else None
+    except:
+        return None
+
+def publish_post(title, content, labels):
+    """Publishes the final article to Blogger."""
+    token = get_blogger_token()
+    if not token:
+        log("❌ Could not generate Blogger Token.")
+        return None
+        
+    url = f"https://www.googleapis.com/blogger/v3/blogs/{os.getenv('BLOGGER_BLOG_ID')}/posts?isDraft=false"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    body = {"title": title, "content": content, "labels": labels}
+    
+    try:
+        r = requests.post(url, headers=headers, json=body, timeout=20)
+        if r.status_code == 200:
+            post_url = r.json().get('url')
+            log(f"✅ Published LIVE: {post_url}")
+            return post_url
+        else:
+            log(f"❌ Blogger API Error: {r.text}")
+            return None
+    except Exception as e:
+        log(f"❌ Connection Fail during publishing: {e}")
+        return None
+
 def run_pipeline(category, config, forced_keyword=None):
     model_name = config['settings'].get('model_name', "gemini-3-flash-preview")
     
