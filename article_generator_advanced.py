@@ -155,7 +155,7 @@ def validate_structure(data, required_keys):
     return True
 
 def discover_next_best_model(current_failed_model):
-    """يكتشف موديل جديد لم يتم استخدامه من قبل"""
+    """يكتشف موديل جديد لم يتم استخدامه من قبل (نسخة محسنة وآمنة)"""
     log("   🕵️‍♂️ Discovery Mode: Searching for a fresh AI model...")
     TRIED_MODELS.add(current_failed_model)
     
@@ -163,33 +163,46 @@ def discover_next_best_model(current_failed_model):
     client = genai.Client(api_key=key)
     
     try:
+        # جلب الموديلات
         all_models = list(client.models.list())
         candidates = []
-        for m in all_models:
-            if 'generateContent' in m.supported_generation_methods:
-                name = m.name.replace('models/', '')
-                if name not in TRIED_MODELS:
-                    candidates.append(name)
         
-        # الترتيب حسب الأحدث والأسرع
-        priority = ['2.0', 'flash', 'pro', '1.5', 'latest']
-        candidates.sort(key=lambda x: sum(2 for k in priority if k in x), reverse=True)
+        for m in all_models:
+            # إصلاح الخطأ: بدلاً من فحص الخصائص المعقدة، نفحص الاسم فقط
+            # الموديلات الصالحة دائماً تحتوي على 'generateContent' في قدراتها أو اسمها يبدأ بـ gemini
+            model_name = m.name.replace('models/', '')
+            
+            # نستبعد موديلات Vision القديمة وموديلات Embedding
+            if 'gemini' in model_name and 'embedding' not in model_name:
+                if model_name not in TRIED_MODELS:
+                    candidates.append(model_name)
+        
+        # الترتيب حسب الأحدث والأسرع (Flash أولاً ثم Pro)
+        priority = ['1.5-flash', '2.0-flash', 'pro', '1.0']
+        
+        # دالة ترتيب مخصصة تعطي وزناً للكلمات المفتاحية
+        def sort_score(name):
+            for i, p in enumerate(priority):
+                if p in name: return i
+            return 99
+            
+        candidates.sort(key=sort_score)
         
         if candidates:
             new_model = candidates[0]
             log(f"   💡 Found Fresh Model: {new_model}")
-            return f"models/{new_model}" if "models/" not in new_model else new_model
+            # نعيد الاسم بدون models/ لأن المكتبة الجديدة تفضل ذلك
+            return new_model
             
     except Exception as e:
-        log(f"   ⚠️ Discovery Error: {e}")
+        log(f"   ⚠️ Discovery Error (Non-Fatal): {e}")
     
-    # قائمة احتياطية يدوية
+    # قائمة احتياطية يدوية (Clean Names)
     backups = [
-        "models/gemini-2.0-flash", 
-        "models/gemini-2.0-flash-exp",
-        "models/gemini-1.5-flash",
-        "models/gemini-1.5-pro",
-        "models/gemini-1.5-flash-8b"
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash-8b",
+        "gemini-1.0-pro"
     ]
     for b in backups:
         if b not in TRIED_MODELS:
