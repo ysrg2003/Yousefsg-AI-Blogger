@@ -781,8 +781,8 @@ def run_pipeline(category, config, forced_keyword=None):
     search_attempts = [
         {"type": "GNEWS", "query": target_keyword},
         {"type": "RSS", "query": target_keyword + " when:1d"},
-        {"type": "RSS", "query": significant_keyword + " news when:1d"},
-        {"type": "RSS", "query": category + " news when:1d"}
+        {"type": "RSS", "query": significant_keyword + " when:1d"},
+        {"type": "RSS", "query": category + "significant_keyword  when:1d"}
     ]
 
     for attempt_idx, attempt in enumerate(search_attempts):
