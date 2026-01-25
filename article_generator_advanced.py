@@ -421,7 +421,7 @@ def get_relevant_kg_for_linking(current_title, current_category, limit=60):
     output = [{"title": i['title'], "url": i['url']} for i in final_list]
     return json.dumps(output)
 
-# SMART HYBRID CHECKER
+# SMART HYBRID CHECKER (Fixed to use the working model)
 def check_semantic_duplication(new_keyword, history_string):
     if not history_string or len(history_string) < 10: return False
     
@@ -439,9 +439,10 @@ def check_semantic_duplication(new_keyword, history_string):
             log(f"      ⛔ BLOCKED (Local Fuzzy): {int(similarity*100)}% match with '{title}'")
             return True
 
-    # 2. AI JUDGE (Use cheaper model)
-    judge_model = "gemini-1.5-flash" 
-    log(f"   🧠 Semantic Check: Asking AI Judge about '{new_keyword}'...")
+    # 2. AI JUDGE
+    # FIX: Use gemini-2.5-flash because we saw in logs it works!
+    judge_model = "gemini-2.5-flash" 
+    log(f"   🧠 Semantic Check: Asking AI Judge ({judge_model}) about '{new_keyword}'...")
     
     prompt = f"""
     TASK: Duplication Check.
@@ -451,17 +452,6 @@ def check_semantic_duplication(new_keyword, history_string):
     OUTPUT JSON: {{"is_duplicate": true}} OR {{"is_duplicate": false}}
     """
     try:
-        # Use main generator function (it will use judge_model but handle errors properly)
-        # Note: We are relying on the robust generate function here
-        # To avoid recursively hitting the model override, we might need to reset it or just accept it
-        # For simplicity/safety, we assume the judge model is stable.
-        
-        # We temporarily bypass the OVERRIDE for this specific check if needed, 
-        # but let's just use the robust function. If current override is 2.0-flash (failing), 
-        # passing "gemini-1.5-flash" here might be overridden by the global variable.
-        # FIX: We will force the model name in the function call, BUT 'generate_step_strict' uses global override.
-        # TRICK: We will rely on Local check + fallback. If we really want AI, we accept using the current working model.
-        
         result = generate_step_strict(judge_model, prompt, "Semantic Judge", required_keys=["is_duplicate"])
         is_dup = result.get('is_duplicate', False)
         if is_dup: log("      ⛔ BLOCKED (AI): Duplicate detected.")
