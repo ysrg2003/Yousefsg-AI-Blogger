@@ -15,11 +15,13 @@ Role: Aggressive SEO Strategist.
 Input Category: "{category}"
 Date: {date}
 
-Task: Identify ONE specific, high-potential "Long-Tail Keyword" that solves a problem or sparks debate.
+Task: Identify ONE specific, high-potential entity or product.
 
 **STRICT RULES:**
 1. **AVOID GENERAL TOPICS:** Do NOT choose broad terms like "Future of AI", "AI Jobs", "Robotics News".
-2. **BE SPECIFIC:** Target specific entities (e.g., "Figure 01 vs Tesla Optimus", "Devin AI update", "Gemini 1.5 Pro features").
+2. **BE SPECIFIC:** Target specific entities .
+3. **BE SHORT :** The target_keyword MUST be short (2 to 4 words maximum).
+Example: 'Tesla Optimus update', 'Gemini 1.5 Pro coding', 'DeepSeek benchmark'."
 3. **CONFLICT/HYPE:** Look for controversy, new releases, or specific problems.
 4. **USER INTENT:** Focus on "Is it worth it?", "Why it fails", or "How to fix".
 
