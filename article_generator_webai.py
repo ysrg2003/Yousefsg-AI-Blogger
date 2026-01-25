@@ -86,7 +86,7 @@ def generate_step_webai(prompt, step_name, required_keys=[]):
     log(f"   🚀 Executing: {step_name} via WebAI Server...")
     
     # السيرفر مبرمج لاستقبال موديل باسم "gemini" لتحويله للويب
-    target_model = "gemini" 
+    target_model = "gpt-4" 
 
     for attempt in range(1, 3): # محاولتان لكل خطوة
         try:
