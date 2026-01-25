@@ -1,18 +1,22 @@
 {
   "categories": {
     "AI Tools & Apps": {
-      "trending_focus": "ChatGPT hidden features, Google Gemini vs ChatGPT comparison, best free AI apps 2024, how to use Microsoft Copilot, Midjourney v6 prompt guide, fix AI hallucinations, AI tools for students, top productivity AI extensions"
+      "trending_focus": "ChatGPT vs Human features, Google Gemini for coding, Microsoft Copilot productivity hacks, best AI tools replacing daily tasks, generative AI software comparison, AI tools for students and writers"
     },
     "AI Income & Hustles": {
-      "trending_focus": "how to make money with AI, best AI tools for freelancers, automated content creation tools, AI side hustles for beginners, monetize AI art, legitimate AI jobs, tools to speed up coding, automate social media with AI"
+      "trending_focus": "AI impact on freelancing, jobs replaced by AI 2026, new AI skills for gig economy, Fiverr AI trends, how to use AI for side hustles, automation risks for creators"
     },
     "Future & Robotics": {
-      "trending_focus": "Figure 01 robot capabilities, Tesla Optimus price and release date, humane ai pin reviews, rabbit r1 updates, dangerous AI developments, smart home AI gadgets, future of jobs with automation, NVIDIA robotics demos"
+      "trending_focus": "Tesla Optimus vs human labor, Cybercab impact on drivers, Boston Dynamics in warehouses, Figure AI workforce, smart home automation trends, blue-collar job automation"
+    },
+    "AI Video & Media": {
+      "trending_focus": "OpenAI Sora latest updates, Google Veo vs Sora, best text-to-video tools 2026, AI in Hollywood movies, deepfake trends and detection, YouTube AI features, AI animation for beginners"
     }
   },
   "settings": {
     "date_range_query": "when:2d",
     "model_name": "models/gemini-2.5-flash",
-    "adsense_optimization": true
+    "adsense_optimization": true,
+    "internal_linking_strictness": "high"
   }
 }
