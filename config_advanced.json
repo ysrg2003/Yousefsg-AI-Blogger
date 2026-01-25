@@ -1,22 +1,23 @@
-{
+د{
   "categories": {
     "AI Tools & Apps": {
-      "trending_focus": "ChatGPT vs Human features, Google Gemini for coding, Microsoft Copilot productivity hacks, best AI tools replacing daily tasks, generative AI software comparison, AI tools for students and writers"
+      "trending_focus": "DeepSeek, OpenAI, Google Gemini, Microsoft Copilot, Anthropic Claude, Perplexity, Midjourney, Grok, AI Coding, LLM Performance"
     },
     "AI Income & Hustles": {
-      "trending_focus": "AI impact on freelancing, jobs replaced by AI 2026, new AI skills for gig economy, Fiverr AI trends, how to use AI for side hustles, automation risks for creators"
+      "trending_focus": "AI Freelancing, Fiverr AI, Upwork automation, monetizing AI art, AI content monetization, AI copyright lawsuits, creator economy automation"
     },
     "Future & Robotics": {
-      "trending_focus": "Tesla Optimus vs human labor, Cybercab impact on drivers, Boston Dynamics in warehouses, Figure AI workforce, smart home automation trends, blue-collar job automation"
+      "trending_focus": "Tesla Optimus, Figure AI, Boston Dynamics, Humanoid robots, NVIDIA Robotics, OpenAI robotics, AI hardware, Neuralink, Smart devices"
     },
     "AI Video & Media": {
-      "trending_focus": "OpenAI Sora latest updates, Google Veo vs Sora, best text-to-video tools 2026, AI in Hollywood movies, deepfake trends and detection, YouTube AI features, AI animation for beginners"
+      "trending_focus": "OpenAI Sora, Kling AI, Runway Gen-3, Luma Dream Machine, YouTube AI, Adobe Firefly, Deepfake detection, AI voice cloning, Pika Labs"
     }
   },
   "settings": {
     "date_range_query": "when:2d",
-    "model_name": "models/gemini-3-flash-preview",
-    "adsense_optimization": true,
-    "internal_linking_strictness": "high"
+    "model_name": "gemini-3-flash-preview",
+    "fallback_model": "gemini-2.5-flash",
+    "min_sources_required": 3,
+    "scraping_timeout": 30
   }
 }
