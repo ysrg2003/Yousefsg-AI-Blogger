@@ -2,6 +2,7 @@
 # DESCRIPTION: Manages the knowledge_graph.json, providing functions to read, write,
 #              and check for semantic duplication using a hybrid local/AI approach.
 
+import os
 import json
 import datetime
 import difflib
