@@ -29,6 +29,7 @@ import json_repair
 import regex 
 import pydantic
 import difflib
+import logging
 from tenacity import (
     retry, 
     stop_after_attempt, 
@@ -46,7 +47,7 @@ import reddit_manager
 from prompts import *
 
 # ==============================================================================
-# 0. CONFIG & LOGGING
+# 0. GLOBAL CONFIGURATION & ANTI-BOT SETTINGS
 # ==============================================================================
 
 FORBIDDEN_PHRASES = [
@@ -57,12 +58,19 @@ FORBIDDEN_PHRASES = [
     "cutting-edge", "realm of"
 ]
 
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1.2 Mobile/15E148 Safari/604.1"
+]
+
 def log(msg):
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
     print(f"[{timestamp}] {msg}", flush=True)
 
 # ==============================================================================
-# 1. HELPER UTILITIES (SMART KEY MANAGER & DISCOVERY)
+# 1. SMART KEY & MODEL MANAGEMENT (THE ENGINE)
 # ==============================================================================
 
 TRIED_MODELS = set()
@@ -89,47 +97,11 @@ class KeyManager:
             self.current_index += 1
             log(f"   🔄 Switching to Key #{self.current_index + 1}...")
             return True
-        log("   ⚠️ All keys exhausted. Resetting to Key #1 and triggering Model Discovery...")
+        log("   ⚠️ All keys exhausted. Resetting Cycle for Discovery...")
         self.current_index = 0
-        return False 
+        return False
 
 key_manager = KeyManager()
-
-import logging
-logger = logging.getLogger("RetryEngine")
-logger.setLevel(logging.INFO)
-
-class JSONValidationError(Exception): pass
-class JSONParsingError(Exception): pass
-
-STRICT_SYSTEM_PROMPT = """
-You are an assistant that MUST return ONLY the exact output requested. 
-No explanations, no headings, no extra text, no apologies. 
-Output exactly and only what the user asked for. 
-If the user requests JSON, return PURE JSON. 
-Obey safety policy.
-"""
-
-def master_json_parser(text):
-    if not text: return None
-    match = regex.search(r'\{(?:[^{}]|(?R))*\}', text, regex.DOTALL)
-    candidate = match.group(0) if match else text
-    try:
-        decoded = json_repair.repair_json(candidate, return_objects=True)
-        if isinstance(decoded, (dict, list)): return decoded
-    except: pass
-    try:
-        clean = candidate.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean)
-    except: return None
-
-def validate_structure(data, required_keys):
-    if not isinstance(data, dict):
-        raise JSONValidationError(f"Expected Dictionary output, but got type: {type(data)}")
-    missing_keys = [key for key in required_keys if key not in data]
-    if missing_keys:
-        raise JSONValidationError(f"JSON is valid but missing required keys: {missing_keys}")
-    return True
 
 def discover_fresh_model(current_model_name):
     """Finds a new model when the current one fails on all keys."""
@@ -150,77 +122,59 @@ def discover_fresh_model(current_model_name):
     except Exception as e:
         log(f"   ⚠️ Listing models failed: {e}")
 
-    # STRICT PRIORITY LIST
-    priority_list = [
-        "gemini-3-flash-preview", 
-        "gemini-2.5-flash",
-        "gemini-2.0-flash-exp",
-        "gemini-1.5-flash"
-    ]
+    priority_list = ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
     
-    final_choice = None
-    for p in priority_list:
-        if p in candidates:
-            final_choice = p
-            break
-        if not candidates and p not in TRIED_MODELS:
-            final_choice = p
-            break
-            
+    final_choice = next((p for p in priority_list if p in candidates), None)
+    if not final_choice and candidates: final_choice = candidates[0]
+    if not final_choice:
+        for p in priority_list:
+            if p not in TRIED_MODELS:
+                final_choice = p
+                break
+                
     if final_choice:
         log(f"   💡 New Model Selected: {final_choice}")
         CURRENT_MODEL_OVERRIDE = final_choice 
         return final_choice
-    
-    log("   ❌ Fatal: No untried models left.")
     return None
 
+# --- THE ULTIMATE HYBRID AI GENERATOR ---
 @retry(
     stop=stop_after_attempt(15), 
-    wait=wait_exponential(multiplier=2, min=4, max=30), 
+    wait=wait_exponential(multiplier=2, min=5, max=35), 
     retry=retry_if_exception_type((JSONParsingError, JSONValidationError, Exception)), 
-    before_sleep=before_sleep_log(logger, logging.WARNING)
+    before_sleep=before_sleep_log(logging.getLogger("RetryEngine"), logging.WARNING)
 )
 def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]):
-    # Enforce priority: Override > Initial
     model_to_use = CURRENT_MODEL_OVERRIDE if CURRENT_MODEL_OVERRIDE else initial_model_name
-    model_to_use = model_to_use.replace("models/", "") 
+    model_to_use = model_to_use.replace("models/", "") # Anti-404 Fix
     
     log(f"   🔄 [Tenacity] Executing: {step_name} | Model: {model_to_use}")
-    
     key = key_manager.get_current_key()
-    if not key: raise RuntimeError("FATAL: All API Keys exhausted.")
-    
     client = genai.Client(api_key=key)
     
     try:
-        time.sleep(5) 
+        time.sleep(random.uniform(3, 6)) # Jitter to prevent concurrent hit 429
         
         generation_config = types.GenerateContentConfig(
             response_mime_type="application/json", 
             system_instruction=STRICT_SYSTEM_PROMPT, 
-            temperature=0.3, 
-            top_p=0.8
+            temperature=0.3
         )
         
-        response = client.models.generate_content(
-            model=model_to_use, 
-            contents=prompt, 
-            config=generation_config
-        )
-        
+        response = client.models.generate_content(model=model_to_use, contents=prompt, config=generation_config)
         parsed_data = master_json_parser(response.text)
         
         if not parsed_data:
-            log(f"      ⚠️ Parsing failed. Triggering Repair...")
-            time.sleep(2)
+            log(f"      ⚠️ Parsing failed. Triggering AI-Repair...")
+            time.sleep(3)
             repair_response = client.models.generate_content(
                 model=model_to_use, 
-                contents=f"Fix JSON Syntax:\n{response.text[:5000]}", 
+                contents=f"Fix this invalid JSON and return ONLY the corrected JSON:\n{response.text[:6000]}", 
                 config=generation_config
             )
             parsed_data = master_json_parser(repair_response.text)
-            if not parsed_data: raise JSONParsingError(f"Failed to parse JSON for {step_name}")
+            if not parsed_data: raise JSONParsingError(f"Critical JSON Failure on {step_name}")
 
         if required_keys: validate_structure(parsed_data, required_keys)
         log(f"      ✅ Success: {step_name} completed.")
@@ -228,333 +182,139 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
 
     except Exception as e:
         error_msg = str(e).lower()
-        is_429 = "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg
-        is_404 = "404" in error_msg or "not found" in error_msg
-        is_403 = "403" in error_msg or "permission" in error_msg
-        
-        if is_429 or is_403:
-            log(f"      ⚠️ API Error ({'429' if is_429 else '403'}) on Key #{key_manager.current_index + 1}.")
+        # Handle 429 (Quota), 403 (Permission), 404 (Not Found)
+        if any(x in error_msg for x in ["429", "quota", "exhausted", "403", "permission", "limit"]):
+            log(f"      ⚠️ API Hit ({error_msg[:20]}) on Key #{key_manager.current_index + 1}.")
             if not key_manager.switch_key():
-                log(f"      ⛔ Model {model_to_use} failed on ALL keys. Switching Model...")
-                time.sleep(20) 
-                new_model = discover_fresh_model(model_to_use)
-                if not new_model: raise RuntimeError("FATAL: All models failed.")
+                log(f"      ⛔ Model Cycle Exhausted. Finding new model...")
+                time.sleep(25)
+                if not discover_fresh_model(model_to_use): raise RuntimeError("TOTAL COLLAPSE: No models left.")
             raise e 
-            
-        elif is_404:
-             log(f"      ❌ Model {model_to_use} NOT FOUND. Switching immediately.")
+        elif "404" in error_msg or "not found" in error_msg:
              discover_fresh_model(model_to_use)
-             raise e 
-             
+             raise e
         else:
-            log(f"      ❌ General Error: {str(e)[:200]}")
+            log(f"      ❌ Unhandled Error: {str(e)[:100]}")
             raise e
 
 # ==============================================================================
-# NEWS & RSS
+# 2. JSON & STRUCTURE HELPERS
 # ==============================================================================
-def get_gnews_api_sources(query_keywords, category):
+
+def master_json_parser(text):
+    if not text: return None
+    match = regex.search(r'\{(?:[^{}]|(?R))*\}', text, regex.DOTALL)
+    candidate = match.group(0) if match else text
+    try:
+        decoded = json_repair.repair_json(candidate, return_objects=True)
+        if isinstance(decoded, (dict, list)): return decoded
+    except: pass
+    try:
+        clean = candidate.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean)
+    except: return None
+
+def validate_structure(data, required_keys):
+    if not isinstance(data, dict): raise JSONValidationError("Output is not a dictionary.")
+    missing = [k for k in required_keys if k not in data]
+    if missing: raise JSONValidationError(f"Missing required JSON keys: {missing}")
+    return True
+
+# ==============================================================================
+# 3. RESEARCH ENGINE (GNEWS + RSS + PRO SCRAPER)
+# ==============================================================================
+
+def get_pro_news(query_keywords, category):
+    """Combines GNews API and RSS for maximum recall."""
+    log(f"   📡 Starting Deep Research for: '{query_keywords}'...")
+    all_items = []
+    
+    # 1. GNews API (High Quality)
     api_key = os.getenv('GNEWS_API_KEY')
-    if not api_key:
-        log("   ⚠️ GNews API Key missing/not loaded.")
-        return []
+    if api_key:
+        url = f"https://gnews.io/api/v4/search?q={urllib.parse.quote(query_keywords)}&lang=en&country=us&max=5&apikey={api_key}"
+        try:
+            r = requests.get(url, timeout=12)
+            if r.status_code == 200:
+                for art in r.json().get('articles', []):
+                    all_items.append({"title": art['title'], "link": art['url'], "date": art['publishedAt'], "image": art.get('image')})
+        except: pass
 
-    log(f"   📡 Querying GNews API for: '{query_keywords}'...")
-    clean_query = query_keywords.replace(',', ' OR ')
-    url = f"https://gnews.io/api/v4/search?q={urllib.parse.quote(clean_query)}&lang=en&country=us&max=5&apikey={api_key}"
-
+    # 2. RSS Fallback (Reliable)
     try:
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        if r.status_code != 200 or 'articles' not in data:
-            return []
-        formatted_items = []
-        for art in data.get('articles', []):
-            formatted_items.append({
-                "title": art.get('title'),
-                "link": art.get('url'),
-                "date": art.get('publishedAt', str(datetime.date.today())),
-                "image": art.get('image')
-            })
-        log(f"   ✅ GNews found {len(formatted_items)} articles.")
-        return formatted_items
-    except Exception as e:
-        log(f"   ❌ GNews Connection Failed: {e}")
-        return []
-
-def get_real_news_rss(query_keywords, category):
-    try:
-        queries_to_try = [
-            f"{query_keywords} when:1d",
-            f"{query_keywords}",
-            f"{category} news when:1d"
-        ]
-        
-        items = []
-        for q in queries_to_try:
-            encoded = urllib.parse.quote(q)
-            url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
-            feed = feedparser.parse(url)
-            if feed.entries:
-                for entry in feed.entries[:8]:
-                    pub = entry.published if 'published' in entry else "Today"
-                    title_clean = entry.title.split(' - ')[0]
-                    items.append({"title": title_clean, "link": entry.link, "date": pub})
-                if len(items) >= 2: 
-                    return items
-        return items
-    except Exception as e:
-        log(f"❌ RSS Error: {e}")
-        return []
-
-# ==============================================================================
-# DUPLICATION & HISTORY
-# ==============================================================================
-def load_kg():
-    try:
-        if os.path.exists('knowledge_graph.json'): return json.load(open('knowledge_graph.json','r'))
-    except: pass
-    return []
-
-def update_kg(title, url, section):
-    try:
-        data = load_kg()
-        for i in data:
-            if i['url']==url: return
-        data.append({"title":title, "url":url, "section":section, "date":str(datetime.date.today())})
-        with open('knowledge_graph.json','w') as f: json.dump(data, f, indent=2)
+        fb_query = urllib.parse.quote(f"{query_keywords} when:2d")
+        feed = feedparser.parse(f"https://news.google.com/rss/search?q={fb_query}&hl=en-US&gl=US&ceid=US:en")
+        for entry in feed.entries[:10]:
+            all_items.append({"title": entry.title.split(' - ')[0], "link": entry.link, "date": getattr(entry, 'published', 'Today')})
     except: pass
 
-def perform_maintenance_cleanup():
-    try:
-        if os.path.exists('knowledge_graph.json'):
-            with open('knowledge_graph.json','r') as f: d=json.load(f)
-            if len(d)>800: json.dump(d[-400:], open('knowledge_graph.json','w'), indent=2)
-    except: pass
-
-def get_recent_titles_string(category=None, limit=100):
-    kg = load_kg()
-    if not kg: return "No previous articles found."
-    if category: relevant_items = [i for i in kg if i.get('section') == category]
-    else: relevant_items = kg
-    recent_items = relevant_items[-limit:]
-    titles = [f"- {i.get('title','Unknown')}" for i in recent_items]
-    if not titles: return "No previous articles in this category."
-    return "\n".join(titles)
-
-def get_relevant_kg_for_linking(current_title, current_category, limit=60):
-    kg = load_kg()
-    same_cat = [i for i in kg if i.get('section') == current_category]
-    other_cat = [i for i in kg if i.get('section') != current_category]
-    relevant_others = []
-    current_keywords = set(current_title.lower().split())
-    for item in other_cat:
-        item_keywords = set(item['title'].lower().split())
-        if len(current_keywords.intersection(item_keywords)) >= 2:
-            relevant_others.append(item)
-    final_list = same_cat[:4] + relevant_others[:2] 
-    output = [{"title": i['title'], "url": i['url']} for i in final_list]
-    return json.dumps(output)
-
-def check_semantic_duplication(new_keyword, history_string):
-    if not history_string or len(history_string) < 10: return False
-    
-    # 1. LOCAL CHECK
-    target = new_keyword.lower().strip()
-    existing_titles = [line.replace("- ", "").strip().lower() for line in history_string.split('\n') if line.strip()]
-    
-    for title in existing_titles:
-        if target in title or title in target:
-             if len(target) > 5:
-                 log(f"      ⛔ BLOCKED (Local Exact): '{title}'")
-                 return True
-        similarity = difflib.SequenceMatcher(None, target, title).ratio()
-        if similarity > 0.85:
-            log(f"      ⛔ BLOCKED (Local Fuzzy): {int(similarity*100)}% match with '{title}'")
-            return True
-
-    # 2. AI JUDGE
-    judge_model = CURRENT_MODEL_OVERRIDE if CURRENT_MODEL_OVERRIDE else "gemini-3-flash-preview"
-    
-    log(f"   🧠 Semantic Check: Asking AI Judge ({judge_model}) about '{new_keyword}'...")
-    
-    prompt = f"""
-    TASK: Duplication Check.
-    NEW TOPIC: "{new_keyword}"
-    PAST ARTICLES: {history_string}
-    QUESTION: Is "NEW TOPIC" covering the exact same event/story as any "PAST ARTICLES"?
-    OUTPUT JSON: {{"is_duplicate": true}} OR {{"is_duplicate": false}}
-    """
-    try:
-        result = generate_step_strict(judge_model, prompt, "Semantic Judge", required_keys=["is_duplicate"])
-        is_dup = result.get('is_duplicate', False)
-        if is_dup: log("      ⛔ BLOCKED (AI): Duplicate detected.")
-        else: log("      ✅ PASSED (AI): Unique.")
-        return is_dup
-    except Exception as e:
-        log(f"      ⚠️ Semantic Check Error: {e}. Assuming safe.")
-        return False
-
-# ==============================================================================
-# 4. SCRAPING (Fixed for Timeout using Eager Strategy)
-# ==============================================================================
+    # Deduplicate by title similarity
+    unique_items = []
+    for item in all_items:
+        if not any(difflib.SequenceMatcher(None, item['title'].lower(), u['title'].lower()).ratio() > 0.85 for u in unique_items):
+            unique_items.append(item)
+            
+    return unique_items
 
 def resolve_and_scrape(google_url):
-    log(f"      🕵️‍♂️ Selenium: Opening & Resolving: {google_url[:60]}...")
+    """Robust Selenium Scraper with Eager loading and Anti-Detection."""
+    log(f"      🕵️‍♂️ Pro Scraper: {google_url[:50]}...")
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    # Fix 1: Block images to save bandwidth
-    chrome_options.add_argument("--blink-settings=imagesEnabled=false") 
-    # Fix 2: Eager loading strategy to avoid timeouts waiting for ads/trackers
-    chrome_options.page_load_strategy = 'eager' 
-    chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-    chrome_options.add_argument("--mute-audio") 
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false") # Speed
+    chrome_options.page_load_strategy = 'eager' # Don't wait for heavy JS/Ads
+    chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
 
     driver = None
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(20)
+        driver.set_page_load_timeout(25)
         
         driver.get(google_url)
-        start_wait = time.time()
-        final_url = google_url
-        while time.time() - start_wait < 15: 
-            current = driver.current_url
-            if "news.google.com" not in current and "google.com" not in current:
-                final_url = current
-                break
-            time.sleep(1) 
+        # Wait for potential redirects
+        time.sleep(2)
+        final_url = driver.current_url
+        page_source = driver.page_source
         
-        extracted_text = trafilatura.extract(driver.page_source, include_comments=False, include_tables=True, favor_precision=True)
-        if extracted_text and len(extracted_text) > 1000: return final_url, driver.title, extracted_text
+        extracted_text = trafilatura.extract(page_source, include_comments=False, include_tables=True)
+        if not extracted_text or len(extracted_text) < 500:
+            soup = BeautifulSoup(page_source, 'html.parser')
+            for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]): tag.extract()
+            extracted_text = soup.get_text(" ", strip=True)
 
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        for script in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]): script.extract()
-        return final_url, driver.title, soup.get_text(" ", strip=True)
+        if len(extracted_text) < 600: return None, None, None
+        return final_url, driver.title, extracted_text
 
     except Exception as e:
-        log(f"      ❌ Selenium Error: {e}")
+        log(f"      ❌ Selenium Failed: {str(e)[:60]}")
         return None, None, None
     finally:
         if driver: driver.quit()
 
 # ==============================================================================
-# 5. IMAGE PROCESSING
+# 4. MULTIMEDIA & IMAGE PROCESSING
 # ==============================================================================
-
-def extract_og_image(html_content):
-    try:
-        soup = BeautifulSoup(html_content, 'html.parser')
-        meta = soup.find('meta', property='og:image')
-        if meta and meta.get('content'): return meta['content']
-        meta = soup.find('meta', name='twitter:image')
-        if meta and meta.get('content'): return meta['content']
-        return None
-    except: return None
-
-def draw_text_with_outline(draw, position, text, font, fill_color, outline_color, outline_width):
-    x, y = position
-    for dx in range(-outline_width, outline_width + 1):
-        for dy in range(-outline_width, outline_width + 1):
-            if dx != 0 or dy != 0: draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
-    draw.text(position, text, font=font, fill=fill_color)
-
-def upload_to_github_cdn(image_bytes, filename):
-    try:
-        gh_token = os.getenv('MY_GITHUB_TOKEN')
-        image_repo_name = os.getenv('GITHUB_IMAGE_REPO') 
-        if not image_repo_name: image_repo_name = os.getenv('GITHUB_REPO_NAME')
-        if not gh_token or not image_repo_name: return None
-
-        g = Github(gh_token)
-        repo = g.get_repo(image_repo_name)
-        date_folder = datetime.datetime.now().strftime("%Y-%m")
-        file_path = f"images/{date_folder}/{filename}"
-        
-        try:
-            repo.create_file(path=file_path, message=f"🤖 Auto-upload: {filename}", content=image_bytes.getvalue(), branch="main")
-        except Exception as e:
-            if "already exists" in str(e):
-                filename = f"{random.randint(1000,9999)}_{filename}"
-                file_path = f"images/{date_folder}/{filename}"
-                repo.create_file(path=file_path, message=f"Retry: {filename}", content=image_bytes.getvalue(), branch="main")
-            else: raise e
-        
-        return f"https://cdn.jsdelivr.net/gh/{image_repo_name}@main/{file_path}"
-    except Exception as e:
-        log(f"      ❌ GitHub Upload Error: {e}")
-        return None
-
-def ensure_haarcascade_exists():
-    cascade_path = "haarcascade_frontalface_default.xml"
-    if not os.path.exists(cascade_path):
-        url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-        try:
-            r = requests.get(url, timeout=30)
-            with open(cascade_path, 'wb') as f: f.write(r.content)
-        except Exception as e: return None
-    return cascade_path
-
-def apply_smart_privacy_blur(pil_image):
-    try:
-        img_np = np.array(pil_image)
-        if img_np.shape[2] == 4: img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
-        else: img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-
-        cascade_path = ensure_haarcascade_exists()
-        if not cascade_path: return pil_image
-        
-        face_cascade = cv2.CascadeClassifier(cascade_path)
-        gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-
-        if len(faces) > 0:
-            log(f"      🕵️‍♂️ Detected {len(faces)} face(s). Blurring...")
-            h_img, w_img, _ = img_np.shape
-            for (x, y, w, h) in faces:
-                pad_w = int(w*0.6) 
-                pad_h = int(h*0.6)
-                pad_h_bottom = int(h * 0.8)
-                x1 = max(0, x - pad_w)
-                y1 = max(0, y - pad_h)
-                x2 = min(w_img, x + w + pad_w)
-                y2 = min(h_img, y + h + pad_h_bottom)
-                roi = img_np[y1:y2, x1:x2]
-                k_size = (w // 2) | 1
-                k_size = max(k_size, 51)
-                try:
-                    blurred_roi = cv2.GaussianBlur(roi, (k_size, k_size), 0)
-                    img_np[y1:y2, x1:x2] = blurred_roi
-                except: continue
-        return Image.fromarray(cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB))
-    except: return pil_image.filter(ImageFilter.GaussianBlur(radius=15))
 
 def select_best_image_with_gemini(model_name, article_title, images_list):
     if not images_list: return None
-    log(f"   🤖 AI Vision: Selecting best image...")
+    log(f"   🤖 AI Vision: Selecting best candidate image...")
     valid_images = []
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {'User-Agent': random.choice(USER_AGENTS)}
     for img_data in images_list[:4]: 
         try:
             r = requests.get(img_data['url'], headers=headers, timeout=10)
             if r.status_code == 200:
-                valid_images.append({"mime_type": "image/jpeg", "data": r.content, "original_url": img_data['url']})
+                valid_images.append({"mime_type": "image/jpeg", "data": r.content, "url": img_data['url']})
         except: pass
 
     if not valid_images: return None
-    prompt = f"TASK: Select best image index (0-{len(valid_images)-1}) for '{article_title}'. Return Integer only."
+    prompt = f"TASK: Return the integer index (0-{len(valid_images)-1}) of the image most relevant to the tech news: '{article_title}'. Return ONLY the number."
     
-    # Updated: Iterate through models to avoid 404
-    vision_models = [
-        "gemini-3-flash-preview", 
-        "gemini-2.5-flash",
-        "gemini-2.0-flash-exp", 
-        "gemini-1.5-flash"
-    ]
-    
+    # Try multiple models for vision support
+    vision_models = ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-1.5-flash"]
     key = key_manager.get_current_key()
     client = genai.Client(api_key=key)
     inputs = [prompt]
@@ -562,410 +322,297 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
 
     for v_model in vision_models:
         try:
-            response = client.models.generate_content(model=v_model, contents=inputs)
-            match = re.search(r'\d+', response.text)
+            resp = client.models.generate_content(model=v_model, contents=inputs)
+            match = re.search(r'\d+', resp.text)
             if match:
                 idx = int(match.group())
-                if 0 <= idx < len(valid_images): 
-                    log(f"      ✅ Vision Success ({v_model}): Selected Image #{idx+1}")
-                    return valid_images[idx]['original_url']
-        except Exception as e:
-            continue
-
-    return images_list[0]['url']
+                if 0 <= idx < len(valid_images): return valid_images[idx]['url']
+        except: continue
+    return valid_images[0]['url']
 
 def process_source_image(source_url, overlay_text, filename_title):
     if not source_url or source_url.startswith('/'): return None
-    log(f"   🖼️ Processing Source Image: {source_url[:60]}...")
+    log(f"   🖼️ Refining Source Image: {source_url[:50]}...")
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {'User-Agent': random.choice(USER_AGENTS)}
         r = requests.get(source_url, headers=headers, timeout=15, stream=True)
-        original_img = Image.open(BytesIO(r.content)).convert("RGBA")
+        img = Image.open(BytesIO(r.content)).convert("RGBA")
         
+        # Crop & Resize for Blogger (1200x630)
         target_w, target_h = 1200, 630
-        img_ratio = original_img.width / original_img.height
+        img_ratio = img.width / img.height
         target_ratio = target_w / target_h
         if img_ratio > target_ratio:
-            new_width = int(target_h * img_ratio)
-            new_height = target_h
+            new_w = int(target_h * img_ratio)
+            img = img.resize((new_w, target_h), Image.Resampling.LANCZOS)
+            left = (new_w - target_w) / 2
+            img = img.crop((left, 0, left + target_w, target_h))
         else:
-            new_width = target_w
-            new_height = int(target_w / img_ratio)
-        original_img = original_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            new_h = int(target_w / img_ratio)
+            img = img.resize((target_w, new_h), Image.Resampling.LANCZOS)
+            top = (new_h - target_h) / 2
+            img = img.crop((0, top, target_w, top + target_h))
         
-        left = (new_width - target_w) / 2
-        top = (new_height - target_h) / 2
-        base_img = original_img.crop((left, top, left+target_w, top+target_h))
-        
-        base_img = apply_smart_privacy_blur(base_img.convert("RGB")).convert("RGBA")
-        overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 90))
-        base_img = Image.alpha_composite(base_img, overlay)
-        
-        if overlay_text:
-            draw = ImageDraw.Draw(base_img)
-            W, H = base_img.size
-            try: font = ImageFont.truetype("arialbd.ttf", 80) 
-            except: font = ImageFont.load_default()
+        # Privacy & Styling
+        img_rgb = img.convert("RGB")
+        try:
+            # Face Detection Check
+            cascade_path = "haarcascade_frontalface_default.xml"
+            if not os.path.exists(cascade_path):
+                r_cas = requests.get("https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml")
+                with open(cascade_path, 'wb') as f: f.write(r_cas.content)
             
-            words = overlay_text.upper().split()
-            lines = []
-            current_line = []
-            for word in words:
-                test_line = ' '.join(current_line + [word])
-                bbox = draw.textbbox((0, 0), test_line, font=font)
-                if bbox[2] < W - 80: current_line.append(word)
-                else:
-                    lines.append(' '.join(current_line))
-                    current_line = [word]
-            lines.append(' '.join(current_line))
-            
-            text_y = H / 2 - (len(lines) * 90 / 2)
-            for line in lines:
-                bbox = draw.textbbox((0, 0), line, font=font)
-                line_x = (W - (bbox[2] - bbox[0])) / 2
-                draw_text_with_outline(draw, (line_x, text_y), line, font, "#FFD700", "black", 5)
-                text_y += 95
+            img_np = np.array(img_rgb)
+            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            face_cascade = cv2.CascadeClassifier(cascade_path)
+            faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+            for (x, y, w, h) in faces:
+                roi = img_np[y:y+h, x:x+w]
+                img_np[y:y+h, x:x+w] = cv2.GaussianBlur(roi, (99, 99), 30)
+            img_rgb = Image.fromarray(img_np)
+        except: pass
 
-        img_byte_arr = BytesIO()
-        base_img.convert("RGB").save(img_byte_arr, format='WEBP', quality=85)
-        safe_filename = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50] + ".webp"
-        return upload_to_github_cdn(img_byte_arr, safe_filename)
+        # Dark Overlay + Text
+        overlay = Image.new('RGBA', img_rgb.size, (0, 0, 0, 100))
+        img_final = Image.alpha_composite(img_rgb.convert("RGBA"), overlay)
+        draw = ImageDraw.Draw(img_final)
+        
+        try: font = ImageFont.truetype("arialbd.ttf", 85)
+        except: font = ImageFont.load_default()
+        
+        words = overlay_text.upper().split()
+        lines, cur_line = [], ""
+        for w in words:
+            if draw.textbbox((0,0), cur_line + w, font=font)[2] < 1100: cur_line += w + " "
+            else: lines.append(cur_line.strip()); cur_line = w + " "
+        lines.append(cur_line.strip())
+        
+        y_text = 315 - (len(lines) * 45)
+        for line in lines:
+            w_l = draw.textbbox((0,0), line, font=font)[2]
+            draw.text(((1200-w_l)/2, y_text), line, font=font, fill="#FFD700")
+            y_text += 100
+
+        byte_arr = BytesIO()
+        img_final.convert("RGB").save(byte_arr, format='WEBP', quality=85)
+        safe_name = re.sub(r'\W+', '-', filename_title).lower()[:50] + ".webp"
+        return upload_to_github_cdn(byte_arr, safe_name)
     except Exception as e:
-        log(f"      ⚠️ Source Image Error: {e}")
+        log(f"      ⚠️ Image Refine Error: {e}")
         return None
 
-def generate_and_upload_image(prompt_text, overlay_text=""):
-    log(f"   🎨 Generating AI Thumbnail...")
-    enhancers = ", photorealistic, shot on Sony A7R IV, 8k, youtube thumbnail style"
-    final_prompt = urllib.parse.quote(f"{prompt_text}{enhancers}")
-    seed = random.randint(1, 99999)
-    image_url = f"https://image.pollinations.ai/prompt/{final_prompt}?width=1280&height=720&model=flux&seed={seed}&nologo=true"
+def generate_and_upload_image(prompt, overlay):
+    log(f"   🎨 Generating AI Artwork (Fallback Mode)...")
+    url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt + ', cinematic tech, 8k')}?width=1280&height=720&model=flux&seed={random.randint(1,999)}&nologo=true"
     try:
-        r = requests.get(image_url, timeout=60)
+        r = requests.get(url, timeout=60)
         img = Image.open(BytesIO(r.content)).convert("RGBA")
-        if overlay_text:
-            draw = ImageDraw.Draw(img)
-            W, H = img.size
-            try: font = ImageFont.truetype("arial.ttf", 80)
-            except: font = ImageFont.load_default()
-            text = overlay_text.upper()
-            bbox = draw.textbbox((0,0), text, font=font)
-            x, y = (W - (bbox[2]-bbox[0]))/2, H - (bbox[3]-bbox[1]) - 50
-            for dx in range(-4,5):
-                for dy in range(-4,5): draw.text((x+dx, y+dy), text, font=font, fill="black")
-            draw.text((x,y), text, font=font, fill="yellow")
-        
-        img_byte_arr = BytesIO()
-        img.convert("RGB").save(img_byte_arr, format='WEBP', quality=85)
-        return upload_to_github_cdn(img_byte_arr, f"ai_gen_{seed}.webp")
-    except Exception as e: return None
+        byte_arr = BytesIO()
+        img.convert("RGB").save(byte_arr, format='WEBP', quality=85)
+        return upload_to_github_cdn(byte_arr, f"ai_gen_{int(time.time())}.webp")
+    except: return None
+
+def upload_to_github_cdn(bytes_io, filename):
+    try:
+        token = os.getenv('MY_GITHUB_TOKEN')
+        repo_name = os.getenv('GITHUB_IMAGE_REPO') or os.getenv('GITHUB_REPO_NAME')
+        if not token or not repo_name: return None
+        g = Github(token)
+        repo = g.get_repo(repo_name)
+        path = f"images/{datetime.datetime.now().strftime('%Y-%m')}/{filename}"
+        repo.create_file(path=path, message=f"Robot Upload: {filename}", content=bytes_io.getvalue(), branch="main")
+        return f"https://cdn.jsdelivr.net/gh/{repo_name}@main/{path}"
+    except: return None
 
 # ==============================================================================
-# 6. MAIN PIPELINE
+# 5. CORE PIPELINE (THE PRODUCTION LINE)
 # ==============================================================================
 
 def run_pipeline(category, config, forced_keyword=None):
     model_name = config['settings'].get('model_name', "gemini-3-flash-preview")
     
-    # 1. STRATEGY
-    target_keyword = ""
-    is_manual_mode = False
-
+    # 1. SEO STRATEGY
+    target_keyword, is_manual = "", False
     if forced_keyword:
-        log(f"\n🔄 RETRY MODE: Trying fallback keyword in '{category}': '{forced_keyword}'")
-        target_keyword = forced_keyword
-        is_manual_mode = True
+        target_keyword, is_manual = forced_keyword, True
+        log(f"\n🔄 MANUAL MODE: Targetting '{target_keyword}' in {category}")
     else:
-        log(f"\n🚀 INIT PIPELINE: {category} (AI Strategist Mode)")
-        recent_titles = get_recent_titles_string(category=category, limit=100)
-        strategy_success = False
-        for attempt in range(1, 3):
-            try:
-                seo_prompt = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today(), history=recent_titles)
-                seo_plan = generate_step_strict(model_name, seo_prompt, f"Step 0 (SEO Strategy - Attempt {attempt})", required_keys=["target_keyword"])
-                target_keyword = seo_plan.get('target_keyword')
-                if target_keyword:
-                    log(f"   🎯 Strategy Defined: Targeting '{target_keyword}'")
-                    strategy_success = True
-                    break
-            except Exception as e:
-                log(f"   ⚠️ Strategy attempt {attempt} failed: {e}")
-                time.sleep(2)
-        if not strategy_success:
-            log("   ❌ SEO Strategy failed. Switching to fallback.")
-            return False
+        log(f"\n🚀 INIT PIPELINE: {category}")
+        history = get_recent_titles_string(category=category, limit=100)
+        plan = generate_step_strict(model_name, PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today(), history=history), "SEO Strategy", ["target_keyword"])
+        target_keyword = plan['target_keyword']
 
-    # 2. SEMANTIC GUARD
-    days_lookback = 7 if is_manual_mode else 60
+    # 2. SEMANTIC GUARD (DEDUP)
+    # Logic: 7 days lookback for manual, 60 days for AI.
+    lookback = 7 if is_manual else 60
     kg_data = load_kg()
-    cutoff_date = datetime.date.today() - datetime.timedelta(days=days_lookback)
-    relevant_history = []
-    for item in kg_data:
-        try:
-            item_date = datetime.datetime.strptime(item.get('date', '2024-01-01'), "%Y-%m-%d").date()
-            if item_date >= cutoff_date: relevant_history.append(f"- {item.get('title')}")
-        except: pass
-    history_string = "\n".join(relevant_history) if relevant_history else "No recent articles."
-
-    if check_semantic_duplication(target_keyword, history_string):
-        log(f"   🚫 ABORTING: Topic '{target_keyword}' covered in last {days_lookback} days.")
+    cutoff = datetime.date.today() - datetime.timedelta(days=lookback)
+    recent_history = "\n".join([f"- {i['title']}" for i in kg_data if datetime.datetime.strptime(i['date'], "%Y-%m-%d").date() >= cutoff])
+    
+    if check_semantic_duplication(target_keyword, recent_history):
+        log(f"   🚫 Aborting: '{target_keyword}' covered in last {lookback} days.")
         return False
 
-    # 3. SOURCE HUNTING
-    rss_items = get_gnews_api_sources(target_keyword, category)
-    if not rss_items:
-        log("   🔄 GNews yielded no results. Switching to Legacy RSS Scraping...")
-        rss_items = get_real_news_rss(f"{target_keyword}", category)
-
-    if not rss_items:
-        log(f"   ⚠️ No news found for '{target_keyword}'.")
-        return False
-
-    collected_sources = []
-    main_headline = ""
+    # 3. SOURCE HUNTING (Deep Research)
+    candidates = get_pro_news(target_keyword, category)
+    collected = []
     main_link = ""
-    required_terms = target_keyword.lower().split()
-    significant_keyword = max(required_terms, key=len) if required_terms else ""
-    
-    log(f"   🕵️‍♂️ Investigating sources for: '{target_keyword}'...")
-    for item in rss_items[:8]:
-        if significant_keyword and len(significant_keyword) > 3:
-            if significant_keyword not in item['title'].lower() and significant_keyword not in item['link'].lower():
-                continue
-        if any(src['domain'] in item['link'] for src in collected_sources): continue
 
-        # Explicitly call the robust scraper with EAGER loading
-        final_url, final_title, text = resolve_and_scrape(item['link'])
-        
-        if text and len(text) >= 600:
-            log(f"         ✅ Accepted Source! ({len(text)} chars).")
-            # We need to re-fetch HTML for OG image if using selenium result
-            # But resolve_and_scrape returns text. We can try to extract image from original URL simply or skip
-            # Better approach: We can't easily get OG image from just text.
-            # Let's try to get image from GNews data or RSS data first.
-            source_img = item.get('image')
-            
-            collected_sources.append({
-                "title": final_title if final_title else item['title'], 
-                "text": text,
-                "domain": urllib.parse.urlparse(final_url).netloc,
-                "url": final_url, 
-                "date": item['date'],
-                "source_image": source_img
-            })
-            if not main_headline: main_headline, main_link = item['title'], item['link']
-            if len(collected_sources) >= 3: break
-        
-        time.sleep(1.5)
+    for item in candidates:
+        f_url, f_title, f_text = resolve_and_scrape(item['link'])
+        if f_text:
+            log(f"      ✅ Accepted: {urllib.parse.urlparse(f_url).netloc} ({len(f_text)} chars)")
+            collected.append({"title": f_title, "text": f_text, "url": f_url, "date": item['date'], "source_image": item.get('image')})
+            if not main_link: main_link = f_url
+            if len(collected) >= 3: break # Minimum 3 sources for depth
+        time.sleep(1)
 
-    if not collected_sources: return False
-        
-    # REDDIT INTEL
-    reddit_context = ""
-    try:
-        reddit_context = reddit_manager.get_community_intel(target_keyword)
-        if reddit_context: log(f"   ✅ Acquired smart community insights from Reddit.")
-    except: pass
+    if len(collected) < 2:
+        log(f"   ❌ Failed to find enough high-quality sources for '{target_keyword}'.")
+        return False
+
+    # 4. SYNTHESIS (THE CONTENT ENGINE)
+    reddit_ctx = reddit_manager.get_community_intel(target_keyword)
+    research_text = "".join([f"\n--- SOURCE {i+1} ---\n{s['text'][:9000]}\n" for i, s in enumerate(collected)])
+    payload = f"METADATA: {json.dumps({'keyword': target_keyword})}\nFEEDBACK: {reddit_ctx}\n\nRESEARCH DATA:\n{research_text}"
     
-    # 4. EXECUTION
     try:
-        log(f"\n✍️ Synthesizing Content...")
-        combined_text = ""
-        for i, src in enumerate(collected_sources):
-            combined_text += f"\n--- SOURCE {i+1}: {src['domain']} ---\nTitle: {src['title']}\nDate: {src['date']}\nCONTENT:\n{src['text'][:9000]}\n"
-        combined_text += f"\n\n{reddit_context}\n"
-        
-        sources_list_formatted = [{"title": s['title'], "url": s['url']} for s in collected_sources]
-        json_ctx = {"rss_headline": main_headline, "keyword_focus": target_keyword, "source_count": len(collected_sources), "date": str(datetime.date.today()), "style_guide": "Critical, First-Person, Beginner-Focused"}
-        
-        payload = f"METADATA: {json.dumps(json_ctx)}\n\n*** RESEARCH DATA ***\n{combined_text}"
-        json_b = generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Step B (Writer)", required_keys=["headline", "hook", "article_body", "verdict"])
-        
-        current_headline = json_b.get('headline', target_keyword)
-        kg_links = get_relevant_kg_for_linking(current_headline, category)
-        input_c = {"draft_content": json_b, "sources_data": sources_list_formatted}
-        json_c = generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(input_c), knowledge_graph=kg_links), "Step C (SEO)", required_keys=["finalTitle", "finalContent", "seo", "imageGenPrompt"])
-        json_d = generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), "Step D (Humanizer)", required_keys=["finalTitle", "finalContent", "seo", "imageGenPrompt"])
-        final = generate_step_strict(model_name, PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), "Step E (Final Polish)", required_keys=["finalTitle", "finalContent", "seo", "imageGenPrompt"])
-        
+        # Generation Chain
+        json_b = generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Step B (Writer)", ["headline", "hook", "article_body", "verdict"])
+        kg_links = get_relevant_kg_for_linking(json_b['headline'], category)
+        json_c = generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps({"draft": json_b, "sources": collected}), knowledge_graph=kg_links), "Step C (SEO)", ["finalTitle", "finalContent", "seo", "imageGenPrompt"])
+        json_d = generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), "Step D (Humanizer)", ["finalContent"])
+        final = generate_step_strict(model_name, PROMPT_E_TEMPLATE.format(json_input=json.dumps({**json_c, **json_d})), "Step E (Polish)", ["finalTitle", "finalContent", "seo", "imageGenPrompt"])
+
         title = final['finalTitle']
         content_html = final['finalContent']
-        seo_data = final.get('seo', {})
-        img_prompt = final.get('imageGenPrompt', title)
-        img_overlay = final.get('imageOverlayText', 'News')
-
-        # MULTIMEDIA
-        log("   🧠 Generating Multimedia Assets...")
-        yt_meta = generate_step_strict(model_name, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta", required_keys=["title", "description", "tags"])
-        fb_dat = generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
-        fb_cap = fb_dat.get('FB_Hook', title)
         
-        log("   🖼️ Image Strategy...")
-        candidate_images = []
-        for src in collected_sources:
-            if src.get('source_image'): candidate_images.append({'url': src['source_image'], 'domain': src['domain']})
+        # 5. ASSETS (IMAGE & VIDEO)
+        log("   🎬 Rendering Assets...")
+        yt_meta = generate_step_strict(model_name, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta", ["title", "description"])
+        fb_dat = generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", ["FB_Hook"])
         
-        selected_source_image = None
-        if candidate_images: selected_source_image = select_best_image_with_gemini(model_name, title, candidate_images)
-        overlay_text_clean = img_overlay if img_overlay else "LATEST NEWS"
+        # Image
+        candidate_imgs = [{"url": s['source_image']} for s in collected if s.get('source_image')]
+        best_img_url = select_best_image_with_gemini(model_name, title, candidate_imgs)
+        overlay_txt = final.get('imageOverlayText', "LATEST TECH")
+        img_cdn = None
+        if best_img_url: img_cdn = process_source_image(best_img_url, overlay_txt, title)
+        if not img_cdn: img_cdn = generate_and_upload_image(final['imageGenPrompt'], overlay_txt)
+
+        # Video
+        summ_clean = re.sub('<[^<]+?>','', content_html)[:2000]
+        script = generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean), "Script", ["video_script"])['video_script']
         
-        img_url = None
-        if selected_source_image:
-            img_url = process_source_image(selected_source_image, overlay_text_clean, title)
-        if not img_url:
-            safe_prompt = f"{img_prompt}, abstract technology, blurred background, no people, no skin, no faces, futuristic, 3d render"
-            img_url = generate_and_upload_image(safe_prompt, overlay_text_clean)
-
-        summ_clean = re.sub('<[^<]+?>','', content_html)[:2500]
-        script_json = None
-        for attempt in range(1, 4):
-            try:
-                raw_result = generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ_clean), f"Video Script (Att {attempt})")
-                if isinstance(raw_result, dict):
-                    if 'video_script' in raw_result: script_json = raw_result['video_script']
-                    elif 'script' in raw_result: script_json = raw_result['script']
-                elif isinstance(raw_result, list): script_json = raw_result
-                if script_json: break
-            except: pass
-
-        vid_main, vid_short, vid_html, fb_path = None, None, "", None
-        if script_json and len(script_json) > 0:
-            ts = int(time.time())
-            out_dir = os.path.abspath("output")
-            os.makedirs(out_dir, exist_ok=True)
-            
-            try:
-                rr = video_renderer.VideoRenderer(output_dir=out_dir, width=1920, height=1080)
-                main_p = os.path.join(out_dir, f"main_{ts}.mp4")
-                pm = rr.render_video(script_json, title, main_p)
-                if pm and os.path.exists(pm):
-                    desc = f"{yt_meta.get('description','')}\n\n🚀 Full Story: {main_link}\n\n#{category.replace(' ','')}"
-                    vid_main, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta.get('title',title)[:100], desc, yt_meta.get('tags',[]))
-                    if vid_main: 
-                        vid_html = f'''<div class="video-container" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.1);"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen loading="lazy" title="{title}"></iframe></div>'''
-            except: pass
-
-            try:
-                rs = video_renderer.VideoRenderer(output_dir=out_dir, width=1080, height=1920)
-                short_p = os.path.join(out_dir, f"short_{ts}.mp4")
-                ps = rs.render_video(script_json, title, short_p)
-                if ps and os.path.exists(ps):
-                    fb_path = ps
-                    vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta.get('title',title)[:90]} #Shorts", desc, yt_meta.get('tags',[])+['shorts'])
-            except: pass
-
-        # VALIDATION
-        log("   🛡️ Initiating Self-Healing Validation...")
+        out_dir = os.path.abspath("output")
+        os.makedirs(out_dir, exist_ok=True)
+        ts = int(time.time())
+        vid_html, fb_path, vid_main_id, vid_short_id = "", None, None, None
+        
+        # Horizontal Video
         try:
-            val_client = genai.Client(api_key=key_manager.get_current_key())
-            healer = content_validator_pro.AdvancedContentValidator(val_client)
-            full_text = "\n".join([s['text'] for s in collected_sources])
-            content_html = healer.run_professional_validation(content_html, full_text, collected_sources)
-        except Exception as e: log(f"   ⚠️ Validation Error: {e}")
+            rr = video_renderer.VideoRenderer(output_dir=out_dir, width=1920, height=1080)
+            pm = rr.render_video(script, title, f"main_{ts}.mp4")
+            if pm:
+                vid_main_id, _ = youtube_manager.upload_video_to_youtube(pm, yt_meta['title'], f"{yt_meta['description']}\n\nFull: {main_link}", yt_meta.get('tags', ["AI"]))
+                if vid_main_id: vid_html = f'<div class="video-container"><iframe src="https://www.youtube.com/embed/{vid_main_id}" frameborder="0" allowfullscreen></iframe></div>'
+        except: pass
 
-        # PUBLISH
-        log("   🚀 Publishing to Blogger...")
-        
-        # Updated Author Box
+        # Vertical Short
+        try:
+            rs = video_renderer.VideoRenderer(output_dir=out_dir, width=1080, height=1920)
+            ps = rs.render_video(script, title, f"short_{ts}.mp4")
+            if ps:
+                fb_path = ps
+                vid_short_id, _ = youtube_manager.upload_video_to_youtube(ps, f"{yt_meta['title'][:90]} #Shorts", "Full story in link! #AI", ["shorts"])
+        except: pass
+
+        # 6. SELF-HEALING & PUBLISH
+        log("   🛡️ Final Self-Healing Check...")
+        val_client = genai.Client(api_key=key_manager.get_current_key())
+        healer = content_validator_pro.AdvancedContentValidator(val_client)
+        final_html_validated = healer.run_professional_validation(content_html, research_text, collected)
+
         author_box = """
         <div style="margin-top:50px; padding:25px; background:#f8f9fa; border-left: 5px solid #2ecc71; border-radius:8px; font-family:sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
             <div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:20px;">
                 <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791" 
-                     style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:3px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);" 
-                     alt="Latest AI">
-                
+                     style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:3px solid #fff;" alt="Latest AI">
                 <div style="flex:1;">
                     <h4 style="margin:0 0 5px; font-size:20px; color:#2c3e50; font-weight:700;">Latest AI</h4>
-                    <span style="font-size:12px; background:#e8f6ef; color:#2ecc71; padding:3px 8px; border-radius:4px; font-weight:bold; letter-spacing:0.5px;">TECH EDITOR</span>
-                    
-                    <p style="margin:12px 0; font-size:15px; color:#555; line-height:1.6;">
-                        Testing AI tools so you don't break your workflow. Brutally honest reviews, simple explainers, and zero fluff.
-                    </p>
-                    
-                    <div style="display:flex; gap:15px; margin-top:10px; flex-wrap:wrap;">
-                        <a href="https://www.facebook.com/share/1AkVHBNbV1/" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="Facebook"><img src="https://cdn-icons-png.flaticon.com/512/5968/5968764.png" width="24" height="24" alt="FB"></a>
-                        <a href="https://x.com/latestaime" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="X (Twitter)"><img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24" height="24" alt="X"></a>
-                        <a href="https://www.instagram.com/latestai.me" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="Instagram"><img src="https://cdn-icons-png.flaticon.com/512/3955/3955024.png" width="24" height="24" alt="IG"></a>
-                        <a href="https://m.youtube.com/@0latestai" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="YouTube"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24" height="24" alt="YT"></a>
-                        <a href="https://pinterest.com/latestaime" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="Pinterest"><img src="https://cdn-icons-png.flaticon.com/512/145/145808.png" width="24" height="24" alt="Pin"></a>
-                        <a href="https://reddit.com/user/Yousefsg/" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="Reddit"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="24" height="24" alt="Reddit"></a>
-                        <a href="https://www.latestai.me" target="_blank" style="text-decoration:none; opacity:0.8; transition:0.3s;" title="Website"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24" height="24" alt="Web"></a>
+                    <span style="font-size:12px; background:#e8f6ef; color:#2ecc71; padding:3px 8px; border-radius:4px; font-weight:bold;">TECH EDITOR</span>
+                    <p style="margin:12px 0; font-size:15px; color:#555;">Testing AI tools so you don't break your workflow. Brutally honest reviews, simple explainers, and zero fluff.</p>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <a href="https://www.facebook.com/share/1AkVHBNbV1/" target="_blank" title="FB"><img src="https://cdn-icons-png.flaticon.com/512/5968/5968764.png" width="24"></a>
+                        <a href="https://x.com/latestaime" target="_blank" title="X"><img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24"></a>
+                        <a href="https://www.instagram.com/latestai.me" target="_blank" title="IG"><img src="https://cdn-icons-png.flaticon.com/512/3955/3955024.png" width="24"></a>
+                        <a href="https://m.youtube.com/@0latestai" target="_blank" title="YT"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24"></a>
+                        <a href="https://reddit.com/user/Yousefsg/" target="_blank" title="Reddit"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="24"></a>
                     </div>
                 </div>
             </div>
-        </div>
-        """
+        </div>"""
         
-        content_html = content_html.replace('href=\\"', 'href="').replace('\\">', '">')
-        content_html = re.sub(r'href=["\']\\?["\']?(http[^"\']+)\\?["\']?["\']', r'href="\1"', content_html)
-        final_content_with_author = content_html + author_box
+        img_tag = f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><img src="{img_cdn}" style="max-width:100%; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1);"></div>'
+        full_body = img_tag + vid_html + final_html_validated + author_box
         
-        img_html = ""
-        if img_url: 
-            alt_text = seo_data.get("imageAltText", title)
-            img_html = f'''<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}" style="margin-left:1em; margin-right:1em;"><img border="0" src="{img_url}" alt="{alt_text}" width="1200" height="630" style="max-width:100%; height:auto; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1);" /></a></div>'''
-
-        full_body = ARTICLE_STYLE + img_html + vid_html + final_content_with_author
-        if 'schemaMarkup' in final:
-            try: full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
-            except: pass
-        
-        published_url = publish_post(title, full_body, [category, "Tech News", "Explainers"])
+        # Publish to Blogger
+        published_url = publish_post(title, full_body, [category, "Tech News"])
         if published_url:
-            log(f"✅ PUBLISHED: {published_url}")
             update_kg(title, published_url, category)
-            new_desc = f"{yt_meta.get('description','')}\n\n👇 READ THE FULL ARTICLE HERE:\n{published_url}\n\n#AI #TechNews"
-            if vid_main: youtube_manager.update_video_description(vid_main, new_desc)
-            if vid_short: youtube_manager.update_video_description(vid_short, new_desc)
-            try:
-                if fb_path and os.path.exists(fb_path): 
-                    social_manager.post_reel_to_facebook(fb_path, f"{fb_cap}\n\nRead more: {published_url}\n\n#AI")
-                elif img_url:
-                    social_manager.distribute_content(f"{fb_cap}\n\n👇 Read Article:\n{published_url}", published_url, img_url)
-            except Exception as e: log(f"   ⚠️ Social Error: {e}")
+            # Update Socials with the URL
+            if vid_main_id: youtube_manager.update_video_description(vid_main_id, f"Full Article: {published_url}\n\n{yt_meta['description']}")
+            if vid_short_id: youtube_manager.update_video_description(vid_short_id, f"Read Full Breakdown: {published_url}")
+            if fb_path: social_manager.post_reel_to_facebook(fb_path, f"{fb_dat['FB_Hook']}\n\nLink: {published_url}")
+            log(f"✅ PROCESS COMPLETE: {published_url}")
             return True
-
-    except Exception as e:
-        log(f"❌ PIPELINE CRASHED: {e}")
-        import traceback
-        traceback.print_exc()
         return False
-    return False
+    except Exception as e:
+        log(f"❌ Synthesis/Publishing Failed: {e}")
+        return False
+
+# ==============================================================================
+# 6. SYSTEM UTILITIES (HISTORY & KG)
+# ==============================================================================
+
+def check_semantic_duplication(new_keyword, history_string):
+    if not history_string or len(history_string) < 10: return False
+    # Local Check (Zero Cost)
+    target = new_keyword.lower().strip()
+    existing = [line.replace("- ", "").strip().lower() for line in history_string.split('\n') if line.strip()]
+    for title in existing:
+        if difflib.SequenceMatcher(None, target, title).ratio() > 0.85: return True
+    # AI Confirmation
+    judge_model = CURRENT_MODEL_OVERRIDE if CURRENT_MODEL_OVERRIDE else "gemini-3-flash-preview"
+    prompt = f"TASK: Duplicate Check. NEW: {new_keyword}. PAST: {history_string}. Output JSON: {{'is_duplicate': true/false}}"
+    try:
+        res = generate_step_strict(judge_model, prompt, "Judge", ["is_duplicate"])
+        return res['is_duplicate']
+    except: return False
 
 def main():
-    try:
-        with open('config_advanced.json','r') as f: cfg = json.load(f)
-    except:
-        log("❌ No Config.")
-        return
+    try: cfg = json.load(open('config_advanced.json','r'))
+    except: return log("❌ Config Missing.")
     
-    all_categories = list(cfg['categories'].keys())
-    random.shuffle(all_categories)
-    log(f"🎲 Session Categories: {all_categories}")
+    categories = list(cfg['categories'].keys())
+    random.shuffle(categories)
     
     success = False
-    for category in all_categories:
-        log(f"\n📁 SWITCHING TO CATEGORY: {category}")
-        if run_pipeline(category, cfg, forced_keyword=None):
-            success = True
-            break 
-        log(f"   ⚠️ AI Strategy failed. Switching to Manual List...")
-        trending_text = cfg['categories'][category].get('trending_focus', '')
-        if trending_text:
-            manual_topics = [t.strip() for t in trending_text.split(',') if t.strip()]
-            random.shuffle(manual_topics)
-            for topic in manual_topics:
-                log(f"   👉 Trying Manual Topic: '{topic}'")
-                if run_pipeline(category, cfg, forced_keyword=topic):
-                    success = True
-                    break 
-            if success: break 
+    for cat in categories:
+        log(f"\n📁 FOLDER: {cat}")
+        if run_pipeline(cat, cfg):
+            success = True; break
             
-    if success:
-        log("\n✅ MISSION ACCOMPLISHED.")
-        perform_maintenance_cleanup()
-    else:
-        log("\n❌ MISSION FAILED. Exhausted all attempts.")
+        log(f"   ⚠️ AI Strategy yielded no article. Attempting Manual Topics...")
+        manual_topics = [t.strip() for t in cfg['categories'][cat]['trending_focus'].split(',')]
+        random.shuffle(manual_topics)
+        for topic in manual_topics:
+            if run_pipeline(cat, cfg, forced_keyword=topic):
+                success = True; break
+        if success: break
+
+    if success: perform_maintenance_cleanup()
+    else: log("❌ SESSION FAILED: No articles could be produced.")
 
 if __name__ == "__main__":
     main()
