@@ -23,5 +23,5 @@ pydantic
 opencv-python-headless
 numpy
 openai
-google-genai
-requests
+
+
