@@ -774,15 +774,19 @@ def run_pipeline(category, config, forced_keyword=None):
     collected_sources = []
     main_headline = ""
     main_link = ""
-    required_terms = target_keyword.lower().split()
-    significant_keyword = max(required_terms, key=len) if required_terms else ""
+    words = target_keyword.split()
+    significant_word = max(words, key=len) if words else category
     
-    # Search Levels: Exact Keyword -> Broader Keyword -> Category News
-    search_attempts = [
-        {"type": "GNEWS", "query": target_keyword},
-        {"type": "RSS", "query": target_keyword + " when:1d"},
-        {"type": "RSS", "query": significant_keyword + " when:1d"},
-        {"type": "RSS", "query": category + "significant_keyword  when:1d"}
+    # 2. مصفوفة استراتيجيات البحث (بدون كلمة News التافهة)
+    # المستوى الأول: بحث حرفي دقيق
+    # المستوى الثاني: بحث عن الأحداث (Revealed, Hands-on)
+    # المستوى الثالث: بحث مقارن (Vs) لجلب مقالات دسمة
+    # المستوى الرابع: بحث عن التحديثات السنوية الحصرية
+    search_strategies = [
+        f'"{target_keyword}"', 
+        f'{target_keyword} (breakthrough OR revealed OR "hands-on" OR review)',
+        f'{significant_word} vs (Sora OR ChatGPT OR Gemini OR Claude OR " ")',
+        f'{category} update'
     ]
 
     for attempt_idx, attempt in enumerate(search_attempts):
