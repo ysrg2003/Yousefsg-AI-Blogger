@@ -7,7 +7,7 @@ def update_workflow_schedule():
     
     # 1. توليد وقت عشوائي جديد للغد
     # الساعات: نختار عشوائياً بين 1 مساء و 12 مساءً (توقيت عالمي UTC)
-    random_hour = random.randint(15, 24)
+    random_hour = random.randint(11, 23)
     # الدقائق: أي دقيقة عشوائية
     random_minute = random.randint(0, 59)
     
