@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - [AUTO-HEALER] - %(
 logger = logging.getLogger("AutoHealer")
 
 class AdvancedContentValidator:
-    def __init__(self, google_client, model_name="models/gemini-2.5-flash"):
+    def __init__(self, google_client, model_name="models/gemini-3-flash-preview"):
         self.client = google_client
         self.model_name = model_name
 
