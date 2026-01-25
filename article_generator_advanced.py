@@ -789,53 +789,41 @@ def run_pipeline(category, config, forced_keyword=None):
         f'{category} update'
     ]
 
-    for attempt_idx, attempt in enumerate(search_attempts):
+    for attempt_idx, query in enumerate(search_strategies):
         if len(collected_sources) >= 3:
             log(f"   ✅ Collected sufficient sources ({len(collected_sources)}). Moving on.")
             break
             
-        log(f"   🕵️‍♂️ Source Hunting (Level {attempt_idx+1}): {attempt['type']} -> '{attempt['query']}'")
+        log(f"   🕵️‍♂️ Source Hunting (Level {attempt_idx+1}): Using query '{query}'")
         
-        items = []
-        if attempt['type'] == "GNEWS":
-            items = get_gnews_api_sources(attempt['query'], category)
-        else:
-            items = get_real_news_rss(attempt['query'])
+        # محاولة GNews أولاً لجودة أعلى، ثم RSS كبديل
+        items = get_gnews_api_sources(query, category)
+        if not items:
+            items = get_real_news_rss(query)
             
         for item in items:
             if len(collected_sources) >= 3: break
             
-            # Deduplication
             if any(src['url'] == item['link'] for src in collected_sources): continue
             
-            # Simple relevance check (skip if too irrelevant)
-            if attempt_idx < 2 and significant_keyword and len(significant_keyword) > 3:
-                if significant_keyword not in item['title'].lower() and significant_keyword not in item['link'].lower():
-                    continue
-
-            # SCRAPE & VALIDATE (Scraper Pro)
             final_url, final_title, text = resolve_and_scrape(item['link'])
             
-            if text: # is_valid_article_text already checked inside resolve_and_scrape
+            if text:
                 log(f"         ✅ Accepted Source! ({len(text)} chars).")
                 
-                # Try to preserve original image if possible
                 source_img = item.get('image')
-                if not source_img:
-                    # Fallback: try to guess OG image from URL if possible (usually not reliable without HTML parsing again)
-                    pass
 
                 collected_sources.append({
                     "title": final_title if final_title else item['title'], 
                     "text": text,
                     "domain": urllib.parse.urlparse(final_url).netloc,
                     "url": final_url, 
-                    "date": item['date'],
+                    "date": item.get('date', 'Today'),
                     "source_image": source_img
                 })
                 if not main_headline: main_headline, main_link = item['title'], item['link']
             
-            time.sleep(1.5) # Be polite
+            time.sleep(1.5)
 
     if not collected_sources:
         log(f"   ❌ No valid sources found for '{target_keyword}' after all attempts.")
