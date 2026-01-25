@@ -3,7 +3,7 @@ name: Daily Article Publishing
 on:
   schedule:
     # سيتم تحديث هذا السطر تلقائياً يومياً
-    - cron: '32 22 * * *'
+    - cron: '49 19 * * *'
   workflow_dispatch:
 
 permissions:
