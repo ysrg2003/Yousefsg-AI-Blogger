@@ -1,18 +1,18 @@
 {
   "categories": {
     "AI Tools & Apps": {
-      "trending_focus": "ChatGPT new features, Google Gemini updates, Microsoft Copilot news, Claude AI latest capabilities, Midjourney v6 news, new AI productivity tools, best AI apps for android ios, generative AI software updates"
+      "trending_focus": "ChatGPT hidden features, Google Gemini vs ChatGPT comparison, best free AI apps 2024, how to use Microsoft Copilot, Midjourney v6 prompt guide, fix AI hallucinations, AI tools for students, top productivity AI extensions"
     },
     "AI Income & Hustles": {
-      "trending_focus": "AI gig economy news, freelance market AI trends, creator economy AI tools, remote work AI developments, digital marketing AI news, solopreneur AI tools, AI startup news for beginners"
+      "trending_focus": "how to make money with AI, best AI tools for freelancers, automated content creation tools, AI side hustles for beginners, monetize AI art, legitimate AI jobs, tools to speed up coding, automate social media with AI"
     },
     "Future & Robotics": {
-      "trending_focus": "humanoid robots news, Tesla Optimus latest, Boston Dynamics updates, Figure AI robotics, NVIDIA robotics developments, AI wearables news, smart home AI technology, future of work automation"
+      "trending_focus": "Figure 01 robot capabilities, Tesla Optimus price and release date, humane ai pin reviews, rabbit r1 updates, dangerous AI developments, smart home AI gadgets, future of jobs with automation, NVIDIA robotics demos"
     }
   },
   "settings": {
     "date_range_query": "when:2d",
-    "model_name": "models/gemini-2.5-flash",
+    "model_name": "models/gemini-2.0-flash",
     "adsense_optimization": true
   }
 }
