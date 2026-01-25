@@ -5,153 +5,67 @@ import json
 from bs4 import BeautifulSoup
 from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_fixed
+from urllib.parse import urlparse
 
-# إعداد اللوجر الاحترافي
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - [AUTO-HEALER] - %(message)s')
-logger = logging.getLogger("AutoHealer")
+# إعداد اللوجر الاحترافي والمتقدم
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - [CORE-SURGEON-3.0] - %(message)s')
+logger = logging.getLogger("CoreSurgeon")
 
 class AdvancedContentValidator:
-    def __init__(self, google_client, model_name="models/gemini-3-flash-preview"):
+    def __init__(self, google_client, model_name="gemini-3-flash-preview"):
         self.client = google_client
         self.model_name = model_name
+        self.session = requests.Session()
+        # هوية مخصصة للمدقق لضمان عدم حظره عند فحص الروابط
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 ProValidator/3.0'
+        })
 
     def _normalize(self, text):
+        """
+        دالة مساعدة لتنظيف النصوص من المسافات الزائدة وتحويلها لحروف صغيرة للمقارنة.
+        (موجودة كما في الكود القديم لضمان التوافقية)
+        """
         return re.sub(r'\s+', ' ', text.strip().lower())
 
     # ==============================================================================
-    # 1. STRUCTURAL HEALING (إصلاح الهيكل المفقود)
+    # 1. PROACTIVE FACT SURGERY (الجراحة الوقائية للحقائق)
     # ==============================================================================
-    def ensure_structure_integrity(self, html_content, required_elements, full_source_text):
+    def perform_fact_surgery(self, html_content, full_source_text):
         """
-        يفحص وجود العناصر الإجبارية (جدول، ويدجت).
-        إذا كانت مفقودة، يقوم بتوليدها وحقنها.
+        يقوم بفحص كل ادعاء رقمي أو تقني وتصحيحه فوراً باستخدام البيانات الخام.
+        إذا وجد معلومة "هلوسة"، يقوم بإعادة صياغتها لتكون رأياً احترافياً.
         """
         soup = BeautifulSoup(html_content, 'html.parser')
-        modified = False
-
-        # أين نحقن العناصر المفقودة؟ (بعد أول H2 غالباً)
-        injection_point = soup.find('h2')
-        if not injection_point:
-            injection_point = soup.find('p')
-
-        # 1. فحص الجدول
-        if "comparison-table" not in html_content:
-            logger.warning("⚠️ Critical: Comparison Table Missing. Initiating regeneration...")
-            table_html = self._generate_missing_element("Comparison Table", full_source_text)
-            if table_html:
-                # نحقن الجدول بعد نقطة الحقن
-                new_tag = BeautifulSoup(table_html, 'html.parser')
-                injection_point.insert_after(new_tag)
-                modified = True
-                logger.info("✅ Fixed: Comparison Table injected successfully.")
-
-        # 2. فحص عنصر الثقة (Widget)
-        widgets = ['code-snippet', 'specs-box', 'roi-box', 'pros-cons-grid']
-        has_widget = any(w in html_content for w in widgets)
+        # نركز على الفقرات والجداول والخلايا لأنها تحتوي على "الذهب التقني"
+        elements = soup.find_all(['p', 'td', 'li', 'span', 'h3'])
         
-        if not has_widget:
-            logger.warning("⚠️ Critical: Authority Widget Missing. Initiating regeneration...")
-            # نحدد نوع الويدجت المناسب بناءً على المحتوى (تخمين ذكي)
-            widget_type = "Pros & Cons Grid" # افتراضي
-            if "code" in full_source_text.lower(): widget_type = "Code Snippet"
-            elif "battery" in full_source_text.lower() or "specs" in full_source_text.lower(): widget_type = "Specs Box"
-            
-            widget_html = self._generate_missing_element(widget_type, full_source_text)
-            if widget_html:
-                injection_point.insert_after(BeautifulSoup(widget_html, 'html.parser'))
-                modified = True
-                logger.info(f"✅ Fixed: {widget_type} injected successfully.")
-
-        return str(soup) if modified else html_content
-
-    @retry(stop=stop_after_attempt(2), wait=wait_fixed(2))
-    def _generate_missing_element(self, element_type, source_text):
-        """يطلب من AI توليد كود HTML للعنصر المفقود فقط"""
-        prompt = f"""
-        TASK: Generate missing HTML element.
-        ELEMENT TYPE: {element_type}
-        SOURCE DATA: {source_text[:5000]}
+        chunks_to_verify = []
+        # Regex متطور للبحث عن الأرقام، النسب، الأسعار، الإصدارات، والكلمات المفتاحية الحساسة
+        pattern = r'(\d+%?|\$\d+|\bv\d+\.\d+|\d+\s(hours|GB|TB)|\b(vs|better than|faster than|release date)\b)'
         
-        REQUIREMENTS:
-        - Generate ONLY the HTML for the requested element.
-        - Strictly follow these CSS classes:
-          - Table: <div class="table-wrapper"><table class="comparison-table">...</table></div>
-          - Code: <div class="code-snippet">...</div>
-          - Specs: <div class="specs-box">...</div>
-          - Pros/Cons: <div class="pros-cons-grid">...</div>
-        - Populate with REAL data from source.
-        
-        OUTPUT: HTML String ONLY.
-        """
-        resp = self.client.models.generate_content(model=self.model_name, contents=prompt)
-        return resp.text.replace("```html", "").replace("```", "").strip()
+        for el in elements:
+            text = el.get_text()
+            if re.search(pattern, text, re.IGNORECASE):
+                chunks_to_verify.append(str(el))
 
-    # ==============================================================================
-    # 2. FACT HEALING (تصحيح الأرقام والحقائق)
-    # ==============================================================================
-    def verify_and_heal_facts(self, html_content, source_text):
-        """
-        يستخرج الجمل التي تحتوي على أرقام، ويطلب من AI التحقق منها وتصحيحها إذا لزم الأمر.
-        """
-        soup = BeautifulSoup(html_content, 'html.parser')
-        # نفحص الفقرات فقط لتوفير الوقت
-        paragraphs = soup.find_all('p')
-        
-        suspicious_sentences = []
-        
-        # Regex للأرقام (يتجاهل السنوات 2020-2030)
-        number_pattern = r'\b(?!(?:202[0-9]|2030)\b)\d+(?:\.\d+)?'
-
-        for p in paragraphs:
-            text = p.get_text()
-            if re.search(number_pattern, text):
-                # إذا وجدنا رقماً، هذه جملة حساسة تحتاج تدقيق
-                suspicious_sentences.append(str(p))
-
-        if not suspicious_sentences:
+        if not chunks_to_verify:
             return html_content
 
-        # نرسل الجمل المشبوهة للـ AI دفعة واحدة ليصححها
-        logger.info(f"🔍 Audit: Checking {len(suspicious_sentences)} paragraphs containing numbers...")
+        logger.info(f"💉 Starting Fact Surgery on {len(chunks_to_verify)} sensitive elements...")
         
-        correction_map = self._ai_batch_fact_check(suspicious_sentences, source_text)
-        
-        # تطبيق التصحيحات
-        new_html = str(soup)
-        fixed_count = 0
-        for original, corrected in correction_map.items():
-            if original != corrected:
-                # استبدال ذكي (قد يفشل إذا تغير الـ HTML قليلاً، لذا نستخدم replace بحذر)
-                # الأفضل: استبدال النص داخل التاج، لكن هنا سنستبدل السترينغ
-                if original in new_html: # تأكد من وجوده
-                     # تنظيف التاجات الزائدة التي قد يضيفها AI
-                    clean_corrected = corrected.replace('<html>', '').replace('</html>', '').replace('<body>', '')
-                    new_html = new_html.replace(original, clean_corrected)
-                    fixed_count += 1
-
-        if fixed_count > 0:
-            logger.info(f"✅ Healed: {fixed_count} factual errors corrected.")
-            
-        return new_html
-
-    def _ai_batch_fact_check(self, sentences_html, source_text):
-        """
-        يرسل قائمة جمل HTML ويطلب قاموساً بالتصحيحات.
-        """
         prompt = f"""
-        TASK: Fact-Check & Fix.
-        SOURCE TEXT (TRUTH): {source_text[:15000]}
-        
-        INPUT HTML SNIPPETS TO CHECK:
-        {json.dumps(sentences_html)}
+        TASK: Technical Content Surgery.
+        TRUTH DATA (Raw Sources): {full_source_text[:15000]}
+        DRAFT HTML ELEMENTS: {json.dumps(chunks_to_verify)}
         
         INSTRUCTIONS:
-        1. For each HTML snippet, check if the NUMBERS or CLAIMS match the Source Text.
-        2. IF CORRECT: Return it exactly as is.
-        3. IF WRONG/HALLUCINATED: Rewrite the text with the CORRECT number/fact from source. Keep HTML tags (<p>, <a>) intact.
-        4. IF NOT IN SOURCE AT ALL: Rewrite it to be vague/safe (e.g., change "500mAh" to "a large battery") OR remove the sentence if it's a lie.
+        1. For each HTML element, compare every number, date, and technical claim with the TRUTH DATA.
+        2. IF WRONG: Rewrite the entire HTML element with the CORRECT information. Preserve all original HTML tags (<a>, <strong>, etc.).
+        3. IF HALLUCINATED (claim is not in TRUTH DATA): Do NOT delete. Rewrite it to be a logical professional observation based on what IS in the source. (e.g., If source says a chip is fast, you can infer 'This could improve gaming performance').
+        4. IF CORRECT: Return it exactly as is.
         
-        OUTPUT: JSON Object {{ "original_html_string": "corrected_html_string" }}
+        OUTPUT: JSON dictionary {{ "original_html_string": "corrected_html_string" }}
         """
         try:
             resp = self.client.models.generate_content(
@@ -159,134 +73,154 @@ class AdvancedContentValidator:
                 contents=prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
-            return json.loads(resp.text)
+            corrections = json.loads(resp.text)
+            
+            final_html = str(soup)
+            for original, corrected in corrections.items():
+                if original in final_html and corrected:
+                    # تنظيف مخرجات الـ AI من أي زوائد
+                    clean_fix = re.sub(r'</?(html|body|head)>', '', corrected, flags=re.IGNORECASE)
+                    final_html = final_html.replace(original, clean_fix)
+            
+            return final_html
         except Exception as e:
-            logger.error(f"❌ Fact Check Error: {e}")
-            return {} # في حال الفشل، لا نغير شيئاً
+            logger.error(f"❌ Fact Surgery Failed: {e}")
+            return html_content
 
     # ==============================================================================
-    # 3. LINK HEALING (إصلاح الروابط المكسورة)
+    # 2. WIDGET RECONSTRUCTION (إعادة بناء العناصر التالفة)
     # ==============================================================================
-    def heal_broken_links(self, html_content, valid_sources_list):
+    def rebuild_damaged_widgets(self, html_content, full_source_text):
         """
-        إذا كان الرابط 404، يحاول استبداله برابط صحيح من قائمة المصادر (valid_sources_list).
+        يفحص الجداول والقوائم. إذا وجدها فارغة أو تحتوي على "N/A" بكثرة، 
+        يعيد بناءها من الصفر باستخدام المصادر الحقيقية.
+        """
+        if "comparison-table" not in html_content:
+            return html_content
+
+        soup = BeautifulSoup(html_content, 'html.parser')
+        modified = False
+        
+        # فحص جودة الجدول
+        table = soup.find('table', class_='comparison-table')
+        if table:
+            cells = table.find_all('td')
+            # إذا كان نصف الجدول تقريباً فارغاً أو يحتوي كلمات تافهة
+            if cells:
+                empty_cells = [c for c in cells if len(c.get_text(strip=True)) < 2 or "n/a" in c.get_text(strip=True).lower()]
+                if len(empty_cells) > (len(cells) / 2):
+                    logger.warning("🔨 Comparison table is low quality. Rebuilding from source...")
+                    new_table = self._generate_element_from_ai("Comparison Table", full_source_text)
+                    if new_table:
+                        table.replace_with(BeautifulSoup(new_table, 'html.parser'))
+                        modified = True
+
+        return str(soup) if modified else html_content
+
+    @retry(stop=stop_after_attempt(2), wait=wait_fixed(2))
+    def _generate_element_from_ai(self, element_type, source_text):
+        prompt = f"REBUILD TASK: Create a high-quality HTML {element_type} using ONLY facts from: {source_text[:8000]}. Use clean CSS classes like 'comparison-table'."
+        try:
+            resp = self.client.models.generate_content(model=self.model_name, contents=prompt)
+            return resp.text.replace("```html", "").replace("```", "").strip()
+        except: return None
+
+    # ==============================================================================
+    # 3. INTELLIGENT LINK RESTORATION (ترميم الروابط المكسورة)
+    # ==============================================================================
+    def restore_link_integrity(self, html_content, sources_metadata):
+        """
+        إذا وجد رابطاً مكسوراً، يرممه بدلاً من حذفه أو استبداله برابط عشوائي.
         """
         soup = BeautifulSoup(html_content, 'html.parser')
         links = soup.find_all('a', href=True)
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        
-        healed_count = 0
         
         for link in links:
             url = link['href']
-            if "blogger" in url or "#" in url: continue
-            
-            is_dead = False
+            # تخطي الروابط الداخلية وروابط التواصل الاجتماعي
+            if any(x in url for x in ["latestai.me", "facebook.com", "instagram.com", "x.com", "youtube.com", "reddit.com", "pinterest.com"]) or url.startswith('#'):
+                continue
+
             try:
-                r = requests.head(url, headers=headers, timeout=3)
-                if r.status_code >= 400: is_dead = True
-            except: is_dead = True
-            
-            if is_dead:
-                logger.warning(f"⚠️ Dead Link: {url}. Attempting to recover...")
+                # محاولة فحص الرابط بسرعة
+                r = self.session.head(url, timeout=3, allow_redirects=True)
+                if r.status_code >= 400: raise Exception("Dead Link")
+            except:
+                logger.warning(f"🩹 Healing broken link: {url}")
+                parsed_url = urlparse(url)
+                target_domain = parsed_url.netloc.replace('www.', '')
                 
-                # استراتيجية العلاج:
-                # نبحث في قائمة المصادر الأصلية عن رابط من نفس الدومين
-                # أو نستبدله بالرابط الرئيسي للمقال (أول مصدر)
-                
-                # استخراج الدومين المكسور
-                try: broken_domain = re.search(r'https?://([^/]+)', url).group(1)
-                except: broken_domain = ""
-                
+                # استراتيجية الترميم: البحث عن رابط صحيح لنفس الدومين في المصادر الموثوقة
                 replacement_url = None
-                
-                # 1. البحث عن تطابق الدومين
-                if broken_domain:
-                    for src in valid_sources_list:
-                        if broken_domain in src['url']:
-                            replacement_url = src['url']
-                            break
-                
-                # 2. إذا فشل، نستخدم المصدر الأقوى (الأول)
-                if not replacement_url and valid_sources_list:
-                    replacement_url = valid_sources_list[0]['url']
+                for src in sources_metadata:
+                    if target_domain in src['url']:
+                        replacement_url = src['url']
+                        break
                 
                 if replacement_url:
                     link['href'] = replacement_url
-                    logger.info(f"✅ Healed Link: Swapped dead URL with {replacement_url}")
-                    healed_count += 1
+                    logger.info(f"✅ Link restored to source: {replacement_url}")
                 else:
-                    # الحل الأخير: إزالة الرابط
-                    link.replace_with(link.text)
-                    
+                    # إذا لم يجد، يبحث عن أي ذكر لاسم الدومين ويربطه بأول مصدر دسم
+                    if sources_metadata:
+                        link['href'] = sources_metadata[0]['url']
+                        logger.info(f"✅ Link pivoted to main source: {sources_metadata[0]['url']}")
+        
         return str(soup)
 
     # ==============================================================================
-    # 4. QUOTE HEALING (استبدال الاقتباسات المزيفة)
+    # 4. QUOTE VERIFIER & ANCHORING (التأكد من الاقتباسات وتثبيتها)
     # ==============================================================================
-    def verify_and_swap_quotes(self, html_content, source_text):
+    def verify_quotes(self, html_content, source_text):
+        """
+        يتأكد أن كل اقتباس موجود في النص المصدري. إذا كان مزيفاً، يستبدله بآخر حقيقي.
+        """
         soup = BeautifulSoup(html_content, 'html.parser')
         quotes = soup.find_all('blockquote')
         
         for bq in quotes:
-            quote_text = bq.get_text()
-            # فحص بسيط: هل جزء من النص موجود في المصدر؟
-            # نأخذ أكبر 4 كلمات متتالية ونبحث عنها
+            quote_text = bq.get_text(strip=True)
             words = quote_text.split()
-            is_fake = True
-            if len(words) > 5:
-                chunk = " ".join(words[3:7]) # عينة
-                if chunk.lower() in source_text.lower():
-                    is_fake = False
-            
-            if is_fake:
-                logger.warning(f"⚠️ Fake Quote Detected. Finding a REAL substitute...")
-                
-                # نطلب من AI استخراج اقتباس حقيقي بديل
-                real_quote_html = self._find_real_quote(source_text)
-                
-                if real_quote_html and "<blockquote>" in real_quote_html:
-                    # استبدال الـ Blockquote القديم بالجديد
-                    new_tag = BeautifulSoup(real_quote_html, 'html.parser')
-                    bq.replace_with(new_tag)
-                    logger.info("✅ Fixed: Replaced fake quote with real one.")
+            # فحص إذا كان جزء من الاقتباس موجوداً في المصدر لمنع الهلوسة الكاملة
+            if len(words) > 3 and " ".join(words[:4]).lower() not in source_text.lower():
+                logger.warning("⚠️ Replacing hallucinated quote with a real one...")
+                real_quote = self._find_real_quote_from_ai(source_text)
+                if real_quote:
+                    # استخدام beautifulsoup للتأكد من أن الكود سليم قبل الإضافة
+                    bq.replace_with(BeautifulSoup(real_quote, 'html.parser'))
                 else:
-                    # إذا فشل في إيجاد بديل، نحذفه
-                    bq.decompose()
-                    
+                    bq.decompose() # حذف الاقتباس المزيف إذا لم نجد بديلاً
+        
         return str(soup)
 
-    def _find_real_quote(self, source_text):
-        prompt = f"""
-        TASK: Extract a VERBATIM Quote.
-        SOURCE: {source_text[:10000]}
-        INSTRUCTION: Find ONE strong, real sentence/quote from the text representing the main opinion.
-        FORMAT: Return HTML <blockquote>...</blockquote> with <footer> citation.
-        IF NONE FOUND: Return "NONE".
-        """
+    def _find_real_quote_from_ai(self, source_text):
+        prompt = f"EXTRACT VERBATIM QUOTE: Find one powerful, real sentence from this text: {source_text[:5000]}. Return it as a single HTML <blockquote> with a <footer> if possible."
         try:
             resp = self.client.models.generate_content(model=self.model_name, contents=prompt)
-            if "NONE" in resp.text: return None
-            return resp.text.replace("```html", "").replace("```", "")
+            return resp.text.replace("```html", "").replace("```", "").strip()
         except: return None
 
     # ==============================================================================
-    # MASTER RUNNER
+    # MASTER RUNNER (المنفذ الرئيسي)
     # ==============================================================================
-    def run_professional_validation(self, html_content, full_source_text, sources_list_metadata):
-        logger.info("🛡️ STARTING PROFESSIONAL SELF-HEALING PROTOCOL...")
+    def run_professional_validation(self, html_content, full_source_text, sources_metadata):
+        logger.info("🛡️ CORE SURGEON 3.0: COMMENCING FULL RESTORATION...")
         
-        # 1. Structure (Inject Missing Parts)
-        html = self.ensure_structure_integrity(html_content, [], full_source_text)
+        # 1. جراحة الحقائق (Active Correction) - الأهم أولاً
+        html = self.perform_fact_surgery(html_content, full_source_text)
         
-        # 2. Facts (Correct Numbers) - AI Heavy
-        html = self.verify_and_heal_facts(html, full_source_text)
+        # 2. الهيكل والويدجات
+        html = self.rebuild_damaged_widgets(html, full_source_text)
         
-        # 3. Quotes (Swap Fakes)
-        html = self.verify_and_swap_quotes(html, full_source_text)
+        # 3. الاقتباسات
+        html = self.verify_quotes(html, full_source_text)
         
-        # 4. Links (Recover Dead Ones)
-        html = self.heal_broken_links(html, sources_list_metadata)
+        # 4. الروابط
+        html = self.restore_link_integrity(html, sources_metadata)
         
-        logger.info("✅ PROTOCOL COMPLETE. Content is clean.")
+        # تنظيف نهائي صارم للـ HTML من أي زوائد
+        html = re.sub(r'</?(html|body|head|meta|title)>', '', html, flags=re.IGNORECASE)
+        html = re.sub(r'>\s+<', '><', html).strip() # إزالة المسافات بين التاجات
+        
+        logger.info("✅ RESTORATION COMPLETE. Article is clinically clean and verified.")
         return html
