@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - [CORE-SURGEON-3.0]
 logger = logging.getLogger("CoreSurgeon")
 
 class AdvancedContentValidator:
-    def __init__(self, google_client, model_name="gemini-3-flash-preview"):
+    def __init__(self, google_client, model_name="gemini-2.5-flash"):
         self.client = google_client
         self.model_name = model_name
         self.session = requests.Session()
