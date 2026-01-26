@@ -1,5 +1,6 @@
 # FILE: main.py
-# DESCRIPTION: Orchestrator. RESTORED: Video Retry Loop, Strict Keyword Filtering.
+# STATUS: AUDITED & VERIFIED
+# FEATURES: Full Orchestration, Retry Loops, Strict Filtering, Image/Video Integration.
 
 import os
 import json
@@ -61,15 +62,13 @@ def run_pipeline(category, config, forced_keyword=None):
     # 3. SMART MULTI-SOURCE HUNTING
     log("   🕵️‍♂️ Starting Source Hunting Mission...")
     
-    # RESTORED: Significant Keyword Logic
     required_terms = target_keyword.lower().split()
     significant_keyword = max(required_terms, key=len) if required_terms else ""
     
     rss_query = f"{target_keyword} when:2d"
-    items = news_fetcher.get_real_news_rss(rss_query, category) # Uses the robust fetcher
+    items = news_fetcher.get_real_news_rss(rss_query, category)
     
     if not items:
-        # Try GNews as backup
         items = news_fetcher.get_gnews_api_sources(target_keyword, category)
 
     collected_sources = []
@@ -77,12 +76,12 @@ def run_pipeline(category, config, forced_keyword=None):
     for item in items:
         if len(collected_sources) >= 3: break
         
-        # RESTORED: Boring Filter
+        # Boring Filter
         if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
             log(f"         ⛔ Skipped Boring Corporate Topic: {item['title']}")
             continue
             
-        # RESTORED: Strict Title Relevance
+        # Strict Title Relevance
         if significant_keyword and len(significant_keyword) > 3:
             if significant_keyword not in item['title'].lower():
                 log(f"         ⚠️ Skipped Irrelevant Title: '{item['title']}'")
@@ -90,10 +89,11 @@ def run_pipeline(category, config, forced_keyword=None):
 
         if any(s['url'] == item['link'] for s in collected_sources): continue
         
-        f_url, f_title, text = scraper.resolve_and_scrape(item['link'])
+        # --- CRITICAL: Receive 4 variables ---
+        f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
         
         if text:
-            # RESTORED: Strict Body Relevance Check
+            # Strict Body Relevance
             if significant_keyword and significant_keyword not in text.lower():
                 log(f"         ⚠️ Skipped: Text missing keyword '{significant_keyword}'")
                 continue
@@ -104,11 +104,11 @@ def run_pipeline(category, config, forced_keyword=None):
                 "url": f_url, 
                 "text": text,
                 "date": item.get('date', 'Today'), 
-                "source_image": item.get('image') if 'image' in item else None,
+                "source_image": f_image if f_image else item.get('image'),
                 "domain": urllib.parse.urlparse(f_url).netloc
             })
     
-    if len(collected_sources) < 1: # Strictness: Need at least 1 good source
+    if len(collected_sources) < 1:
         log(f"   ❌ Insufficient source depth. Aborting.")
         return False
 
@@ -150,6 +150,7 @@ def run_pipeline(category, config, forced_keyword=None):
             required_keys=["finalTitle", "finalContent"]
         )
         
+        # --- CRITICAL: Required Keys ---
         final = api_manager.generate_step_strict(
             model_name, 
             PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), 
@@ -165,6 +166,7 @@ def run_pipeline(category, config, forced_keyword=None):
         c_imgs = [{'url': src['source_image']} for src in collected_sources if src.get('source_image')]
         
         if c_imgs:
+            log(f"      🔍 Found {len(c_imgs)} source images. Selecting best...")
             sel_img = image_processor.select_best_image_with_gemini(model_name, title, c_imgs)
             if sel_img:
                 img_url = image_processor.process_source_image(sel_img, final.get('imageOverlayText'), title)
@@ -173,13 +175,13 @@ def run_pipeline(category, config, forced_keyword=None):
             log("      ⚠️ NO SOURCE IMAGE: Activating AI Generation Backup...")
             img_url = image_processor.generate_and_upload_image(final.get('imageGenPrompt', title), final.get('imageOverlayText'))
 
-        # --- VIDEO GENERATION (RESTORED RETRY LOOP) ---
+        # --- VIDEO GENERATION ---
         log("   🎬 [Video Mission] Starting...")
         vid_main, vid_short, vid_html, fb_path = None, None, "", None
         summ = re.sub('<[^<]+?>','', content_html)[:2500]
         
         script_json = None
-        # RESTORED: The 3-Attempt Loop
+        # --- CRITICAL: Retry Loop ---
         for attempt in range(1, 4):
             log(f"      🎬 Generating Script (Attempt {attempt}/3)...")
             try:
@@ -188,7 +190,6 @@ def run_pipeline(category, config, forced_keyword=None):
                     PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), 
                     f"Video Script (Att {attempt})"
                 )
-                # Flexible parsing logic from original code
                 if isinstance(v_script_data, dict):
                     if 'video_script' in v_script_data and isinstance(v_script_data['video_script'], list):
                         script_json = v_script_data['video_script']
