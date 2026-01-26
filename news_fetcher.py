@@ -1,6 +1,5 @@
 # FILE: news_fetcher.py
-# DESCRIPTION: Fetches news from Google News RSS with targeted fallback logic.
-# RESTORED: Comma-separation logic and category fallback.
+# DESCRIPTION: Fetches news with targeted logic AND category fallback.
 
 import requests
 import urllib.parse
@@ -11,43 +10,37 @@ import os
 from config import log
 
 def get_gnews_api_sources(query, category):
-    """Fetches news using GNews.io API (If Key exists)."""
     api_key = os.getenv('GNEWS_API_KEY')
-    if not api_key:
-        return []
-
+    if not api_key: return []
     log(f"   📡 Querying GNews API for: '{query}'...")
     url = f"https://gnews.io/api/v4/search?q={urllib.parse.quote(query)}&lang=en&country=us&max=5&apikey={api_key}"
-
     try:
         r = requests.get(url, timeout=10)
         data = r.json()
-        if r.status_code != 200 or 'articles' not in data:
-            return []
-        formatted_items = []
+        if r.status_code != 200 or 'articles' not in data: return []
+        formatted = []
         for art in data.get('articles', []):
-            formatted_items.append({
+            formatted.append({
                 "title": art.get('title'),
                 "link": art.get('url'),
                 "date": art.get('publishedAt', str(datetime.date.today())),
                 "image": art.get('image')
             })
-        return formatted_items
-    except:
-        return []
+        return formatted
+    except: return []
 
 def get_real_news_rss(query_keywords, category=None):
     """
     Fetches news using Google News RSS.
-    RESTORED: Handles comma-separated keywords for targeted search.
+    RESTORED: Comma separation logic AND Category Fallback.
     """
     try:
-        # --- ORIGINAL LOGIC FOR TARGETED TOPICS ---
+        # 1. Targeted Search
         if "," in query_keywords:
             topics = [t.strip() for t in query_keywords.split(',') if t.strip()]
             focused = random.choice(topics)
             log(f"   🎯 Targeted Search: '{focused}'")
-            full_query = f"{focused} when:2d" # Restored 'when:2d'
+            full_query = f"{focused} when:2d"
         else:
             full_query = f"{query_keywords} when:2d"
 
@@ -65,7 +58,7 @@ def get_real_news_rss(query_keywords, category=None):
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
             return items 
         
-        # --- ORIGINAL FALLBACK LOGIC ---
+        # 2. RESTORED FALLBACK: Category Search
         elif category:
             log(f"   ⚠️ RSS Empty. Fallback to Category: {category}")
             fb = f"{category} news when:1d"
