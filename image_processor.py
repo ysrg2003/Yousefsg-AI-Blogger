@@ -163,9 +163,11 @@ def apply_smart_privacy_blur(pil_image):
         log(f"      ⚠️ Smart Blur Error: {e}. Fallback to global blur.")
         return pil_image.filter(ImageFilter.GaussianBlur(radius=15))
 
+
 def select_best_image_with_gemini(model_name, article_title, images_list):
     """
-    Uses Gemini Vision to select the best image, avoiding close-up faces.
+    Uses Gemini Vision to select image. 
+    FORCE: If Gemini rejects all, it defaults to the first image instead of None.
     """
     if not images_list: return None
 
@@ -187,20 +189,15 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
 
     if not valid_images: return None
 
+    # إذا كانت هناك صورة واحدة فقط، خذها فوراً ولا تسأل الذكاء الاصطناعي
+    if len(valid_images) == 1:
+        log("      ✅ Only one source image found. Using it directly.")
+        return valid_images[0]['original_url']
+
     prompt = f"""
-    TASK: Photo Editor Selection.
-    ARTICLE TITLE: "{article_title}"
-    
-    CRITERIA FOR SELECTION:
-    1. **Relevance:** Image must match the specific tech topic.
-    2. **PRIVACY & AESTHETICS:** 
-       - **PREFER:** Images of gadgets, screens, code, wide shots of offices, or robots.
-       - **AVOID:** Close-up portraits of specific people faces if an alternative exists.
-       - **AVOID:** Low quality or blurry images.
-    
-    OUTPUT INSTRUCTIONS:
-    - Return ONLY the integer index (0, 1, 2...) of the best image.
-    - If ALL images are completely irrelevant or unsafe, return -1.
+    TASK: Select best image index (0-{len(valid_images)-1}) for '{article_title}'.
+    CRITERIA: Relevance is key.
+    OUTPUT: Integer only.
     """
 
     try:
@@ -216,13 +213,7 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
             contents=inputs
         )
         
-        result = response.text.strip()
-        
-        if "-1" in result or "NONE" in result:
-            log("      🤖 Gemini rejected all source images.")
-            return None
-            
-        match = re.search(r'\d+', result)
+        match = re.search(r'\d+', response.text)
         if match:
             idx = int(match.group())
             if 0 <= idx < len(valid_images):
@@ -232,7 +223,9 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
     except Exception as e:
         log(f"      ⚠️ Gemini Vision Error: {e}")
     
-    return images_list[0]['url']
+    # --- FORCE FALLBACK TO FIRST IMAGE ---
+    log("      ⚠️ Gemini rejected/failed. FORCING usage of the first source image.")
+    return valid_images[0]['original_url']
 
 def process_source_image(source_url, overlay_text, filename_title):
     log(f"   🖼️ Processing Source Image: {source_url[:60]}...")
