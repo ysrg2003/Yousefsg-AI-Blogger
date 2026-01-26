@@ -1,5 +1,5 @@
 # FILE: news_fetcher.py
-# DESCRIPTION: Fetches news with targeted logic AND category fallback.
+# DESCRIPTION: Fetches news with smart query handling.
 
 import requests
 import urllib.parse
@@ -12,8 +12,10 @@ from config import log
 def get_gnews_api_sources(query, category):
     api_key = os.getenv('GNEWS_API_KEY')
     if not api_key: return []
-    log(f"   📡 Querying GNews API for: '{query}'...")
-    url = f"https://gnews.io/api/v4/search?q={urllib.parse.quote(query)}&lang=en&country=us&max=5&apikey={api_key}"
+    # تنظيف الاستعلام من إضافات الوقت لأن API لها معامل خاص
+    clean_query = query.replace(" when:2d", "").replace(" when:1d", "")
+    log(f"   📡 Querying GNews API for: '{clean_query}'...")
+    url = f"https://gnews.io/api/v4/search?q={urllib.parse.quote(clean_query)}&lang=en&country=us&max=5&apikey={api_key}"
     try:
         r = requests.get(url, timeout=10)
         data = r.json()
@@ -30,19 +32,21 @@ def get_gnews_api_sources(query, category):
     except: return []
 
 def get_real_news_rss(query_keywords, category=None):
-    """
-    Fetches news using Google News RSS.
-    RESTORED: Comma separation logic AND Category Fallback.
-    """
     try:
-        # 1. Targeted Search
-        if "," in query_keywords:
-            topics = [t.strip() for t in query_keywords.split(',') if t.strip()]
-            focused = random.choice(topics)
-            log(f"   🎯 Targeted Search: '{focused}'")
-            full_query = f"{focused} when:2d"
+        # تنظيف الكلمات المفتاحية
+        base_query = query_keywords.strip()
+        
+        # منطق الفاصلة (Targeted Search)
+        if "," in base_query:
+            topics = [t.strip() for t in base_query.split(',') if t.strip()]
+            base_query = random.choice(topics)
+            log(f"   🎯 Targeted Search Focus: '{base_query}'")
+
+        # --- FIX: Prevent double 'when:2d' ---
+        if "when:" not in base_query:
+            full_query = f"{base_query} when:2d"
         else:
-            full_query = f"{query_keywords} when:2d"
+            full_query = base_query
 
         log(f"   📰 Querying Google News RSS for: '{full_query}'...")
         encoded = urllib.parse.quote(full_query)
@@ -52,13 +56,13 @@ def get_real_news_rss(query_keywords, category=None):
         items = []
         
         if feed.entries:
-            for entry in feed.entries[:8]:
+            for entry in feed.entries[:10]: # زيادة العدد لزيادة الفرص
                 pub = entry.published if 'published' in entry else "Today"
                 title_clean = entry.title.split(' - ')[0]
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
             return items 
         
-        # 2. RESTORED FALLBACK: Category Search
+        # Fallback
         elif category:
             log(f"   ⚠️ RSS Empty. Fallback to Category: {category}")
             fb = f"{category} news when:1d"
