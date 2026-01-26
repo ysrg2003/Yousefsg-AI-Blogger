@@ -1,6 +1,6 @@
 # FILE: scraper.py
-# DESCRIPTION: Advanced web scraper using Selenium.
-# RESTORED: The 'while loop' for redirect resolution.
+# STATUS: AUDITED & VERIFIED
+# FEATURES: Selenium Eager Loading, Redirect Resolution Loop, OG:Image Extraction.
 
 import time
 import random
@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from config import log, USER_AGENTS
 
 def resolve_and_scrape(google_url):
-    log(f"      🕵️‍♂️ Selenium: Resolving Link with Eager Strategy...")
+    log(f"      🕵️‍♂️ Selenium: Resolving Link & Hunting Image...")
     
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
@@ -30,7 +30,7 @@ def resolve_and_scrape(google_url):
         
         driver.get(google_url)
         
-        # RESTORED: The Redirect Wait Loop
+        # --- CRITICAL: Redirect Wait Loop ---
         start_wait = time.time()
         final_url = google_url
         while time.time() - start_wait < 15: 
@@ -43,12 +43,24 @@ def resolve_and_scrape(google_url):
         final_title = driver.title
         page_source = driver.page_source
         
-        # RESTORED: Video Filter
+        # Video Filter
         bad_segments = ["/video/", "/watch", "/gallery/", "/photos/", "youtube.com"]
         if any(seg in final_url.lower() for seg in bad_segments):
             log(f"      ⚠️ Skipped Video/Gallery URL: {final_url}")
-            return None, None, None
+            return None, None, None, None
 
+        # --- CRITICAL: Image Extraction ---
+        soup = BeautifulSoup(page_source, 'html.parser')
+        og_image = None
+        try:
+            meta_img = soup.find('meta', property='og:image')
+            if meta_img: og_image = meta_img.get('content')
+            if not og_image:
+                meta_img = soup.find('meta', name='twitter:image')
+                if meta_img: og_image = meta_img.get('content')
+        except: pass
+
+        # Text Extraction
         extracted_text = trafilatura.extract(
             page_source, 
             include_comments=False, 
@@ -57,21 +69,21 @@ def resolve_and_scrape(google_url):
         )
         
         if extracted_text and len(extracted_text) > 800:
-            return final_url, final_title, extracted_text
+            return final_url, final_title, extracted_text, og_image
 
-        soup = BeautifulSoup(page_source, 'html.parser')
+        # Fallback Text
         for script in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
             script.extract()
         fallback_text = soup.get_text(" ", strip=True)
         
         if len(fallback_text) > 800:
-            return final_url, final_title, fallback_text
+            return final_url, final_title, fallback_text, og_image
             
-        return None, None, None
+        return None, None, None, None
 
     except Exception as e:
         log(f"      ❌ Selenium Error: {str(e)[:100]}")
-        return None, None, None
+        return None, None, None, None
     finally:
         if driver:
             try: driver.quit()
