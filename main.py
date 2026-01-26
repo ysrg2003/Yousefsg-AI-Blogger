@@ -30,7 +30,7 @@ import youtube_manager
 from prompts import *
 
 def run_pipeline(category, config, forced_keyword=None):
-    model_name = config['settings'].get('model_name', "gemini-3-flash-preview")
+    model_name = config['settings'].get('model_name', "gemini-2.5-flash")
     
     # --------------------------------------------------------------------------
     # 1. STRATEGY: Define the target keyword
