@@ -1,6 +1,6 @@
 # FILE: scraper.py
-# DESCRIPTION: Advanced web scraper using Selenium with Eager Loading, User-Agent rotation,
-#              and a junk-text validation layer.
+# DESCRIPTION: Advanced web scraper using Selenium with Eager Loading.
+# RESTORED: Original redirect resolution logic and Chrome options.
 
 import time
 import random
@@ -12,80 +12,77 @@ import trafilatura
 from bs4 import BeautifulSoup
 from config import log, USER_AGENTS
 
-def is_valid_article_text(text):
-    """
-    Validation Layer 2.0: Checks if scraped text is high quality or junk.
-    """
-    if not text or len(text) < 800:
-        return False
-    
-    # FIX: Removed 'robot' from this list to allow Robotics articles
-    junk_indicators = [
-        "JavaScript is required", "enable cookies", "access denied", 
-        "security check", "please verify you are a human", "403 forbidden",
-        "captcha", "cloudflare", "Incapsula"
-    ]
-    
-    text_lower = text.lower()[:500] # Check first 500 chars usually contains these messages
-    for junk in junk_indicators:
-        if junk in text_lower:
-            log(f"      🗑️ Junk detected: '{junk}'. Skipping source.")
-            return False
-            
-    return True
-
 def resolve_and_scrape(google_url):
     """
-    Opens a URL using Selenium with Eager Strategy, resolves redirects,
-    and scrapes clean, validated article text.
+    Opens a URL using Selenium, resolves redirects (crucial for Google News links),
+    and scrapes content using the original robust logic.
     """
     log(f"      🕵️‍♂️ Selenium: Resolving Link with Eager Strategy...")
     
-    random_ua = random.choice(USER_AGENTS)
-    
+    # --- ORIGINAL CHROME OPTIONS RESTORED ---
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    # Fix 1: Block images to save bandwidth
-    chrome_options.add_argument("--blink-settings=imagesEnabled=false") 
-    # Fix 2: Eager loading strategy (DOM only, skips ads/heavy scripts)
-    chrome_options.page_load_strategy = 'eager' 
-    chrome_options.add_argument(f'user-agent={random_ua}')
+    # Randomize User-Agent from config
+    chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
     chrome_options.add_argument("--mute-audio") 
 
     driver = None
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        # Fix 3: Increased timeout to 45s to avoid renderer timeout errors
-        driver.set_page_load_timeout(45) 
+        driver.set_page_load_timeout(25) 
         
         driver.get(google_url)
-        time.sleep(2) # Allow JS redirects to settle
-        final_url = driver.current_url
-        page_source = driver.page_source
-
-        # Try Trafilatura first for high-quality extraction
-        text = trafilatura.extract(page_source, include_comments=False, favor_precision=True)
-        if is_valid_article_text(text):
-            return final_url, driver.title, text
-            
-        # Fallback to BeautifulSoup if Trafilatura fails
-        soup = BeautifulSoup(page_source, 'html.parser')
-        for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript", "form", "iframe"]): 
-            tag.extract()
-        bs_text = soup.get_text(" ", strip=True)
-        if is_valid_article_text(bs_text):
-            return final_url, driver.title, bs_text
         
+        # --- ORIGINAL REDIRECT LOGIC RESTORED ---
+        # This loop waits for the URL to change from "google.com" to the actual site
+        start_wait = time.time()
+        final_url = google_url
+        
+        while time.time() - start_wait < 15: 
+            current = driver.current_url
+            if "news.google.com" not in current and "google.com" not in current:
+                final_url = current
+                break
+            time.sleep(1) 
+        
+        final_title = driver.title
+        page_source = driver.page_source
+        
+        # Filter out video/gallery pages (Original Logic)
+        bad_segments = ["/video/", "/watch", "/gallery/", "/photos/", "youtube.com"]
+        if any(seg in final_url.lower() for seg in bad_segments):
+            log(f"      ⚠️ Skipped Video/Gallery URL: {final_url}")
+            return None, None, None
+
+        # Try Trafilatura (Best quality)
+        extracted_text = trafilatura.extract(
+            page_source, 
+            include_comments=False, 
+            include_tables=True, # Restored
+            favor_precision=True
+        )
+        
+        if extracted_text and len(extracted_text) > 800:
+            return final_url, final_title, extracted_text
+
+        # Fallback: BeautifulSoup (Original Logic)
+        soup = BeautifulSoup(page_source, 'html.parser')
+        for script in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
+            script.extract()
+        fallback_text = soup.get_text(" ", strip=True)
+        
+        if len(fallback_text) > 800:
+            return final_url, final_title, fallback_text
+            
         return None, None, None
+
     except Exception as e:
-        log(f"      ❌ Scraper Error: {str(e)[:100]}")
+        log(f"      ❌ Selenium Error: {str(e)[:100]}")
         return None, None, None
     finally:
         if driver:
-            try:
-                driver.quit()
-            except:
-                pass
+            try: driver.quit()
+            except: pass
