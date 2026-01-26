@@ -1,6 +1,6 @@
 # FILE: scraper.py
-# DESCRIPTION: Advanced web scraper using Selenium with Eager Loading.
-# RESTORED: Original redirect resolution logic and Chrome options.
+# DESCRIPTION: Advanced web scraper using Selenium.
+# RESTORED: The 'while loop' for redirect resolution.
 
 import time
 import random
@@ -13,18 +13,12 @@ from bs4 import BeautifulSoup
 from config import log, USER_AGENTS
 
 def resolve_and_scrape(google_url):
-    """
-    Opens a URL using Selenium, resolves redirects (crucial for Google News links),
-    and scrapes content using the original robust logic.
-    """
     log(f"      🕵️‍♂️ Selenium: Resolving Link with Eager Strategy...")
     
-    # --- ORIGINAL CHROME OPTIONS RESTORED ---
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    # Randomize User-Agent from config
     chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
     chrome_options.add_argument("--mute-audio") 
 
@@ -36,11 +30,9 @@ def resolve_and_scrape(google_url):
         
         driver.get(google_url)
         
-        # --- ORIGINAL REDIRECT LOGIC RESTORED ---
-        # This loop waits for the URL to change from "google.com" to the actual site
+        # RESTORED: The Redirect Wait Loop
         start_wait = time.time()
         final_url = google_url
-        
         while time.time() - start_wait < 15: 
             current = driver.current_url
             if "news.google.com" not in current and "google.com" not in current:
@@ -51,24 +43,22 @@ def resolve_and_scrape(google_url):
         final_title = driver.title
         page_source = driver.page_source
         
-        # Filter out video/gallery pages (Original Logic)
+        # RESTORED: Video Filter
         bad_segments = ["/video/", "/watch", "/gallery/", "/photos/", "youtube.com"]
         if any(seg in final_url.lower() for seg in bad_segments):
             log(f"      ⚠️ Skipped Video/Gallery URL: {final_url}")
             return None, None, None
 
-        # Try Trafilatura (Best quality)
         extracted_text = trafilatura.extract(
             page_source, 
             include_comments=False, 
-            include_tables=True, # Restored
+            include_tables=True,
             favor_precision=True
         )
         
         if extracted_text and len(extracted_text) > 800:
             return final_url, final_title, extracted_text
 
-        # Fallback: BeautifulSoup (Original Logic)
         soup = BeautifulSoup(page_source, 'html.parser')
         for script in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
             script.extract()
