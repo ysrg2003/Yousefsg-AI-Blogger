@@ -248,6 +248,7 @@ def run_pipeline(category, config, forced_keyword=None):
                         <a href="https://www.instagram.com/latestai.me" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/3955/3955024.png" width="24"></a>
                         <a href="https://m.youtube.com/@0latestai" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24"></a>
                         <a href="https://pinterest.com/latestaime" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/145/145808.png" width="24"></a>
+                        <a href="https://reddit.com/user/Yousefsg/" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="26"></a>
                         <a href="https://www.latestai.me" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24"></a>
                     </div>
                 </div>
