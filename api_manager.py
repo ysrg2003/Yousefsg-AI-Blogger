@@ -104,6 +104,7 @@ def discover_fresh_model(current_model_name):
     priority_list = [
         "gemini-3-flash-preview", 
         "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
         "gemini-2.0-flash-exp",
         "gemini-1.5-flash"
     ]
@@ -173,11 +174,16 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
             temperature=0.3, 
             top_p=0.8
         )
+
+        request_options = {"timeout": 300} # انتظر حتى 5 دقائق للرد
         
         response = client.models.generate_content(
             model=model_to_use, 
             contents=prompt, 
-            config=generation_config
+            config=generation_config,
+            request_options=request_options
+            
+    
         )
         
         # --- Robust Parsing & Repair ---
