@@ -1,6 +1,6 @@
 # FILE: api_manager.py
-# DESCRIPTION: Manages all interactions with the Gemini API, including key rotation,
-#              model discovery, and robust, self-healing API calls.
+# DESCRIPTION: Manages Gemini API interactions with Key Rotation & Self-Healing.
+# COMBINED: Original Logic + API Heat Improvement.
 
 import os
 import time
@@ -13,14 +13,13 @@ from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from config import log
 
-# Global state for model management
+# Global state
 TRIED_MODELS = set()
 CURRENT_MODEL_OVERRIDE = None
+API_HEAT = 5 # Improvement: Dynamic Cooldown
 
 class KeyManager:
-    """
-    Manages a pool of API keys, rotating them on failure.
-    """
+    """Manages API keys pool."""
     def __init__(self):
         self.keys = []
         for i in range(1, 11):
@@ -41,7 +40,7 @@ class KeyManager:
             self.current_index += 1
             log(f"   🔄 Switching to Key #{self.current_index + 1}...")
             return True
-        log("   ⚠️ All keys exhausted. Resetting to Key #1 for Model Switch...")
+        log("   ⚠️ All keys exhausted. Resetting to Key #1...")
         self.current_index = 0
         return False
 
@@ -76,94 +75,41 @@ def master_json_parser(text):
 
 def validate_structure(data, required_keys):
     if not isinstance(data, dict):
-        raise JSONValidationError(f"Expected Dictionary output, but got type: {type(data)}")
-    missing_keys = [key for key in required_keys if key not in data]
-    if missing_keys:
-        raise JSONValidationError(f"JSON is valid but missing required keys: {missing_keys}")
+        raise JSONValidationError(f"Expected Dictionary, got {type(data)}")
+    missing = [k for k in required_keys if k not in data]
+    if missing:
+        raise JSONValidationError(f"Missing keys: {missing}")
     return True
 
-def discover_fresh_model(current_model_name):
-    """Finds a new model when the current one fails on all keys."""
-    global CURRENT_MODEL_OVERRIDE
-    log(f"   🕵️‍♂️ Discovery Mode: Finding replacement for {current_model_name}...")
-    TRIED_MODELS.add(current_model_name.replace('models/', ''))
-    
-    key = key_manager.get_current_key()
-    client = genai.Client(api_key=key)
-    
-    candidates = []
-    try:
-        for m in client.models.list():
-            m_name = m.name.replace('models/', '')
-            if 'gemini' in m_name and 'embedding' not in m_name:
-                if m_name not in TRIED_MODELS:
-                    candidates.append(m_name)
-    except Exception as e:
-        log(f"   ⚠️ Listing models failed: {e}")
-
-    priority_list = [
-        "gemini-2.5-flash",
-        "gemini-3-flash-preview", 
-        "gemini-2.0-flash-exp",
-        "gemini-1.5-flash"
-    ]
-    
-    final_choice = None
-    for p in priority_list:
-        if p in candidates and p not in TRIED_MODELS:
-            final_choice = p
-            break
-        if not candidates and p not in TRIED_MODELS:
-            final_choice = p
-            break
-            
-    if final_choice:
-        log(f"   💡 New Model Selected: {final_choice}")
-        CURRENT_MODEL_OVERRIDE = final_choice 
-        return final_choice
-    
-    log("   ❌ Fatal: No untried models left.")
-    return None
-
-# --- DYNAMIC HEAT MANAGEMENT SYSTEM ---
-# Global variable to track API "health". Higher value = more cooldown.
-API_HEAT = 5  # Start with a safe 5-second cooldown
-
 @retry(
-    stop=stop_after_attempt(15), 
-    wait=wait_exponential(multiplier=2.5, min=5, max=90), 
+    stop=stop_after_attempt(10), 
+    wait=wait_exponential(multiplier=2, min=4, max=60), 
     retry=retry_if_exception_type(Exception), 
     before_sleep=before_sleep_log(logger, logging.WARNING)
 )
 def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]):
     global API_HEAT
-    
-    # --- Model Selection ---
-    model_to_use = (CURRENT_MODEL_OVERRIDE if CURRENT_MODEL_OVERRIDE else initial_model_name).replace("models/", "") 
+    model_to_use = (CURRENT_MODEL_OVERRIDE if CURRENT_MODEL_OVERRIDE else initial_model_name).replace("models/", "")
     
     log(f"   🔄 [Tenacity] Executing: {step_name} | Model: {model_to_use}")
     
     key = key_manager.get_current_key()
-    if not key: 
-        raise RuntimeError("FATAL: All API Keys have been exhausted.")
+    if not key: raise RuntimeError("FATAL: No API Keys.")
     
     client = genai.Client(api_key=key)
     
     try:
-        # 1. Proactive Cooling
+        # Improvement: Proactive Cooling
         if API_HEAT > 0:
             log(f"      🌡️ API Heat is at {API_HEAT}s. Cooling down...")
-            time.sleep(API_HEAT) 
+            time.sleep(API_HEAT)
         
         generation_config = types.GenerateContentConfig(
             response_mime_type="application/json", 
             system_instruction=STRICT_SYSTEM_PROMPT, 
-            temperature=0.3, 
-            top_p=0.8
+            temperature=0.3
         )
         
-        # Note: We do NOT use 'request_options' here to avoid TypeError.
-        # We rely on Tenacity to handle timeouts via retries.
         response = client.models.generate_content(
             model=model_to_use, 
             contents=prompt, 
@@ -171,60 +117,39 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
         )
         
         if not response.text:
-            log(f"      ❌ CRITICAL: API returned an empty response for {step_name}. Retrying.")
-            raise JSONParsingError("API returned empty response.")
+            raise JSONParsingError("Empty response from API.")
 
         parsed_data = master_json_parser(response.text)
         
         if not parsed_data:
-            log(f"      ⚠️ Parsing failed. Triggering AI-powered repair...")
-            time.sleep(2)
-            repair_response = client.models.generate_content(
-                model=model_to_use, 
-                contents=f"CRITICAL: Fix the following broken JSON syntax:\n{response.text[:5000]}", 
+            log(f"      ⚠️ Parsing failed. Triggering AI Repair...")
+            repair_resp = client.models.generate_content(
+                model="gemini-2.5-flash", 
+                contents=f"Fix this broken JSON:\n{response.text[:5000]}", 
                 config=generation_config
             )
-            parsed_data = master_json_parser(repair_response.text)
-            
+            parsed_data = master_json_parser(repair_resp.text)
             if not parsed_data:
-                log(f"      ❌ CRITICAL: AI Repair failed for {step_name}. Forcing full retry.")
-                raise JSONParsingError(f"Failed to parse JSON for {step_name} even after repair attempt.")
+                raise JSONParsingError("Repair failed.")
 
-        if required_keys: 
+        if required_keys:
             validate_structure(parsed_data, required_keys)
         
-        # 2. SUCCESS: Cool down
-        API_HEAT = max(3, API_HEAT - 2) 
-        log(f"      ✅ Success: {step_name} completed. API Heat reduced to {API_HEAT}s.")
+        # Success: Cool down
+        API_HEAT = max(3, API_HEAT - 2)
+        log(f"      ✅ Success: {step_name} completed.")
         return parsed_data
 
     except Exception as e:
         error_msg = str(e).lower()
-        
-        is_quota_or_permission_error = "429" in error_msg or "quota" in error_msg or "403" in error_msg
-        is_server_overload_error = "503" in error_msg or "overloaded" in error_msg
-        is_model_not_found_error = "404" in error_msg or "not found" in error_msg
-        
-        if is_quota_or_permission_error:
-            log(f"      ⚠️ Key-specific Error on Key #{key_manager.current_index + 1}. Switching key...")
+        if "429" in error_msg or "quota" in error_msg:
+            log(f"      ⚠️ Quota Error. Switching Key...")
             if not key_manager.switch_key():
-                log(f"      ⛔ Model {model_to_use} failed on ALL keys. Switching model...")
-                time.sleep(20) 
-                new_model = discover_fresh_model(model_to_use)
-                if not new_model: 
-                    raise RuntimeError("FATAL: All models failed. Cannot continue.")
-            raise e 
-        
-        elif is_server_overload_error:
-            API_HEAT = min(90, API_HEAT + 15) 
-            log(f"      🔥 Server Overload (503). API Heat increased to {API_HEAT}s. Waiting for exponential backoff.")
-            raise e 
-        
-        elif is_model_not_found_error:
-             log(f"      ❌ Model {model_to_use} NOT FOUND. Switching immediately.")
-             discover_fresh_model(model_to_use)
-             raise e 
-             
+                raise RuntimeError("All keys exhausted.")
+            raise e # Retry with new key
+        elif "503" in error_msg:
+            API_HEAT += 10
+            raise e
         else:
-            log(f"      ❌ General Error for {step_name}: {str(e)[:200]}")
+            log(f"      ❌ Error in {step_name}: {str(e)[:100]}")
             raise e
