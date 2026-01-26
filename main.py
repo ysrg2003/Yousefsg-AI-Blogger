@@ -1,5 +1,5 @@
 # FILE: main.py
-# DESCRIPTION: The main orchestrator. Corrected to match the original robust logic.
+# DESCRIPTION: Orchestrator. RESTORED: Video Retry Loop, Strict Keyword Filtering.
 
 import os
 import json
@@ -10,8 +10,6 @@ import datetime
 import urllib.parse
 import traceback
 import re
-
-# --- RESTORED IMPORT ---
 from google import genai 
 
 # Local Modules
@@ -22,8 +20,6 @@ import scraper
 import image_processor
 import history_manager
 import publisher
-
-# Peripheral Modules
 import content_validator_pro
 import reddit_manager
 import social_manager
@@ -36,16 +32,14 @@ def run_pipeline(category, config, forced_keyword=None):
     
     # 1. STRATEGY
     target_keyword = ""
-    is_manual_mode = False
     if forced_keyword:
         log(f"   👉 [Mode: Manual Fallback] Keyword: '{forced_keyword}'")
-        target_keyword, is_manual_mode = forced_keyword, True
+        target_keyword = forced_keyword
     else:
         log(f"   👉 [Mode: AI Strategist] Category: {category}")
         recent = history_manager.get_recent_titles_string(category=category)
         try:
             seo_p = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today(), history=recent)
-            # RESTORED: required_keys
             seo_plan = api_manager.generate_step_strict(
                 model_name, seo_p, "SEO Strategy", required_keys=["target_keyword"]
             )
@@ -55,8 +49,7 @@ def run_pipeline(category, config, forced_keyword=None):
             log(f"   ❌ SEO Strategy failed: {e}")
             return False
 
-    if not target_keyword:
-        return False
+    if not target_keyword: return False
 
     # 2. SEMANTIC GUARD
     log("   🧠 Checking memory to avoid repetition...")
@@ -67,53 +60,56 @@ def run_pipeline(category, config, forced_keyword=None):
 
     # 3. SMART MULTI-SOURCE HUNTING
     log("   🕵️‍♂️ Starting Source Hunting Mission...")
-    collected_sources = []
-    words = target_keyword.split()
-    significant_word = max(words, key=len) if words else category
     
-    search_strategies = [
-        f'"{target_keyword}"', 
-        f'{target_keyword} (breakthrough OR revealed OR review)',
-        f'{significant_word} vs (Sora OR ChatGPT OR Gemini OR Claude)',
-        f'{category} update 2026'
-    ]
+    # RESTORED: Significant Keyword Logic
+    required_terms = target_keyword.lower().split()
+    significant_keyword = max(required_terms, key=len) if required_terms else ""
+    
+    rss_query = f"{target_keyword} when:2d"
+    items = news_fetcher.get_real_news_rss(rss_query, category) # Uses the robust fetcher
+    
+    if not items:
+        # Try GNews as backup
+        items = news_fetcher.get_gnews_api_sources(target_keyword, category)
 
-    for attempt_idx, query in enumerate(search_strategies):
-        if len(collected_sources) >= 3:
-            log(f"   ✅ Collected sufficient sources ({len(collected_sources)}). Moving on.")
-            break
+    collected_sources = []
+    
+    for item in items:
+        if len(collected_sources) >= 3: break
+        
+        # RESTORED: Boring Filter
+        if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
+            log(f"         ⛔ Skipped Boring Corporate Topic: {item['title']}")
+            continue
             
-        log(f"   🕵️‍♂️ Hunting Level {attempt_idx + 1}: '{query}'")
-        items = news_fetcher.get_gnews_api_sources(query, category)
-        if not items:
-            items = news_fetcher.get_real_news_rss(query)
-            
-        for item in items:
-            if len(collected_sources) >= 3: break
-            
-            # --- RESTORED: Boring Filter ---
-            if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
-                log(f"         ⛔ Skipped Boring Corporate Topic: {item['title']}")
+        # RESTORED: Strict Title Relevance
+        if significant_keyword and len(significant_keyword) > 3:
+            if significant_keyword not in item['title'].lower():
+                log(f"         ⚠️ Skipped Irrelevant Title: '{item['title']}'")
                 continue
-            # -------------------------------
 
-            if any(s['url'] == item['link'] for s in collected_sources): continue
-            
-            f_url, f_title, text = scraper.resolve_and_scrape(item['link'])
-            if text:
-                log(f"         ✅ Source Captured! ({len(text)} chars)")
-                collected_sources.append({
-                    "title": f_title or item['title'], 
-                    "url": f_url, 
-                    "text": text,
-                    "date": item.get('date', 'Today'), 
-                    "source_image": item.get('image'),
-                    "domain": urllib.parse.urlparse(f_url).netloc
-                })
-        time.sleep(1)
+        if any(s['url'] == item['link'] for s in collected_sources): continue
+        
+        f_url, f_title, text = scraper.resolve_and_scrape(item['link'])
+        
+        if text:
+            # RESTORED: Strict Body Relevance Check
+            if significant_keyword and significant_keyword not in text.lower():
+                log(f"         ⚠️ Skipped: Text missing keyword '{significant_keyword}'")
+                continue
 
-    if len(collected_sources) < 2:
-        log(f"   ❌ Insufficient source depth ({len(collected_sources)}). Aborting.")
+            log(f"         ✅ Source Captured! ({len(text)} chars)")
+            collected_sources.append({
+                "title": f_title or item['title'], 
+                "url": f_url, 
+                "text": text,
+                "date": item.get('date', 'Today'), 
+                "source_image": item.get('image') if 'image' in item else None,
+                "domain": urllib.parse.urlparse(f_url).netloc
+            })
+    
+    if len(collected_sources) < 1: # Strictness: Need at least 1 good source
+        log(f"   ❌ Insufficient source depth. Aborting.")
         return False
 
     # 4. REDDIT INTEL
@@ -130,14 +126,12 @@ def run_pipeline(category, config, forced_keyword=None):
         
         payload = f"METADATA: {json.dumps({'keyword': target_keyword})}\n\nDATA:\n{combined_text}"
         
-        # --- RESTORED: required_keys for ALL steps ---
         json_b = api_manager.generate_step_strict(
             model_name, 
             PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), 
             "Step B (Writer)",
             required_keys=["headline", "article_body"]
         )
-        log("      ✅ Draft Written.")
         
         kg_links = history_manager.get_relevant_kg_for_linking(json_b.get('headline', target_keyword), category)
         input_c = {"draft_content": json_b, "sources_data": [{"title": s['title'], "url": s['url']} for s in collected_sources]}
@@ -148,7 +142,6 @@ def run_pipeline(category, config, forced_keyword=None):
             "Step C (SEO)",
             required_keys=["finalTitle", "finalContent"]
         )
-        log("      ✅ SEO Optimized.")
         
         json_d = api_manager.generate_step_strict(
             model_name, 
@@ -156,26 +149,22 @@ def run_pipeline(category, config, forced_keyword=None):
             "Step D (Humanizing)",
             required_keys=["finalTitle", "finalContent"]
         )
-        log("      ✅ Content Humanized.")
         
         final = api_manager.generate_step_strict(
             model_name, 
             PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), 
             "Step E (Final Polish)",
-            required_keys=["finalTitle", "finalContent"] # CRITICAL FIX
+            required_keys=["finalTitle", "finalContent"]
         )
-        log("      ✅ Final Polish Complete.")
         
         title, content_html = final['finalTitle'], final['finalContent']
-        seo_data = final.get('seo', {})
-
+        
         # --- MULTIMEDIA SECTION ---
         log("   🖼️ [Image Mission] Starting...")
         img_url = None
         c_imgs = [{'url': src['source_image']} for src in collected_sources if src.get('source_image')]
         
         if c_imgs:
-            log(f"      🔍 Found {len(c_imgs)} source images. Selecting best...")
             sel_img = image_processor.select_best_image_with_gemini(model_name, title, c_imgs)
             if sel_img:
                 img_url = image_processor.process_source_image(sel_img, final.get('imageOverlayText'), title)
@@ -183,23 +172,40 @@ def run_pipeline(category, config, forced_keyword=None):
         if not img_url:
             log("      ⚠️ NO SOURCE IMAGE: Activating AI Generation Backup...")
             img_url = image_processor.generate_and_upload_image(final.get('imageGenPrompt', title), final.get('imageOverlayText'))
-            if img_url: log("      ✅ AI Backup Image created and hosted.")
-            else: log("      ❌ AI Backup Image failed too.")
 
-        # --- VIDEO GENERATION ---
+        # --- VIDEO GENERATION (RESTORED RETRY LOOP) ---
         log("   🎬 [Video Mission] Starting...")
         vid_main, vid_short, vid_html, fb_path = None, None, "", None
         summ = re.sub('<[^<]+?>','', content_html)[:2500]
-        try:
-            v_meta = api_manager.generate_step_strict(model_name, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta", required_keys=["title", "description"])
-            v_script_data = api_manager.generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script")
-            script_json = v_script_data.get('video_script') or v_script_data.get('script')
-            
-            if script_json:
+        
+        script_json = None
+        # RESTORED: The 3-Attempt Loop
+        for attempt in range(1, 4):
+            log(f"      🎬 Generating Script (Attempt {attempt}/3)...")
+            try:
+                v_script_data = api_manager.generate_step_strict(
+                    model_name, 
+                    PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), 
+                    f"Video Script (Att {attempt})"
+                )
+                # Flexible parsing logic from original code
+                if isinstance(v_script_data, dict):
+                    if 'video_script' in v_script_data and isinstance(v_script_data['video_script'], list):
+                        script_json = v_script_data['video_script']
+                        break
+                    for key in ['script', 'dialogue', 'scenes']:
+                        if key in v_script_data and isinstance(v_script_data[key], list):
+                            script_json = v_script_data[key]
+                            break
+            except Exception as e:
+                log(f"      ⚠️ Script Gen Error: {e}")
+
+        if script_json:
+            try:
+                v_meta = api_manager.generate_step_strict(model_name, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta", required_keys=["title", "description"])
                 ts, out = int(time.time()), os.path.abspath("output")
                 os.makedirs(out, exist_ok=True)
                 
-                # Main Video
                 rr = video_renderer.VideoRenderer(output_dir=out, width=1920, height=1080)
                 pm = rr.render_video(script_json, title, f"main_{ts}.mp4")
                 if pm:
@@ -208,20 +214,19 @@ def run_pipeline(category, config, forced_keyword=None):
                     if vid_main:
                         vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
                 
-                # Short Video
                 rs = video_renderer.VideoRenderer(output_dir=out, width=1080, height=1920)
                 ps = rs.render_video(script_json, title, f"short_{ts}.mp4")
                 if ps:
                     fb_path = ps
                     vid_short, _ = youtube_manager.upload_video_to_youtube(ps, title[:90]+" #Shorts", v_desc, v_meta.get('tags',[])+['shorts'])
-                log("      ✅ Video assets processed.")
-        except Exception as ve:
-            log(f"      ⚠️ Video generation skipped/failed: {ve}")
+            except Exception as ve:
+                log(f"      ⚠️ Video Render/Upload Error: {ve}")
+        else:
+            log("      ❌ Failed to generate video script after 3 attempts.")
 
-        # --- SELF-HEALING VALIDATION ---
+        # --- VALIDATION ---
         log("   🛡️ [Validation] Starting core surgery...")
         try:
-            # RESTORED: genai usage
             val_client = genai.Client(api_key=api_manager.key_manager.get_current_key())
             healer = content_validator_pro.AdvancedContentValidator(val_client)
             content_html = healer.run_professional_validation(content_html, combined_text, collected_sources)
@@ -229,7 +234,7 @@ def run_pipeline(category, config, forced_keyword=None):
             log(f"      ⚠️ Validator skipped: {he}")
 
         # --- PUBLISHING ---
-        log(f"   🚀 [Publishing] Final assembly for: {title}")
+        log(f"   🚀 [Publishing] Final assembly...")
         fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
         fb_cap = fb_dat.get('FB_Hook', title)
 
@@ -242,15 +247,6 @@ def run_pipeline(category, config, forced_keyword=None):
                     <h4 style="margin:0; font-size:22px; color:#2c3e50; font-weight:800;">Yousef S. | Latest AI</h4>
                     <span style="font-size:12px; background:#e8f6ef; color:#2ecc71; padding:4px 10px; border-radius:6px; font-weight:bold;">TECH EDITOR</span>
                     <p style="margin:15px 0; color:#555; line-height:1.7;">Testing AI tools so you don't break your workflow. Brutally honest reviews, simple explainers, and zero fluff.</p>
-                    <div style="display:flex; gap:15px; flex-wrap:wrap;">
-                        <a href="https://www.facebook.com/share/1AkVHBNbV1/" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/5968/5968764.png" width="24"></a>
-                        <a href="https://x.com/latestaime" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24"></a>
-                        <a href="https://www.instagram.com/latestai.me" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/3955/3955024.png" width="24"></a>
-                        <a href="https://m.youtube.com/@0latestai" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24"></a>
-                        <a href="https://pinterest.com/latestaime" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/145/145808.png" width="24"></a>
-                        <a href="https://reddit.com/user/Yousefsg/" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="26"></a>
-                        <a href="https://www.latestai.me" target="_blank"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24"></a>
-                    </div>
                 </div>
             </div>
         </div>
@@ -268,13 +264,10 @@ def run_pipeline(category, config, forced_keyword=None):
         if p_url:
             history_manager.update_kg(title, p_url, category)
             log(f"   ✅ [SUCCESS] Published LIVE at: {p_url}")
-            
-            # Social Distribution
             try:
                 social_manager.distribute_content(f"{fb_cap}\n\n{p_url}", p_url, img_url)
                 if fb_path: social_manager.post_reel_to_facebook(fb_path, fb_cap)
             except: pass
-            
             return True
         else:
             log("   ❌ Blogger API failed to publish.")
