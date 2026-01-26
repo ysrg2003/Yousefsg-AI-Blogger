@@ -1,18 +1,19 @@
 # FILE: news_fetcher.py
-# DESCRIPTION: Fetches news articles from GNews API and Google News RSS.
+# DESCRIPTION: Fetches news from Google News RSS with targeted fallback logic.
+# RESTORED: Comma-separation logic and category fallback.
 
-import os
 import requests
 import urllib.parse
 import feedparser
+import random
 import datetime
+import os
 from config import log
 
 def get_gnews_api_sources(query, category):
-    """Fetches news using GNews.io API."""
+    """Fetches news using GNews.io API (If Key exists)."""
     api_key = os.getenv('GNEWS_API_KEY')
     if not api_key:
-        log("   ⚠️ GNews API Key missing/not loaded. Skipping.")
         return []
 
     log(f"   📡 Querying GNews API for: '{query}'...")
@@ -31,28 +32,51 @@ def get_gnews_api_sources(query, category):
                 "date": art.get('publishedAt', str(datetime.date.today())),
                 "image": art.get('image')
             })
-        log(f"   ✅ GNews found {len(formatted_items)} articles.")
         return formatted_items
-    except Exception as e:
-        log(f"   ❌ GNews Connection Failed: {e}")
+    except:
         return []
 
-def get_real_news_rss(query):
-    """Fetches news using Google News RSS as a fallback."""
+def get_real_news_rss(query_keywords, category=None):
+    """
+    Fetches news using Google News RSS.
+    RESTORED: Handles comma-separated keywords for targeted search.
+    """
     try:
-        log(f"   📰 Querying Google News RSS for: '{query}'...")
-        encoded = urllib.parse.quote(query)
+        # --- ORIGINAL LOGIC FOR TARGETED TOPICS ---
+        if "," in query_keywords:
+            topics = [t.strip() for t in query_keywords.split(',') if t.strip()]
+            focused = random.choice(topics)
+            log(f"   🎯 Targeted Search: '{focused}'")
+            full_query = f"{focused} when:2d" # Restored 'when:2d'
+        else:
+            full_query = f"{query_keywords} when:2d"
+
+        log(f"   📰 Querying Google News RSS for: '{full_query}'...")
+        encoded = urllib.parse.quote(full_query)
         url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+        
         feed = feedparser.parse(url)
         items = []
+        
         if feed.entries:
             for entry in feed.entries[:8]:
-                items.append({
-                    "title": entry.title.split(' - ')[0],
-                    "link": entry.link,
-                    "date": entry.published if 'published' in entry else "Today"
-                })
-        return items
+                pub = entry.published if 'published' in entry else "Today"
+                title_clean = entry.title.split(' - ')[0]
+                items.append({"title": title_clean, "link": entry.link, "date": pub})
+            return items 
+        
+        # --- ORIGINAL FALLBACK LOGIC ---
+        elif category:
+            log(f"   ⚠️ RSS Empty. Fallback to Category: {category}")
+            fb = f"{category} news when:1d"
+            url = f"https://news.google.com/rss/search?q={urllib.parse.quote(fb)}&hl=en-US&gl=US&ceid=US:en"
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:5]:
+                items.append({"title": entry.title, "link": entry.link, "date": "Today"})
+            return items
+            
+        return []
+            
     except Exception as e:
         log(f"❌ RSS Error: {e}")
         return []
