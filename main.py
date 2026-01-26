@@ -1,6 +1,5 @@
 # FILE: main.py
-# DESCRIPTION: The main orchestrator for the AI Blogger Automation project.
-#              This script runs the entire pipeline from topic selection to publishing.
+# DESCRIPTION: The main orchestrator. Corrected to match the original robust logic.
 
 import os
 import json
@@ -12,8 +11,11 @@ import urllib.parse
 import traceback
 import re
 
-# استيراد الوحدات الجديدة المنطقية
-from config import log, FORBIDDEN_PHRASES, ARTICLE_STYLE
+# --- RESTORED IMPORT ---
+from google import genai 
+
+# Local Modules
+from config import log, FORBIDDEN_PHRASES, ARTICLE_STYLE, BORING_KEYWORDS
 import api_manager
 import news_fetcher
 import scraper
@@ -21,7 +23,7 @@ import image_processor
 import history_manager
 import publisher
 
-# استيراد الوحدات الموجودة مسبقاً (الطرفية)
+# Peripheral Modules
 import content_validator_pro
 import reddit_manager
 import social_manager
@@ -30,7 +32,7 @@ import youtube_manager
 from prompts import *
 
 def run_pipeline(category, config, forced_keyword=None):
-    model_name = config['settings'].get('model_name', "gemini-3-flash-preview")
+    model_name = config['settings'].get('model_name', "gemini-2.5-flash")
     
     # 1. STRATEGY
     target_keyword = ""
@@ -43,7 +45,10 @@ def run_pipeline(category, config, forced_keyword=None):
         recent = history_manager.get_recent_titles_string(category=category)
         try:
             seo_p = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today(), history=recent)
-            seo_plan = api_manager.generate_step_strict(model_name, seo_p, "SEO Strategy", required_keys=["target_keyword"])
+            # RESTORED: required_keys
+            seo_plan = api_manager.generate_step_strict(
+                model_name, seo_p, "SEO Strategy", required_keys=["target_keyword"]
+            )
             target_keyword = seo_plan.get('target_keyword')
             log(f"   🎯 AI Goal: {target_keyword}")
         except Exception as e:
@@ -55,7 +60,6 @@ def run_pipeline(category, config, forced_keyword=None):
 
     # 2. SEMANTIC GUARD
     log("   🧠 Checking memory to avoid repetition...")
-    days = 7 if is_manual_mode else 60
     history_str = history_manager.get_recent_titles_string(limit=200)
     if history_manager.check_semantic_duplication(target_keyword, history_str):
         log("   🚫 Duplication detected. Stopping this keyword.")
@@ -86,6 +90,13 @@ def run_pipeline(category, config, forced_keyword=None):
             
         for item in items:
             if len(collected_sources) >= 3: break
+            
+            # --- RESTORED: Boring Filter ---
+            if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
+                log(f"         ⛔ Skipped Boring Corporate Topic: {item['title']}")
+                continue
+            # -------------------------------
+
             if any(s['url'] == item['link'] for s in collected_sources): continue
             
             f_url, f_title, text = scraper.resolve_and_scrape(item['link'])
@@ -119,19 +130,40 @@ def run_pipeline(category, config, forced_keyword=None):
         
         payload = f"METADATA: {json.dumps({'keyword': target_keyword})}\n\nDATA:\n{combined_text}"
         
-        json_b = api_manager.generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Step B (Writer)")
+        # --- RESTORED: required_keys for ALL steps ---
+        json_b = api_manager.generate_step_strict(
+            model_name, 
+            PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), 
+            "Step B (Writer)",
+            required_keys=["headline", "article_body"]
+        )
         log("      ✅ Draft Written.")
         
-        kg_links = history_manager.get_relevant_kg_for_linking(json_b.get('headline'), category)
+        kg_links = history_manager.get_relevant_kg_for_linking(json_b.get('headline', target_keyword), category)
         input_c = {"draft_content": json_b, "sources_data": [{"title": s['title'], "url": s['url']} for s in collected_sources]}
         
-        json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(input_c), knowledge_graph=kg_links), "Step C (SEO)")
+        json_c = api_manager.generate_step_strict(
+            model_name, 
+            PROMPT_C_TEMPLATE.format(json_input=json.dumps(input_c), knowledge_graph=kg_links), 
+            "Step C (SEO)",
+            required_keys=["finalTitle", "finalContent"]
+        )
         log("      ✅ SEO Optimized.")
         
-        json_d = api_manager.generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), "Step D (Humanizing)")
+        json_d = api_manager.generate_step_strict(
+            model_name, 
+            PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), 
+            "Step D (Humanizing)",
+            required_keys=["finalTitle", "finalContent"]
+        )
         log("      ✅ Content Humanized.")
         
-        final = api_manager.generate_step_strict(model_name, PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), "Step E (Final Polish)")
+        final = api_manager.generate_step_strict(
+            model_name, 
+            PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), 
+            "Step E (Final Polish)",
+            required_keys=["finalTitle", "finalContent"] # CRITICAL FIX
+        )
         log("      ✅ Final Polish Complete.")
         
         title, content_html = final['finalTitle'], final['finalContent']
@@ -159,7 +191,7 @@ def run_pipeline(category, config, forced_keyword=None):
         vid_main, vid_short, vid_html, fb_path = None, None, "", None
         summ = re.sub('<[^<]+?>','', content_html)[:2500]
         try:
-            v_meta = api_manager.generate_step_strict(model_name, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta")
+            v_meta = api_manager.generate_step_strict(model_name, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta", required_keys=["title", "description"])
             v_script_data = api_manager.generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script")
             script_json = v_script_data.get('video_script') or v_script_data.get('script')
             
@@ -189,6 +221,7 @@ def run_pipeline(category, config, forced_keyword=None):
         # --- SELF-HEALING VALIDATION ---
         log("   🛡️ [Validation] Starting core surgery...")
         try:
+            # RESTORED: genai usage
             val_client = genai.Client(api_key=api_manager.key_manager.get_current_key())
             healer = content_validator_pro.AdvancedContentValidator(val_client)
             content_html = healer.run_professional_validation(content_html, combined_text, collected_sources)
@@ -197,7 +230,7 @@ def run_pipeline(category, config, forced_keyword=None):
 
         # --- PUBLISHING ---
         log(f"   🚀 [Publishing] Final assembly for: {title}")
-        fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook")
+        fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
         fb_cap = fb_dat.get('FB_Hook', title)
 
         author_box = """
