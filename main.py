@@ -1,3 +1,7 @@
+# FILE: main.py
+# ROLE: Orchestrator
+# UPDATED: Real Author Box, Strict Duplicate Source Check, Schema Update.
+
 import os
 import json
 import time
@@ -9,7 +13,6 @@ import traceback
 import re
 from google import genai 
 
-# استيراد الوحدات مع ضمان المسارات
 from config import log, FORBIDDEN_PHRASES, ARTICLE_STYLE, BORING_KEYWORDS
 import api_manager
 import news_fetcher
@@ -55,7 +58,7 @@ def run_pipeline(category, config, forced_keyword=None):
         log("   🚫 Duplication detected. Stopping this keyword.")
         return False
 
-    # 3. SMART MULTI-SOURCE HUNTING (HUNTER LOOP)
+    # 3. SMART MULTI-SOURCE HUNTING
     log("   🕵️‍♂️ Starting Source Hunting Mission (Target: 3 Sources)...")
     
     collected_sources = []
@@ -70,7 +73,6 @@ def run_pipeline(category, config, forced_keyword=None):
     required_terms = target_keyword.lower().split()
     significant_keyword = max(required_terms, key=len) if required_terms else ""
 
-    # --- LOOP UNTIL 3 SOURCES FOUND ---
     for strategy in search_strategies:
         if len(collected_sources) >= 3:
             log("   ✅ Quota Met: 3 Sources Collected.")
@@ -91,29 +93,40 @@ def run_pipeline(category, config, forced_keyword=None):
                 log(f"         ⛔ Skipped Boring: {item['title']}")
                 continue
                 
-            if strategy != f"{category} news" and significant_keyword and len(significant_keyword) > 3:
-                if significant_keyword not in item['title'].lower():
-                    log(f"         ⚠️ Skipped Irrelevant Title: '{item['title']}'")
-                    continue
-
-            if any(s['url'] == item['link'] for s in collected_sources): continue
-            
-            # --- UNPACK 4 VARIABLES (PROTOCOL) ---
+            # --- FIX: RESOLVE URL FIRST TO PREVENT DUPLICATES ---
+            # We must resolve the redirect (e.g. google news link) to get the real domain
             f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
+            
+            if not f_url: continue # Failed to resolve
+
+            # Check for duplicates using the REAL resolved URL/Domain
+            is_duplicate = False
+            f_domain = urllib.parse.urlparse(f_url).netloc.replace('www.', '')
+            
+            for s in collected_sources:
+                s_domain = s['domain'].replace('www.', '')
+                if f_url == s['url'] or f_domain == s_domain:
+                    is_duplicate = True
+                    break
+            
+            if is_duplicate:
+                log(f"         ⚠️ Skipped Duplicate Source: {f_domain}")
+                continue
+            # ----------------------------------------------------
             
             if text:
                 if strategy != f"{category} news" and significant_keyword and significant_keyword not in text.lower():
                     log(f"         ⚠️ Skipped: Text missing keyword.")
                     continue
 
-                log(f"         ✅ Source Captured! ({len(text)} chars)")
+                log(f"         ✅ Source Captured! ({len(text)} chars) from {f_domain}")
                 collected_sources.append({
                     "title": f_title or item['title'], 
                     "url": f_url, 
                     "text": text,
                     "date": item.get('date', 'Today'), 
                     "source_image": f_image if f_image else item.get('image'),
-                    "domain": urllib.parse.urlparse(f_url).netloc
+                    "domain": f_domain
                 })
         
         time.sleep(1)
@@ -160,7 +173,6 @@ def run_pipeline(category, config, forced_keyword=None):
             required_keys=["finalTitle", "finalContent"]
         )
         
-        # --- ROBUST STEP E ---
         try:
             final = api_manager.generate_step_strict(
                 model_name, 
@@ -254,7 +266,7 @@ def run_pipeline(category, config, forced_keyword=None):
         fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
         fb_cap = fb_dat.get('FB_Hook', title)
 
-        # --- HARD-CODED SOURCES SECTION ---
+        # --- SOURCES SECTION ---
         sources_block = """
         <div style="margin-top: 40px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #3498db;">
             <h3 style="margin-top: 0; font-size: 18px; color: #2c3e50;">📚 Sources & References</h3>
@@ -264,18 +276,26 @@ def run_pipeline(category, config, forced_keyword=None):
             safe_title = src['title'].replace('"', '').replace("'", "")
             sources_block += f'<li style="margin-bottom: 8px;"><a href="{src["url"]}" target="_blank" rel="nofollow noopener" style="text-decoration: none; color: #3498db; font-weight: 600;">{safe_title}</a> <span style="font-size: 0.85em; color: #7f8c8d;">({src["domain"]})</span></li>'
         sources_block += "</ul></div>"
-        
         content_html += sources_block
 
+        # --- UPDATED AUTHOR BOX (WITH REAL DATA) ---
         author_box = """
         <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
             <div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:25px;">
                 <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiB6B0pK8PhY0j0JrrYCSG_QykTjsbxbbdePdNP_nRT_39FW4SGPPqTrAjendimEUZdipHUiYJfvHVjTBH7Eoz8vEjzzCTeRcDlIcDrxDnUhRJFJv4V7QHtileqO4wF-GH39vq_JAe4UrSxNkfjfi1fDS9_T4mPmwEC71VH9RJSEuSFrNb2ZRQedyA61iQ=s1017-rw" 
-                     style="width:90px; height:90px; border-radius:50%; object-fit:cover; border:4px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+                     style="width:90px; height:90px; border-radius:50%; object-fit:cover; border:4px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,0.1);" alt="Yousef S.">
                 <div style="flex:1;">
                     <h4 style="margin:0; font-size:22px; color:#2c3e50; font-weight:800;">Yousef S. | Latest AI</h4>
                     <span style="font-size:12px; background:#e8f6ef; color:#2ecc71; padding:4px 10px; border-radius:6px; font-weight:bold;">TECH EDITOR</span>
                     <p style="margin:15px 0; color:#555; line-height:1.7;">Testing AI tools so you don't break your workflow. Brutally honest reviews, simple explainers, and zero fluff.</p>
+                    <div style="display:flex; gap:15px; flex-wrap:wrap; margin-top:15px;">
+                        <a href="https://www.facebook.com/share/1AkVHBNbV1/" target="_blank" title="Facebook"><img src="https://cdn-icons-png.flaticon.com/512/5968/5968764.png" width="24"></a>
+                        <a href="https://x.com/latestaime" target="_blank" title="X (Twitter)"><img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24"></a>
+                        <a href="https://www.instagram.com/latestai.me" target="_blank" title="Instagram"><img src="https://cdn-icons-png.flaticon.com/512/3955/3955024.png" width="24"></a>
+                        <a href="https://m.youtube.com/@0latestai" target="_blank" title="YouTube"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24"></a>
+                        <a href="https://pinterest.com/latestaime" target="_blank" title="Pinterest"><img src="https://cdn-icons-png.flaticon.com/512/145/145808.png" width="24"></a>
+                        <a href="https://www.latestai.me" target="_blank" title="Website"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24"></a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -286,8 +306,26 @@ def run_pipeline(category, config, forced_keyword=None):
         img_h = f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}"><img src="{img_url}" width="1200" height="630" style="max-width:100%; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1);" /></a></div>' if img_url else ""
         
         full_body = ARTICLE_STYLE + img_h + vid_html + final_c + author_box
+        
+        # --- ENHANCED SCHEMA MARKUP ---
         if 'schemaMarkup' in final and final['schemaMarkup']: 
-            full_body += f'\n<script type="application/ld+json">{json.dumps(final["schemaMarkup"])}</script>'
+            schema = final['schemaMarkup']
+            # Inject Social Links into Schema
+            schema['author'] = {
+                "@type": "Person",
+                "name": "Yousef S.",
+                "url": "https://www.latestai.me",
+                "image": "https://blogger.googleusercontent.com/img/a/AVvXsEiB6B0pK8PhY0j0JrrYCSG_QykTjsbxbbdePdNP_nRT_39FW4SGPPqTrAjendimEUZdipHUiYJfvHVjTBH7Eoz8vEjzzCTeRcDlIcDrxDnUhRJFJv4V7QHtileqO4wF-GH39vq_JAe4UrSxNkfjfi1fDS9_T4mPmwEC71VH9RJSEuSFrNb2ZRQedyA61iQ=s1017-rw",
+                "sameAs": [
+                    "https://www.facebook.com/share/1AkVHBNbV1/",
+                    "https://x.com/latestaime",
+                    "https://www.instagram.com/latestai.me",
+                    "https://m.youtube.com/@0latestai",
+                    "https://pinterest.com/latestaime",
+                    "https://www.reddit.com/user/Yousefsg/"
+                ]
+            }
+            full_body += f'\n<script type="application/ld+json">{json.dumps(schema)}</script>'
 
         p_url = publisher.publish_post(title, full_body, [category, "Tech News", "Reviews"])
         if p_url:
