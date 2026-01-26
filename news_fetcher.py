@@ -1,6 +1,3 @@
-# FILE: news_fetcher.py
-# DESCRIPTION: Fetches news with smart query handling.
-
 import requests
 import urllib.parse
 import feedparser
@@ -12,7 +9,6 @@ from config import log
 def get_gnews_api_sources(query, category):
     api_key = os.getenv('GNEWS_API_KEY')
     if not api_key: return []
-    # تنظيف الاستعلام من إضافات الوقت لأن API لها معامل خاص
     clean_query = query.replace(" when:2d", "").replace(" when:1d", "")
     log(f"   📡 Querying GNews API for: '{clean_query}'...")
     url = f"https://gnews.io/api/v4/search?q={urllib.parse.quote(clean_query)}&lang=en&country=us&max=5&apikey={api_key}"
@@ -33,16 +29,12 @@ def get_gnews_api_sources(query, category):
 
 def get_real_news_rss(query_keywords, category=None):
     try:
-        # تنظيف الكلمات المفتاحية
         base_query = query_keywords.strip()
-        
-        # منطق الفاصلة (Targeted Search)
         if "," in base_query:
             topics = [t.strip() for t in base_query.split(',') if t.strip()]
             base_query = random.choice(topics)
             log(f"   🎯 Targeted Search Focus: '{base_query}'")
 
-        # --- FIX: Prevent double 'when:2d' ---
         if "when:" not in base_query:
             full_query = f"{base_query} when:2d"
         else:
@@ -56,13 +48,12 @@ def get_real_news_rss(query_keywords, category=None):
         items = []
         
         if feed.entries:
-            for entry in feed.entries[:10]: # زيادة العدد لزيادة الفرص
+            for entry in feed.entries[:10]:
                 pub = entry.published if 'published' in entry else "Today"
                 title_clean = entry.title.split(' - ')[0]
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
             return items 
         
-        # Fallback
         elif category:
             log(f"   ⚠️ RSS Empty. Fallback to Category: {category}")
             fb = f"{category} news when:1d"
