@@ -1,17 +1,11 @@
-# FILE: config.py
-# DESCRIPTION: Contains shared constants and utility functions.
-
 import datetime
 
-# User-Agent Rotation
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 ]
 
-# Forbidden Phrases (Style Guide)
 FORBIDDEN_PHRASES = [
     "In today's digital age", "The world of AI is ever-evolving", "unveils", "unveiled",
     "poised to", "delve into", "game-changer", "paradigm shift", "tapestry", "robust",
@@ -20,15 +14,12 @@ FORBIDDEN_PHRASES = [
     "cutting-edge", "realm of"
 ]
 
-# --- MISSING PART RESTORED ---
-# Boring Keywords to filter out corporate reports
 BORING_KEYWORDS = [
     "CFO", "CEO", "Quarterly", "Earnings", "Report", "Market Cap", 
     "Dividend", "Shareholders", "Acquisition", "Merger", "Appointment", 
     "Executive", "Knorex", "Partner", "Agreement", "B2B", "Enterprise"
 ]
 
-# Article CSS Style
 ARTICLE_STYLE = """
 <style>
     .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.8; color: #333; font-size: 18px; }
