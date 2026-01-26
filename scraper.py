@@ -1,7 +1,3 @@
-# FILE: scraper.py
-# STATUS: AUDITED & VERIFIED
-# FEATURES: Selenium Eager Loading, Redirect Resolution Loop, OG:Image Extraction.
-
 import time
 import random
 from selenium import webdriver
@@ -30,7 +26,7 @@ def resolve_and_scrape(google_url):
         
         driver.get(google_url)
         
-        # --- CRITICAL: Redirect Wait Loop ---
+        # حلقة الانتظار (من الكود الأصلي)
         start_wait = time.time()
         final_url = google_url
         while time.time() - start_wait < 15: 
@@ -43,13 +39,12 @@ def resolve_and_scrape(google_url):
         final_title = driver.title
         page_source = driver.page_source
         
-        # Video Filter
         bad_segments = ["/video/", "/watch", "/gallery/", "/photos/", "youtube.com"]
         if any(seg in final_url.lower() for seg in bad_segments):
             log(f"      ⚠️ Skipped Video/Gallery URL: {final_url}")
             return None, None, None, None
 
-        # --- CRITICAL: Image Extraction ---
+        # استخراج الصورة (تحسين ضروري)
         soup = BeautifulSoup(page_source, 'html.parser')
         og_image = None
         try:
@@ -60,7 +55,6 @@ def resolve_and_scrape(google_url):
                 if meta_img: og_image = meta_img.get('content')
         except: pass
 
-        # Text Extraction
         extracted_text = trafilatura.extract(
             page_source, 
             include_comments=False, 
@@ -71,7 +65,6 @@ def resolve_and_scrape(google_url):
         if extracted_text and len(extracted_text) > 800:
             return final_url, final_title, extracted_text, og_image
 
-        # Fallback Text
         for script in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
             script.extract()
         fallback_text = soup.get_text(" ", strip=True)
