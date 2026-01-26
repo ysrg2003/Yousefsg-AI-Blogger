@@ -212,7 +212,7 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
         
         # 2. SUCCESS: Cool down the system
         # On success, we reduce the cooldown period for the next call.
-        API_HEAT = max(3, API_HEAT - 2) # Reduce heat, but maintain a minimum 3s cooldown.
+        API_HEAT = max(5, API_HEAT // 2) 
         log(f"      ✅ Success: {step_name} completed. API Heat reduced to {API_HEAT}s.")
         return parsed_data
 
