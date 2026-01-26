@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_fixed
 from urllib.parse import urlparse
+from google import genai
 
 # إعداد اللوجر الاحترافي والمتقدم
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [CORE-SURGEON-3.0] - %(message)s')
