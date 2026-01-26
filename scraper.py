@@ -20,7 +20,7 @@ def is_valid_article_text(text):
     junk_indicators = [
         "JavaScript is required", "enable cookies", "access denied", 
         "security check", "please verify you are a human", "403 forbidden",
-        "captcha", "cloudflare", "Incapsula", "robot"
+        "captcha", "cloudflare", "Incapsula"
     ]
     
     text_lower = text.lower()[:500]
