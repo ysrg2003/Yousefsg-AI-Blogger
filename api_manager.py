@@ -102,8 +102,8 @@ def discover_fresh_model(current_model_name):
         log(f"   ⚠️ Listing models failed: {e}")
 
     priority_list = [
-        "gemini-3-flash-preview", 
         "gemini-2.5-flash",
+        "gemini-3-flash-preview", 
         "gemini-2.0-flash-exp",
         "gemini-1.5-flash"
     ]
