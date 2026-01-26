@@ -125,25 +125,48 @@ def discover_fresh_model(current_model_name):
     log("   ❌ Fatal: No untried models left.")
     return None
 
+# FILE: api_manager.py
+
+# ... (باقي الكود في الملف: imports, KeyManager, etc. يبقى كما هو) ...
+
+# --- DYNAMIC HEAT MANAGEMENT SYSTEM ---
+# Global variable to track API "health". Higher value = more cooldown.
+API_HEAT = 5  # Start with a safe 5-second cooldown
+
 @retry(
     stop=stop_after_attempt(15), 
-    wait=wait_exponential(multiplier=2, min=4, max=30), 
-    retry=retry_if_exception_type((JSONParsingError, JSONValidationError, Exception)), 
+    wait=wait_exponential(multiplier=2.5, min=5, max=90), # Increased max wait time
+    retry=retry_if_exception_type(Exception), 
     before_sleep=before_sleep_log(logger, logging.WARNING)
 )
 def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]):
+    """
+    An intelligent, self-healing function for making Gemini API calls.
+    Features: Dynamic cooldown, granular error handling, and robust JSON repair.
+    """
+    global API_HEAT
+    
+    # --- Model Selection ---
+    # The global override (from model discovery) has the highest priority.
     model_to_use = (CURRENT_MODEL_OVERRIDE if CURRENT_MODEL_OVERRIDE else initial_model_name).replace("models/", "") 
     
     log(f"   🔄 [Tenacity] Executing: {step_name} | Model: {model_to_use}")
     
+    # --- Key Selection ---
     key = key_manager.get_current_key()
-    if not key: raise RuntimeError("FATAL: All API Keys exhausted.")
+    if not key: 
+        raise RuntimeError("FATAL: All API Keys have been exhausted.")
     
     client = genai.Client(api_key=key)
     
     try:
-        time.sleep(5) 
+        # 1. Proactive Cooling (Dynamic Heat Management)
+        # The system cools down before every request based on recent server health.
+        if API_HEAT > 0:
+            log(f"      🌡️ API Heat is at {API_HEAT}s. Cooling down...")
+            time.sleep(API_HEAT) 
         
+        # --- API Call ---
         generation_config = types.GenerateContentConfig(
             response_mime_type="application/json", 
             system_instruction=STRICT_SYSTEM_PROMPT, 
@@ -157,45 +180,68 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
             config=generation_config
         )
         
+        # --- Robust Parsing & Repair ---
+        if not response.text:
+            log(f"      ❌ CRITICAL: API returned an empty response for {step_name}. Retrying.")
+            raise JSONParsingError("API returned an empty response.")
+
         parsed_data = master_json_parser(response.text)
         
         if not parsed_data:
-            log(f"      ⚠️ Parsing failed. Triggering Repair...")
-            time.sleep(2)
+            log(f"      ⚠️ Parsing failed. Triggering AI-powered repair...")
+            time.sleep(2) # Brief pause before repair call
             repair_response = client.models.generate_content(
                 model=model_to_use, 
-                contents=f"Fix JSON Syntax:\n{response.text[:5000]}", 
+                contents=f"CRITICAL: Fix the following broken JSON syntax:\n{response.text[:5000]}", 
                 config=generation_config
             )
             parsed_data = master_json_parser(repair_response.text)
             
             if not parsed_data:
-                log(f"      ❌ CRITICAL: Repair failed for {step_name}. Retrying entire step.")
-                raise JSONParsingError(f"Failed to parse JSON for {step_name} after repair attempt.")
+                log(f"      ❌ CRITICAL: AI Repair failed for {step_name}. Forcing full retry.")
+                raise JSONParsingError(f"Failed to parse JSON for {step_name} even after repair attempt.")
 
-        if required_keys: validate_structure(parsed_data, required_keys)
-        log(f"      ✅ Success: {step_name} completed.")
+        if required_keys: 
+            validate_structure(parsed_data, required_keys)
+        
+        # 2. SUCCESS: Cool down the system
+        # On success, we reduce the cooldown period for the next call.
+        API_HEAT = max(3, API_HEAT - 2) # Reduce heat, but maintain a minimum 3s cooldown.
+        log(f"      ✅ Success: {step_name} completed. API Heat reduced to {API_HEAT}s.")
         return parsed_data
 
     except Exception as e:
         error_msg = str(e).lower()
-        is_server_error = any(x in error_msg for x in ["429", "503", "quota", "exhausted", "permission", "403"])
-        is_404 = "404" in error_msg or "not found" in error_msg
         
-        if is_server_error:
-            log(f"      ⚠️ API Server Error on Key #{key_manager.current_index + 1}.")
+        # --- Granular Error Handling ---
+        is_quota_or_permission_error = "429" in error_msg or "quota" in error_msg or "403" in error_msg
+        is_server_overload_error = "503" in error_msg or "overloaded" in error_msg
+        is_model_not_found_error = "404" in error_msg or "not found" in error_msg
+        
+        if is_quota_or_permission_error:
+            # Action: Switch Key. If all keys fail, switch model.
+            log(f"      ⚠️ Key-specific Error on Key #{key_manager.current_index + 1}. Switching key...")
             if not key_manager.switch_key():
-                log(f"      ⛔ Model {model_to_use} failed on ALL keys. Switching Model...")
+                log(f"      ⛔ Model {model_to_use} failed on ALL keys. Switching model...")
                 time.sleep(20) 
                 new_model = discover_fresh_model(model_to_use)
-                if not new_model: raise RuntimeError("FATAL: All models failed.")
-            raise e 
-            
-        elif is_404:
+                if not new_model: 
+                    raise RuntimeError("FATAL: All models failed. Cannot continue.")
+            raise e # Re-raise for Tenacity to retry with the new key/model
+        
+        elif is_server_overload_error:
+            # Action: Increase heat and wait. Do NOT switch key.
+            API_HEAT = min(90, API_HEAT + 15) # Drastically increase heat, cap at 90s
+            log(f"      🔥 Server Overload (503). API Heat increased to {API_HEAT}s. Waiting for exponential backoff.")
+            raise e # Re-raise for Tenacity to wait and retry with the same key
+        
+        elif is_model_not_found_error:
+             # Action: Switch Model immediately.
              log(f"      ❌ Model {model_to_use} NOT FOUND. Switching immediately.")
              discover_fresh_model(model_to_use)
-             raise e 
+             raise e # Re-raise for Tenacity to retry with the new model
              
         else:
+            # Action: For any other error (e.g., parsing), just let Tenacity handle the retry.
             log(f"      ❌ General Error for {step_name}: {str(e)[:200]}")
             raise e
