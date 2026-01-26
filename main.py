@@ -1,6 +1,6 @@
 # FILE: main.py
 # ROLE: Orchestrator
-# UPDATED: Real Author Box, Strict Duplicate Source Check, Schema Update.
+# UPDATED: Added Reddit to Author Box.
 
 import os
 import json
@@ -93,16 +93,14 @@ def run_pipeline(category, config, forced_keyword=None):
                 log(f"         ⛔ Skipped Boring: {item['title']}")
                 continue
                 
-            # --- FIX: RESOLVE URL FIRST TO PREVENT DUPLICATES ---
-            # We must resolve the redirect (e.g. google news link) to get the real domain
+            # Resolve URL FIRST
             f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
             
-            if not f_url: continue # Failed to resolve
+            if not f_url: continue
 
-            # Check for duplicates using the REAL resolved URL/Domain
+            # Duplicate Check
             is_duplicate = False
             f_domain = urllib.parse.urlparse(f_url).netloc.replace('www.', '')
-            
             for s in collected_sources:
                 s_domain = s['domain'].replace('www.', '')
                 if f_url == s['url'] or f_domain == s_domain:
@@ -112,7 +110,6 @@ def run_pipeline(category, config, forced_keyword=None):
             if is_duplicate:
                 log(f"         ⚠️ Skipped Duplicate Source: {f_domain}")
                 continue
-            # ----------------------------------------------------
             
             if text:
                 if strategy != f"{category} news" and significant_keyword and significant_keyword not in text.lower():
@@ -278,7 +275,7 @@ def run_pipeline(category, config, forced_keyword=None):
         sources_block += "</ul></div>"
         content_html += sources_block
 
-        # --- UPDATED AUTHOR BOX (WITH REAL DATA) ---
+        # --- UPDATED AUTHOR BOX (WITH REDDIT) ---
         author_box = """
         <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
             <div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:25px;">
@@ -294,6 +291,7 @@ def run_pipeline(category, config, forced_keyword=None):
                         <a href="https://www.instagram.com/latestai.me" target="_blank" title="Instagram"><img src="https://cdn-icons-png.flaticon.com/512/3955/3955024.png" width="24"></a>
                         <a href="https://m.youtube.com/@0latestai" target="_blank" title="YouTube"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24"></a>
                         <a href="https://pinterest.com/latestaime" target="_blank" title="Pinterest"><img src="https://cdn-icons-png.flaticon.com/512/145/145808.png" width="24"></a>
+                        <a href="https://www.reddit.com/user/Yousefsg/" target="_blank" title="Reddit"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="24"></a>
                         <a href="https://www.latestai.me" target="_blank" title="Website"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24"></a>
                     </div>
                 </div>
@@ -307,10 +305,10 @@ def run_pipeline(category, config, forced_keyword=None):
         
         full_body = ARTICLE_STYLE + img_h + vid_html + final_c + author_box
         
-        # --- ENHANCED SCHEMA MARKUP ---
         if 'schemaMarkup' in final and final['schemaMarkup']: 
             schema = final['schemaMarkup']
-            # Inject Social Links into Schema
+            schema['@type'] = "TechArticle"
+            schema['proficiencyLevel'] = "Beginner"
             schema['author'] = {
                 "@type": "Person",
                 "name": "Yousef S.",
