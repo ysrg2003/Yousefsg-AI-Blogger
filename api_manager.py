@@ -1,7 +1,3 @@
-# FILE: api_manager.py
-# DESCRIPTION: Manages Gemini API interactions with Key Rotation & Self-Healing.
-# COMBINED: Original Logic + API Heat Improvement.
-
 import os
 import time
 import json
@@ -13,13 +9,11 @@ from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from config import log
 
-# Global state
 TRIED_MODELS = set()
 CURRENT_MODEL_OVERRIDE = None
-API_HEAT = 5 # Improvement: Dynamic Cooldown
+API_HEAT = 5 
 
 class KeyManager:
-    """Manages API keys pool."""
     def __init__(self):
         self.keys = []
         for i in range(1, 11):
@@ -44,6 +38,7 @@ class KeyManager:
         self.current_index = 0
         return False
 
+# تصدير نسخة واحدة مشتركة
 key_manager = KeyManager()
 
 logger = logging.getLogger("RetryEngine")
@@ -99,7 +94,6 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
     client = genai.Client(api_key=key)
     
     try:
-        # Improvement: Proactive Cooling
         if API_HEAT > 0:
             log(f"      🌡️ API Heat is at {API_HEAT}s. Cooling down...")
             time.sleep(API_HEAT)
@@ -135,7 +129,6 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
         if required_keys:
             validate_structure(parsed_data, required_keys)
         
-        # Success: Cool down
         API_HEAT = max(3, API_HEAT - 2)
         log(f"      ✅ Success: {step_name} completed.")
         return parsed_data
@@ -146,7 +139,7 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
             log(f"      ⚠️ Quota Error. Switching Key...")
             if not key_manager.switch_key():
                 raise RuntimeError("All keys exhausted.")
-            raise e # Retry with new key
+            raise e
         elif "503" in error_msg:
             API_HEAT += 10
             raise e
