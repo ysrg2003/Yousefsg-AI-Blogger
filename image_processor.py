@@ -10,6 +10,7 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import cv2
 import numpy as np
+import urllib.parse
 from github import Github
 from google import genai
 from google.genai import types
