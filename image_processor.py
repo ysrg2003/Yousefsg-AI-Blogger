@@ -1,3 +1,6 @@
+# FILE: image_processor.py
+# DESCRIPTION: Smart Image Processing (Face/Neck/Hair Blur ONLY if detected).
+
 import os
 import re
 import requests
@@ -13,7 +16,6 @@ from google import genai
 from google.genai import types
 from bs4 import BeautifulSoup
 from config import log, USER_AGENTS
-# استيراد المدير المشترك
 from api_manager import key_manager
 
 def extract_og_image(html_content):
@@ -71,30 +73,68 @@ def ensure_haarcascade_exists():
     return cascade_path
 
 def apply_smart_privacy_blur(pil_image):
+    """
+    Applies blur ONLY to faces (including hair/neck) if detected.
+    If no faces are found, returns the original sharp image.
+    """
     try:
+        # Convert PIL to OpenCV format
         img_np = np.array(pil_image)
         if img_np.shape[2] == 4: img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
         else: img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
 
         cascade_path = ensure_haarcascade_exists()
-        if not cascade_path: return pil_image
+        if not cascade_path: 
+            return pil_image # Return original if model missing
         
         face_cascade = cv2.CascadeClassifier(cascade_path)
         gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(30, 30))
+        
+        # Detect faces (Human & Humanoid Robots)
+        # minNeighbors=4 makes it slightly aggressive to catch robots
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
 
         if len(faces) > 0:
+            log(f"      🕵️‍♂️ Detected {len(faces)} face(s). Applying Extended Blur (Face+Hair+Neck)...")
+            h_img, w_img, _ = img_np.shape
+            
             for (x, y, w, h) in faces:
-                pad_w, pad_h = int(w*0.6), int(h*0.6)
-                x1, y1 = max(0, x - pad_w), max(0, y - pad_h)
-                x2, y2 = min(img_np.shape[1], x + w + pad_w), min(img_np.shape[0], y + h + int(h*0.8))
+                # --- EXPANDED BLUR AREA LOGIC ---
+                # We expand the box significantly to cover hair and neck
+                pad_w = int(w * 0.5)        # 50% padding on sides
+                pad_h_top = int(h * 0.8)    # 80% padding on top (Hair)
+                pad_h_bottom = int(h * 1.0) # 100% padding on bottom (Neck)
+                
+                # Calculate coordinates with boundary checks
+                x1 = max(0, x - pad_w)
+                y1 = max(0, y - pad_h_top)
+                x2 = min(w_img, x + w + pad_w)
+                y2 = min(h_img, y + h + pad_h_bottom)
+                
+                # Extract Region of Interest (ROI)
                 roi = img_np[y1:y2, x1:x2]
-                k_size = (w // 2) | 1
-                k_size = max(k_size, 51)
-                try: img_np[y1:y2, x1:x2] = cv2.GaussianBlur(roi, (k_size, k_size), 0)
+                
+                # Calculate blur strength based on face size
+                k_size = (w // 2) | 1 # Ensure odd number
+                k_size = max(k_size, 99) # Minimum blur strength (Very High)
+                
+                try:
+                    # Apply Gaussian Blur
+                    blurred_roi = cv2.GaussianBlur(roi, (k_size, k_size), 0)
+                    img_np[y1:y2, x1:x2] = blurred_roi
                 except: pass
-        return Image.fromarray(cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB))
-    except: return pil_image.filter(ImageFilter.GaussianBlur(radius=15))
+            
+            # Convert back to PIL if changes were made
+            return Image.fromarray(cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB))
+        
+        else:
+            # --- NO FACES DETECTED ---
+            log("      👀 No faces detected. Keeping image sharp.")
+            return pil_image # Return original sharp image
+
+    except Exception as e:
+        log(f"      ⚠️ Smart Blur Error: {e}. Returning original.")
+        return pil_image
 
 def select_best_image_with_gemini(model_name, article_title, images_list):
     if not images_list: return None
@@ -109,7 +149,6 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
 
     if not valid_images: return None
 
-    # إجبار: إذا وجدت صورة واحدة فقط، خذها فوراً
     if len(valid_images) == 1:
         log("      ✅ Only one source image found. Using it directly.")
         return valid_images[0]['original_url']
@@ -132,8 +171,6 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
             if 0 <= idx < len(valid_images): return valid_images[idx]['original_url']
     except: pass
     
-    # Fallback
-    log("      ⚠️ Gemini selection failed. Defaulting to first image.")
     return valid_images[0]['original_url']
 
 def process_source_image(source_url, overlay_text, filename_title):
@@ -159,7 +196,14 @@ def process_source_image(source_url, overlay_text, filename_title):
         top = (new_height - target_h) / 2
         base_img = original_img.crop((left, top, left+target_w, top+target_h))
         
-        base_img = apply_smart_privacy_blur(base_img.convert("RGB")).convert("RGBA")
+        # --- APPLY SMART BLUR (Only if faces detected) ---
+        # We convert to RGB for processing, then back to RGBA
+        base_img_rgb = base_img.convert("RGB")
+        base_img_rgb = apply_smart_privacy_blur(base_img_rgb)
+        base_img = base_img_rgb.convert("RGBA")
+        # -------------------------------------------------
+
+        # Dark Overlay (For text readability)
         overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 90))
         base_img = Image.alpha_composite(base_img, overlay)
         
