@@ -1,7 +1,3 @@
-# FILE: main.py
-# STATUS: AUDITED & VERIFIED
-# FEATURES: Full Orchestration, Retry Loops, Strict Filtering, Image/Video Integration.
-
 import os
 import json
 import time
@@ -13,7 +9,7 @@ import traceback
 import re
 from google import genai 
 
-# Local Modules
+# استيراد الوحدات مع ضمان المسارات
 from config import log, FORBIDDEN_PHRASES, ARTICLE_STYLE, BORING_KEYWORDS
 import api_manager
 import news_fetcher
@@ -59,57 +55,71 @@ def run_pipeline(category, config, forced_keyword=None):
         log("   🚫 Duplication detected. Stopping this keyword.")
         return False
 
-    # 3. SMART MULTI-SOURCE HUNTING
-    log("   🕵️‍♂️ Starting Source Hunting Mission...")
+    # 3. SMART MULTI-SOURCE HUNTING (HUNTER LOOP)
+    log("   🕵️‍♂️ Starting Source Hunting Mission (Target: 3 Sources)...")
+    
+    collected_sources = []
+    search_strategies = [
+        target_keyword,
+        f"{target_keyword} news",
+        f"{target_keyword} review OR analysis",
+        f"{category} {target_keyword}",
+        f"{category} news"
+    ]
     
     required_terms = target_keyword.lower().split()
     significant_keyword = max(required_terms, key=len) if required_terms else ""
-    
-    rss_query = f"{target_keyword} when:2d"
-    items = news_fetcher.get_real_news_rss(rss_query, category)
-    
-    if not items:
-        items = news_fetcher.get_gnews_api_sources(target_keyword, category)
 
-    collected_sources = []
-    
-    for item in items:
-        if len(collected_sources) >= 3: break
-        
-        # Boring Filter
-        if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
-            log(f"         ⛔ Skipped Boring Corporate Topic: {item['title']}")
-            continue
+    # --- LOOP UNTIL 3 SOURCES FOUND ---
+    for strategy in search_strategies:
+        if len(collected_sources) >= 3:
+            log("   ✅ Quota Met: 3 Sources Collected.")
+            break
             
-        # Strict Title Relevance
-        if significant_keyword and len(significant_keyword) > 3:
-            if significant_keyword not in item['title'].lower():
-                log(f"         ⚠️ Skipped Irrelevant Title: '{item['title']}'")
-                continue
-
-        if any(s['url'] == item['link'] for s in collected_sources): continue
+        log(f"   🏹 Strategy: '{strategy}'")
         
-        # --- CRITICAL: Receive 4 variables ---
-        f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
-        
-        if text:
-            # Strict Body Relevance
-            if significant_keyword and significant_keyword not in text.lower():
-                log(f"         ⚠️ Skipped: Text missing keyword '{significant_keyword}'")
-                continue
+        items = news_fetcher.get_real_news_rss(strategy, category)
+        if not items:
+            items = news_fetcher.get_gnews_api_sources(strategy, category)
+            
+        if not items: continue
 
-            log(f"         ✅ Source Captured! ({len(text)} chars)")
-            collected_sources.append({
-                "title": f_title or item['title'], 
-                "url": f_url, 
-                "text": text,
-                "date": item.get('date', 'Today'), 
-                "source_image": f_image if f_image else item.get('image'),
-                "domain": urllib.parse.urlparse(f_url).netloc
-            })
-    
-    if len(collected_sources) < 1:
-        log(f"   ❌ Insufficient source depth. Aborting.")
+        for item in items:
+            if len(collected_sources) >= 3: break
+            
+            if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
+                log(f"         ⛔ Skipped Boring: {item['title']}")
+                continue
+                
+            if strategy != f"{category} news" and significant_keyword and len(significant_keyword) > 3:
+                if significant_keyword not in item['title'].lower():
+                    log(f"         ⚠️ Skipped Irrelevant Title: '{item['title']}'")
+                    continue
+
+            if any(s['url'] == item['link'] for s in collected_sources): continue
+            
+            # --- UNPACK 4 VARIABLES (PROTOCOL) ---
+            f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
+            
+            if text:
+                if strategy != f"{category} news" and significant_keyword and significant_keyword not in text.lower():
+                    log(f"         ⚠️ Skipped: Text missing keyword.")
+                    continue
+
+                log(f"         ✅ Source Captured! ({len(text)} chars)")
+                collected_sources.append({
+                    "title": f_title or item['title'], 
+                    "url": f_url, 
+                    "text": text,
+                    "date": item.get('date', 'Today'), 
+                    "source_image": f_image if f_image else item.get('image'),
+                    "domain": urllib.parse.urlparse(f_url).netloc
+                })
+        
+        time.sleep(1)
+
+    if len(collected_sources) < 2:
+        log(f"   ❌ Failed to collect enough sources (Found {len(collected_sources)}). Aborting.")
         return False
 
     # 4. REDDIT INTEL
@@ -150,15 +160,21 @@ def run_pipeline(category, config, forced_keyword=None):
             required_keys=["finalTitle", "finalContent"]
         )
         
-        # --- CRITICAL: Required Keys ---
-        final = api_manager.generate_step_strict(
-            model_name, 
-            PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), 
-            "Step E (Final Polish)",
-            required_keys=["finalTitle", "finalContent"]
-        )
+        # --- ROBUST STEP E ---
+        try:
+            final = api_manager.generate_step_strict(
+                model_name, 
+                PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), 
+                "Step E (Final Polish)",
+                required_keys=["finalTitle", "finalContent"]
+            )
+        except Exception as e:
+            log(f"      ⚠️ Step E failed. Fallback to Step D. Error: {e}")
+            final = json_d
+            final['imageGenPrompt'] = final.get('finalTitle', target_keyword)
+            final['imageOverlayText'] = "LATEST NEWS"
         
-        title, content_html = final['finalTitle'], final['finalContent']
+        title, content_html = final.get('finalTitle', 'Untitled'), final.get('finalContent', '<p>Error</p>')
         
         # --- MULTIMEDIA SECTION ---
         log("   🖼️ [Image Mission] Starting...")
@@ -181,7 +197,6 @@ def run_pipeline(category, config, forced_keyword=None):
         summ = re.sub('<[^<]+?>','', content_html)[:2500]
         
         script_json = None
-        # --- CRITICAL: Retry Loop ---
         for attempt in range(1, 4):
             log(f"      🎬 Generating Script (Attempt {attempt}/3)...")
             try:
@@ -238,6 +253,19 @@ def run_pipeline(category, config, forced_keyword=None):
         log(f"   🚀 [Publishing] Final assembly...")
         fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
         fb_cap = fb_dat.get('FB_Hook', title)
+
+        # --- HARD-CODED SOURCES SECTION ---
+        sources_block = """
+        <div style="margin-top: 40px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #3498db;">
+            <h3 style="margin-top: 0; font-size: 18px; color: #2c3e50;">📚 Sources & References</h3>
+            <ul style="margin-bottom: 0; padding-left: 20px; color: #555;">
+        """
+        for src in collected_sources:
+            safe_title = src['title'].replace('"', '').replace("'", "")
+            sources_block += f'<li style="margin-bottom: 8px;"><a href="{src["url"]}" target="_blank" rel="nofollow noopener" style="text-decoration: none; color: #3498db; font-weight: 600;">{safe_title}</a> <span style="font-size: 0.85em; color: #7f8c8d;">({src["domain"]})</span></li>'
+        sources_block += "</ul></div>"
+        
+        content_html += sources_block
 
         author_box = """
         <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
