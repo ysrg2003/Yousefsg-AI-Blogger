@@ -6,11 +6,11 @@ import os
 import re
 import requests
 import random
+import urllib.parse # FIX: Added missing import
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import cv2
 import numpy as np
-import urllib.parse
 from github import Github
 from google import genai
 from google.genai import types
@@ -41,6 +41,7 @@ def upload_to_github_cdn(image_bytes, filename):
     try:
         gh_token = os.getenv('MY_GITHUB_TOKEN')
         image_repo_name = os.getenv('GITHUB_IMAGE_REPO') 
+        if not image_repo_name: image_repo_name = os.getenv('GITHUB_REPO_NAME')
         if not gh_token or not image_repo_name: return None
 
         g = Github(gh_token)
@@ -89,9 +90,13 @@ def apply_smart_privacy_blur(pil_image):
             log(f"      🕵️‍♂️ Detected {len(faces)} face(s). Blurring...")
             h_img, w_img, _ = img_np.shape
             for (x, y, w, h) in faces:
-                pad_w, pad_h = int(w*0.6), int(h*0.6)
-                x1, y1 = max(0, x - pad_w), max(0, y - pad_h)
-                x2, y2 = min(w_img, x + w + pad_w), min(h_img, y + h + int(h*0.8))
+                pad_w = int(w*0.6) 
+                pad_h = int(h*0.6)
+                pad_h_bottom = int(h * 0.8)
+                x1 = max(0, x - pad_w)
+                y1 = max(0, y - pad_h)
+                x2 = min(w_img, x + w + pad_w)
+                y2 = min(h_img, y + h + pad_h_bottom)
                 roi = img_np[y1:y2, x1:x2]
                 k_size = (w // 2) | 1
                 k_size = max(k_size, 51)
@@ -226,5 +231,9 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
         
         img_byte_arr = BytesIO()
         img.convert("RGB").save(img_byte_arr, format='WEBP', quality=85)
+        
+        # Use a generic filename based on seed if no title is passed
         return upload_to_github_cdn(img_byte_arr, f"ai_gen_{seed}.webp")
-    except Exception as e: return None
+    except Exception as e: 
+        log(f"      ❌ AI Image Gen Error: {e}")
+        return None
