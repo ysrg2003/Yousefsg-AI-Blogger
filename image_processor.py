@@ -236,17 +236,29 @@ def process_source_image(source_url, overlay_text, filename_title):
         safe_name = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50] + ".jpg"
         return upload_to_github_cdn(img_byte_arr, safe_name)
     except: return None
-
 def generate_and_upload_image(prompt_text, overlay_text=""):
-    enhancers = ", photorealistic, shot on Sony A7R IV, 8k, youtube thumbnail style"
-    final_prompt = urllib.parse.quote(f"{prompt_text}{enhancers}")
+log(f"   🎨 Generating Professional AI Thumbnail for: {prompt_text[:50]}...")
+    
+    # --- الخلطة السرية للاحترافية ---
+    style_prefix = "A high-end cinematic editorial tech photograph visualizing "
+    style_suffix = (
+        ". Perspective: Close-up POV shot, showing a professional human hand interacting with the subject. "
+        "Strictly NO faces, NO people, NO skin beyond the hand. "
+        "Style: Professional studio lighting, sharp focus, shallow depth of field, 8k resolution, "
+        "realistic textures, storytelling composition, dramatic atmosphere, no text, no distorted features."
+    )
+    
+    # دمج النص القادم من الـ AI مع القالب الاحترافي
+    final_prompt_text = f"{style_prefix}'{prompt_text}'{style_suffix}"
+    final_prompt = urllib.parse.quote(final_prompt_text)
+    
     seed = random.randint(1, 99999)
     image_url = f"https://image.pollinations.ai/prompt/{final_prompt}?width=1280&height=720&model=flux&seed={seed}&nologo=true"
+    
     try:
         r = requests.get(image_url, timeout=60)
         if r.status_code != 200: return None
         img = Image.open(BytesIO(r.content)).convert("RGBA")
-        
         if overlay_text:
             draw = ImageDraw.Draw(img)
             try:
@@ -254,7 +266,6 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
                 if not os.path.exists(font_path): font_path = "arial.ttf"
                 font = ImageFont.truetype(font_path, 80)
             except: font = ImageFont.load_default()
-            
             text = overlay_text.upper()
             bbox = draw.textbbox((0, 0), text, font=font)
             x, y = (1280 - (bbox[2]-bbox[0]))/2, 720 - (bbox[3]-bbox[1]) - 50
@@ -266,3 +277,5 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
         img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
         return upload_to_github_cdn(img_byte_arr, f"ai_gen_{seed}.jpg")
     except: return None
+        
+        
