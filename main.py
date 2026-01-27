@@ -1,6 +1,6 @@
 # FILE: main.py
 # ROLE: Orchestrator
-# FINAL VERSION: Integrated with Smart Visual Detective & Contextual Media Hunt
+# FINAL VERSION: Integrated with AI Creative Director for intelligent visual strategy.
 
 import os
 import json
@@ -52,14 +52,27 @@ def run_pipeline(category, config, forced_keyword=None):
 
         if not target_keyword: return False
 
-        # 2. SEMANTIC GUARD
+        # 2. CREATIVE DIRECTOR (NEW STEP)
+        log("   🎬 [Creative Director] Deciding on visual strategy...")
+        try:
+            strategy_prompt = PROMPT_VISUAL_STRATEGY.format(target_keyword=target_keyword, category=category)
+            strategy_decision = api_manager.generate_step_strict(
+                model_name, strategy_prompt, "Visual Strategy", required_keys=["visual_strategy"]
+            )
+            visual_strategy = strategy_decision.get("visual_strategy", "generate_comparison_table")
+            log(f"      👉 Directive Received: '{visual_strategy}'")
+        except Exception as e:
+            log(f"      ⚠️ Visual Strategy failed: {e}. Defaulting to fallback.")
+            visual_strategy = "generate_comparison_table" # Safe fallback
+
+        # 3. SEMANTIC GUARD
         log("   🧠 Checking memory to avoid repetition...")
         history_str = history_manager.get_recent_titles_string(limit=200)
         if history_manager.check_semantic_duplication(target_keyword, history_str):
             log("   🚫 Duplication detected. Stopping this keyword.")
             return False
 
-        # 3. SMART MULTI-SOURCE HUNTING
+        # 4. SMART MULTI-SOURCE HUNTING (FOR TEXT)
         log("   🕵️‍♂️ Starting Source Hunting Mission (Target: 3 Sources)...")
         
         collected_sources = []
@@ -71,89 +84,59 @@ def run_pipeline(category, config, forced_keyword=None):
             f'{category} news'
         ]
         
-        required_terms = target_keyword.lower().split()
-        significant_keyword = max(required_terms, key=len) if required_terms else ""
-
         for strategy in search_strategies:
-            if len(collected_sources) >= 3:
-                log("   ✅ Quota Met: 3 Sources Collected.")
-                break
-                
+            if len(collected_sources) >= 3: break
             log(f"   🏹 Strategy: '{strategy}'")
-            
             items = news_fetcher.get_real_news_rss(strategy, category)
-            if not items:
-                items = news_fetcher.get_gnews_api_sources(strategy, category)
-                
+            if not items: items = news_fetcher.get_gnews_api_sources(strategy, category)
             if not items: continue
 
             for item in items:
                 if len(collected_sources) >= 3: break
-                
-                if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
-                    log(f"         ⛔ Skipped Boring: {item['title']}")
-                    continue
+                if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS): continue
                     
                 f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
-                
                 if not f_url: continue
 
-                is_duplicate = False
                 f_domain = urllib.parse.urlparse(f_url).netloc.replace('www.', '')
-                for s in collected_sources:
-                    s_domain = s['domain'].replace('www.', '')
-                    if f_url == s['url'] or f_domain == s_domain:
-                        is_duplicate = True
-                        break
-                
-                if is_duplicate:
-                    log(f"         ⚠️ Skipped Duplicate Source: {f_domain}")
-                    continue
+                if any(s['domain'].replace('www.', '') == f_domain for s in collected_sources): continue
                 
                 if text:
-                    if strategy != f"{category} news" and significant_keyword and significant_keyword not in text.lower():
-                        log(f"         ⚠️ Skipped: Text missing keyword.")
-                        continue
-
                     log(f"         ✅ Source Captured! ({len(text)} chars) from {f_domain}")
                     collected_sources.append({
-                        "title": f_title or item['title'], 
-                        "url": f_url, 
-                        "text": text,
-                        "date": item.get('date', 'Today'), 
-                        "source_image": f_image if f_image else item.get('image'),
+                        "title": f_title or item['title'], "url": f_url, "text": text,
+                        "date": item.get('date', 'Today'), "source_image": f_image or item.get('image'),
                         "domain": f_domain
                     })
-            
             time.sleep(1)
 
         if len(collected_sources) < 2:
             log(f"   ❌ Failed to collect enough sources (Found {len(collected_sources)}). Aborting.")
             return False
 
-        # 4. REDDIT INTEL & VISUAL HUNT (UPDATED)
-        log("   📱 Harvesting Reddit opinions & Visuals...")
-        # Now returns tuple: (text_report, media_list)
-        reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
-        
-        # 4.5 SMART MEDIA HUNT (OFFICIAL SITE) (NEW)
-        log("   🕵️‍♂️ Launching Smart Media Hunt (Official Sources)...")
-        official_media = scraper.smart_media_hunt(target_keyword, category)
-        
-        # Combine all visual proofs
-        all_visual_proofs = reddit_media + official_media
-        log(f"   📸 Total Visual Proofs Found: {len(all_visual_proofs)} items")
+        # 5. ADAPTIVE VISUAL HUNT (EXECUTES DIRECTOR'S ORDERS)
+        all_visual_proofs = []
+        reddit_context = ""
+        if visual_strategy.startswith("hunt_for_"):
+            log("   📸 Directive is 'Hunt'. Launching Visual Detective...")
+            reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
+            official_media = scraper.smart_media_hunt(target_keyword, category)
+            all_visual_proofs = reddit_media + official_media
+            log(f"      📸 Total Visual Proofs Found: {len(all_visual_proofs)} items")
+        else:
+            log(f"   🎨 Directive is '{visual_strategy}'. Skipping media hunt.")
+            reddit_context, _ = reddit_manager.get_community_intel(target_keyword)
 
-        # 5. SYNTHESIS & GENERATION
+        # 6. SYNTHESIS & GENERATION
         log("   ✍️ [Generation Started] Preparing research data...")
         combined_text = ""
         for i, src in enumerate(collected_sources):
             combined_text += f"\n--- SOURCE {i+1}: {src['domain']} ---\nURL: {src['url']}\nCONTENT:\n{src['text'][:9000]}\n"
         if reddit_context: combined_text += f"\n\n{reddit_context}\n"
         
-        # Inject Visual Evidence into Payload
         payload = f"METADATA: {json.dumps({'keyword': target_keyword, 'category': category})}\n"
-        payload += f"OFFICIAL_MEDIA_ASSETS: {json.dumps(all_visual_proofs)}\n" # <--- Passing Visuals to Writer
+        payload += f"VISUAL_STRATEGY_DIRECTIVE: \"{visual_strategy}\"\n"
+        payload += f"VISUAL_EVIDENCE_LINKS: {json.dumps(all_visual_proofs)}\n"
         payload += f"\nDATA:\n{combined_text}"
         
         json_b = api_manager.generate_step_strict(
@@ -181,7 +164,6 @@ def run_pipeline(category, config, forced_keyword=None):
         )
         
         final = json_d
-        
         title, content_html = final.get('finalTitle', 'Untitled'), final.get('finalContent', '<p>Error</p>')
         
         # --- MULTIMEDIA SECTION ---
@@ -190,13 +172,11 @@ def run_pipeline(category, config, forced_keyword=None):
         c_imgs = [{'url': src['source_image']} for src in collected_sources if src.get('source_image')]
         
         if c_imgs:
-            log(f"      🔍 Found {len(c_imgs)} source images. Selecting best...")
             sel_img = image_processor.select_best_image_with_gemini(model_name, title, c_imgs)
             if sel_img:
                 img_url = image_processor.process_source_image(sel_img, final.get('imageOverlayText'), title)
         
         if not img_url:
-            log("      ⚠️ NO SOURCE IMAGE: Activating AI Generation Backup...")
             img_url = image_processor.generate_and_upload_image(final.get('imageGenPrompt', title), final.get('imageOverlayText'))
 
         # --- VIDEO GENERATION ---
@@ -205,24 +185,13 @@ def run_pipeline(category, config, forced_keyword=None):
         summ = re.sub('<[^<]+?>','', content_html)[:2500]
         
         script_json = None
-        for attempt in range(1, 4):
-            log(f"      🎬 Generating Script (Attempt {attempt}/3)...")
-            try:
-                v_script_data = api_manager.generate_step_strict(
-                    model_name, 
-                    PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), 
-                    f"Video Script (Att {attempt})"
-                )
-                if isinstance(v_script_data, dict):
-                    if 'video_script' in v_script_data and isinstance(v_script_data['video_script'], list):
-                        script_json = v_script_data['video_script']
-                        break
-                    for key in ['script', 'dialogue', 'scenes']:
-                        if key in v_script_data and isinstance(v_script_data[key], list):
-                            script_json = v_script_data[key]
-                            break
-            except Exception as e:
-                log(f"      ⚠️ Script Gen Error: {e}")
+        try:
+            v_script_data = api_manager.generate_step_strict(
+                model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script"
+            )
+            if 'video_script' in v_script_data and isinstance(v_script_data['video_script'], list):
+                script_json = v_script_data['video_script']
+        except Exception as e: log(f"      ⚠️ Script Gen Error: {e}")
 
         if script_json:
             try:
@@ -243,19 +212,14 @@ def run_pipeline(category, config, forced_keyword=None):
                 if ps:
                     fb_path = ps
                     vid_short, _ = youtube_manager.upload_video_to_youtube(ps, title[:90]+" #Shorts", v_desc, v_meta.get('tags',[])+['shorts'])
-            except Exception as ve:
-                log(f"      ⚠️ Video Render/Upload Error: {ve}")
-        else:
-            log("      ❌ Failed to generate video script after 3 attempts.")
+            except Exception as ve: log(f"      ⚠️ Video Render/Upload Error: {ve}")
 
         # --- VALIDATION ---
         log("   🛡️ [Validation] Starting core surgery...")
         try:
-            # Updated to use the new KeyManager-integrated Validator
             healer = content_validator_pro.AdvancedContentValidator()
             content_html = healer.run_professional_validation(content_html, combined_text, collected_sources)
-        except Exception as he:
-            log(f"      ⚠️ Validator skipped: {he}")
+        except Exception as he: log(f"      ⚠️ Validator skipped: {he}")
 
         # --- PUBLISHING ---
         log(f"   🚀 [Publishing] Final assembly...")
@@ -292,27 +256,7 @@ def run_pipeline(category, config, forced_keyword=None):
         full_body = ARTICLE_STYLE + img_h + vid_html + final_c + author_box
         
         if 'schemaMarkup' in final and final['schemaMarkup']: 
-            schema = final['schemaMarkup']
-            schema['@type'] = "TechArticle"
-            schema['proficiencyLevel'] = "Beginner"
-            current_iso_date = datetime.datetime.now().isoformat()
-            schema['datePublished'] = current_iso_date
-            schema['dateModified'] = current_iso_date
-            schema['author'] = {
-                "@type": "Person",
-                "name": "Yousef S.",
-                "url": "https://www.latestai.me",
-                "image": "https://blogger.googleusercontent.com/img/a/AVvXsEiB6B0pK8PhY0j0JrrYCSG_QykTjsbxbbdePdNP_nRT_39FW4SGPPqTrAjendimEUZdipHUiYJfvHVjTBH7Eoz8vEjzzCTeRcDlIcDrxDnUhRJFJv4V7QHtileqO4wF-GH39vq_JAe4UrSxNkfjfi1fDS9_T4mPmwEC71VH9RJSEuSFrNb2ZRQedyA61iQ=s1017-rw",
-                "sameAs": [
-                    "https://www.facebook.com/share/1AkVHBNbV1/",
-                    "https://x.com/latestaime",
-                    "https://www.instagram.com/latestai.me",
-                    "https://m.youtube.com/@0latestai",
-                    "https://pinterest.com/latestaime",
-                    "https://www.reddit.com/user/Yousefsg/"
-                ]
-            }
-            full_body += f'\n<script type="application/ld+json">{json.dumps(schema)}</script>'
+            full_body += f'\n<script type="application/ld+json">{json.dumps(final["schemaMarkup"])}</script>'
 
         p_url = publisher.publish_post(title, full_body, [category, "Tech News", "Reviews"])
         
@@ -321,18 +265,12 @@ def run_pipeline(category, config, forced_keyword=None):
             log(f"   ✅ [SUCCESS] Published LIVE at: {p_url}")
             
             try:
-                log("   🔄 Updating YouTube descriptions with article link...")
                 youtube_update_text = f"👇 Read the full, in-depth article here:\n{p_url}"
-                if vid_main:
-                    youtube_manager.update_video_description(vid_main, youtube_update_text)
-                if vid_short:
-                    youtube_manager.update_video_description(vid_short, youtube_update_text)
-
+                if vid_main: youtube_manager.update_video_description(vid_main, youtube_update_text)
+                if vid_short: youtube_manager.update_video_description(vid_short, youtube_update_text)
                 social_manager.distribute_content(fb_cap, p_url, img_url)
-                if fb_path:
-                    social_manager.post_reel_to_facebook(fb_path, fb_cap, p_url)
-            except Exception as social_e:
-                log(f"   ⚠️ Social media distribution/update failed: {social_e}")
+                if fb_path: social_manager.post_reel_to_facebook(fb_path, fb_cap, p_url)
+            except Exception as social_e: log(f"   ⚠️ Social media distribution/update failed: {social_e}")
             
             return True
         else:
