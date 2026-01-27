@@ -123,7 +123,8 @@ def smart_media_hunt(target_keyword, category):
     except Exception as e:
         log(f"      ⚠️ Sniper Hunt Error: {e}")
     finally:
-        if driver: driver.quit()
+        if driver:
+            driver.quit()
     
     return all_media
 
@@ -134,10 +135,6 @@ def resolve_and_scrape(google_url):
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
-    
-    # --- CRITICAL FIX: Images are NO LONGER blocked ---
-    # This allows BeautifulSoup to "see" the media on the page.
-    
     driver = None
     try:
         service = Service(ChromeDriverManager().install())
@@ -158,7 +155,6 @@ def resolve_and_scrape(google_url):
         page_source = driver.page_source
         soup = BeautifulSoup(page_source, 'html.parser')
 
-        # --- NEW: Extract visuals from the current news article ---
         found_media = extract_media_from_soup(soup, final_url)
         if found_media: log(f"         📸 Found {len(found_media)} visual asset(s) in this source.")
 
@@ -167,7 +163,6 @@ def resolve_and_scrape(google_url):
         extracted_text = trafilatura.extract(page_source, include_comments=False, favor_precision=True)
         
         if extracted_text and len(extracted_text) > 600:
-            # CRITICAL FIX: Now returns 5 values, including the media found
             return final_url, final_title, extracted_text, og_image, found_media
 
         return None, None, None, None, []
@@ -176,5 +171,4 @@ def resolve_and_scrape(google_url):
         return None, None, None, None, []
     finally:
         if driver:
-            try: driver.quit()
-            except: pass```
+            driver.quit()
