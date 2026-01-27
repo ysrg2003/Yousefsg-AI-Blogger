@@ -2,7 +2,7 @@ name: Daily Article Publishing
 
 on:
   schedule:
-    - cron: '33 12 * * *' # توقيت افتراضي (2 ظهرا)
+    - cron: '20 17 * * *' # توقيت افتراضي (2 ظهرا)
   workflow_dispatch: 
 
 permissions:
