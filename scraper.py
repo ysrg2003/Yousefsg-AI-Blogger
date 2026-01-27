@@ -30,8 +30,8 @@ def resolve_and_scrape(google_url):
     }
     chrome_options.add_experimental_option("prefs", prefs)
 
-    }
-    chrome_options.add_experimental_option("prefs", prefs)
+    
+    
     # -----------------------------------------------------------------
 
     driver = None
