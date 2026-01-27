@@ -240,7 +240,6 @@ You must return a JSON object with EXACTLY these keys. Do NOT merge them.
 3.  No Markdown fences (```json).
 4.  No conversational filler.
 """
-
 # ------------------------------------------------------------------
 # PROMPT C: VISUALS & SEO (The "Magazine Editor")
 # ------------------------------------------------------------------
