@@ -1,7 +1,6 @@
-
 # FILE: main.py
 # ROLE: Orchestrator
-# FINAL CORRECTED VERSION: Fixed SyntaxError by ensuring try/except block is complete.
+# FINAL VERSION: Integrated with Smart Visual Detective & Contextual Media Hunt
 
 import os
 import json
@@ -132,9 +131,18 @@ def run_pipeline(category, config, forced_keyword=None):
             log(f"   ❌ Failed to collect enough sources (Found {len(collected_sources)}). Aborting.")
             return False
 
-        # 4. REDDIT INTEL
-        log("   📱 Harvesting Reddit opinions...")
-        reddit_context = reddit_manager.get_community_intel(target_keyword)
+        # 4. REDDIT INTEL & VISUAL HUNT (UPDATED)
+        log("   📱 Harvesting Reddit opinions & Visuals...")
+        # Now returns tuple: (text_report, media_list)
+        reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
+        
+        # 4.5 SMART MEDIA HUNT (OFFICIAL SITE) (NEW)
+        log("   🕵️‍♂️ Launching Smart Media Hunt (Official Sources)...")
+        official_media = scraper.smart_media_hunt(target_keyword, category)
+        
+        # Combine all visual proofs
+        all_visual_proofs = reddit_media + official_media
+        log(f"   📸 Total Visual Proofs Found: {len(all_visual_proofs)} items")
 
         # 5. SYNTHESIS & GENERATION
         log("   ✍️ [Generation Started] Preparing research data...")
@@ -143,7 +151,10 @@ def run_pipeline(category, config, forced_keyword=None):
             combined_text += f"\n--- SOURCE {i+1}: {src['domain']} ---\nURL: {src['url']}\nCONTENT:\n{src['text'][:9000]}\n"
         if reddit_context: combined_text += f"\n\n{reddit_context}\n"
         
-        payload = f"METADATA: {json.dumps({'keyword': target_keyword})}\n\nDATA:\n{combined_text}"
+        # Inject Visual Evidence into Payload
+        payload = f"METADATA: {json.dumps({'keyword': target_keyword, 'category': category})}\n"
+        payload += f"OFFICIAL_MEDIA_ASSETS: {json.dumps(all_visual_proofs)}\n" # <--- Passing Visuals to Writer
+        payload += f"\nDATA:\n{combined_text}"
         
         json_b = api_manager.generate_step_strict(
             model_name, 
@@ -240,10 +251,11 @@ def run_pipeline(category, config, forced_keyword=None):
         # --- VALIDATION ---
         log("   🛡️ [Validation] Starting core surgery...")
         try:
-            # التعديل: لم نعد نمرر العميل، الكلاس ينشئه بنفسه
+            # Updated to use the new KeyManager-integrated Validator
             healer = content_validator_pro.AdvancedContentValidator()
             content_html = healer.run_professional_validation(content_html, combined_text, collected_sources)
         except Exception as he:
+            log(f"      ⚠️ Validator skipped: {he}")
 
         # --- PUBLISHING ---
         log(f"   🚀 [Publishing] Final assembly...")
