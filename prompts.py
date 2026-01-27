@@ -289,12 +289,12 @@ Output JSON ONLY (Must contain these specific keys):
       "tags": ["tag1", "tag2", "tag3"],
       "imageAltText": "Realistic representation of [Topic] in action"
   }},
-  "schemaMarkup": {
+  "schemaMarkup": {{
       "INSTRUCTION": "Choose the correct Schema type:",
       "IF": "Topic is a released software/app/tool that anyone can use -> Use 'SoftwareApplication' with 'Review' schema.",
       "ELSE IF": "Topic is unreleased hardware, expensive robotics, or general news -> Use 'NewsArticle' schema (Do NOT include star ratings).",
       "OUTPUT": "Return the full valid JSON-LD object based on the logic above."
-  }
+  }}
 }}
 
 **CRITICAL OUTPUT RULES:**
