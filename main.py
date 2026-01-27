@@ -310,10 +310,11 @@ def run_pipeline(category, config, forced_keyword=None):
             schema['@type'] = "TechArticle"
             schema['proficiencyLevel'] = "Beginner"
 
-           current_iso_date = datetime.datetime.now().isoformat()
+            # --- FIX: FORCE CURRENT DATE (NO AI HALLUCINATIONS) ---
+            current_iso_date = datetime.datetime.now().isoformat()
             schema['datePublished'] = current_iso_date
-            schema['dateModified'] = current_iso_date # مهم جداً للتحديثات
-        
+            schema['dateModified'] = current_iso_date
+            # ------------------------------------------------------
             schema['author'] = {
                 "@type": "Person",
                 "name": "Yousef S.",
