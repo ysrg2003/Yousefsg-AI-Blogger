@@ -35,6 +35,39 @@ Output JSON ONLY:
 2. No Markdown.
 """
 
+
+
+# ------------------------------------------------------------------
+# PROMPT 0.5: THE CREATIVE DIRECTOR (VISUAL STRATEGY)
+# ------------------------------------------------------------------
+PROMPT_VISUAL_STRATEGY = """
+ROLE: Creative Director at a top-tier tech publication (like The Verge).
+TASK: Analyze the topic and decide the SINGLE BEST type of visual evidence to make the article trustworthy and engaging.
+
+INPUT TOPIC: "{target_keyword}"
+INPUT CATEGORY: "{category}"
+
+**VISUAL STRATEGY OPTIONS (Choose ONE):**
+1.  `"hunt_for_video"`: Best for tangible products, robots, things that move.
+2.  `"hunt_for_screenshot"`: Best for software UI, apps, websites with new features.
+3.  `"generate_quote_box"`: Best for abstract topics like lawsuits, opinions, reports, ethics. Extract a powerful quote from the source text.
+4.  `"generate_comparison_table"`: Best for "vs" topics, benchmarks, or comparing old/new versions.
+5.  `"generate_code_snippet"`: Best for programming, APIs, developer tools.
+6.  `"generate_timeline"`: Best for historical events, evolution of a product, or legal cases.
+7.  `"generate_infographic"`: Best for topics with a lot of statistics or data.
+
+**YOUR ANALYSIS (Internal Thought Process):**
+- Is this a physical object? -> `hunt_for_video`.
+- Is this a software I can see on a screen? -> `hunt_for_screenshot`.
+- Is this a legal or ethical debate? -> `generate_quote_box`.
+- Is it a comparison? -> `generate_comparison_table`.
+
+**OUTPUT PURE JSON ONLY:**
+{{
+  "visual_strategy": "The chosen strategy from the list above"
+}}
+"""
+
 # ------------------------------------------------------------------
 # PROMPT A: TOPIC SELECTION (Filter: "Is this clickable content?")
 # ------------------------------------------------------------------
@@ -114,14 +147,28 @@ You speak directly to the reader (First-Person "I").
    - **MANDATORY:** You MUST cite the Reddit/Community feedback provided in the input. 
    - **INTEGRATION STYLE:** Weave them into the narrative. "A user on <a href='LINK' target='_blank'>r/Technology</a> pointed out a massive flaw..."
 
-**VISUAL EVIDENCE SELECTION (INTELLIGENT MODE):**
-I have provided a list of "OFFICIAL_MEDIA_ASSETS". Each item has a 'url' and a 'description'.
-1. **ANALYZE:** Read the 'description' of each asset.
-2. **SELECT:** Pick the one that sounds most like a **User Interface Demo** or a **Result Showcase**.
-   - *Good Description:* "Interface showing text prompt generation", "Video result of a flying car".
-   - *Bad Description:* "Site background pattern", "Company logo animation".
-3. **EMBED:** Use the chosen URL in the HTML format described below.
-4. **CAPTION:** Add a small caption under the media based on its description. e.g., <figcaption>Official demo showing [Feature Name]</figcaption>.
+**VISUAL EXECUTION DIRECTIVE (MANDATORY):**
+I have given you a `VISUAL_STRATEGY_DIRECTIVE`. Your primary goal is to execute this order.
+
+**1. IF DIRECTIVE STARTS WITH "hunt_for_":**
+   - Check the `VISUAL_EVIDENCE_LINKS` list.
+   - **If NOT EMPTY:** Embed the best asset (video/gif) with the highest score.
+   - **If EMPTY (Hunt Failed):** You MUST generate a fallback. Create a `prompt-card` or a `pros-cons-grid` as a Plan B. Announce it: "While we couldn't find an official demo, here's an example of how it should work:".
+
+**2. IF DIRECTIVE IS "generate_quote_box":**
+   - Find the most powerful, controversial, or insightful sentence from the entire source text.
+   - Format it inside a `<blockquote>` with a proper citation. Do NOT look for media.
+
+**3. IF DIRECTIVE IS "generate_comparison_table":**
+   - Create a detailed `<table class="comparison-table">` comparing the subject to its main competitor or previous version. Do NOT look for media.
+
+**4. IF DIRECTIVE IS "generate_code_snippet":**
+   - Create a `<div class="code-box">` with a relevant code example (e.g., API usage, fixing a bug). Do NOT look for media.
+
+**5. IF DIRECTIVE IS "generate_timeline":**
+   - Create a simple `<ul>` list with dates and key events related to the topic (e.g., lawsuit filings, product updates).
+
+**RULE:** You must execute the directive. Failure to include a visual element (either found or generated) will result in termination.
 
 **THE HONESTY PROTOCOL (CRITICAL):**
 1. **CHECK YOUR INPUTS:** Look at the "VISUAL_EVIDENCE_LINKS" list provided above.
