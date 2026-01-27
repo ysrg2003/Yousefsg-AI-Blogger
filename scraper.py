@@ -15,10 +15,11 @@ from config import log, USER_AGENTS
 # ==============================================================================
 
 # قائمة استبعاد للمواقع الإخبارية (نحن نريد المصدر الرسمي فقط عند البحث عن الوسائط)
+# تم حذف "youtube" من هنا للسماح بالعثور على العروض الرسمية
 NEWS_DOMAINS_BLACKLIST = [
     "techcrunch", "theverge", "engadget", "wired", "cnet", "forbes", 
     "businessinsider", "nytimes", "wsj", "bloomberg", "reuters", "cnn",
-    "bbc", "medium", "reddit", "youtube", "wikipedia", "latestai", "techradar"
+    "bbc", "medium", "reddit", "wikipedia", "latestai", "techradar"
 ]
 
 # ==============================================================================
@@ -90,9 +91,6 @@ def smart_media_hunt(target_keyword, category):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
     
-    # ملاحظة: هنا لا نحظر الصور تماماً لأننا نريد التأكد من وجودها في DOM، 
-    # لكننا نعتمد على السرعة.
-    
     driver = None
     found_media = []
     
@@ -111,11 +109,36 @@ def smart_media_hunt(target_keyword, category):
         
         for link in links[:6]: # نفحص أول 6 نتائج
             url = link.get_attribute('href')
-            if url and is_official_looking_url(url, target_keyword):
+            if not url: continue
+
+            # --- NEW: YouTube Handling Logic ---
+            # إذا كان الرابط فيديو يوتيوب، نعتبره كنزاً ونأخذه فوراً
+            if "youtube.com/watch" in url:
+                try:
+                    # استخراج ID الفيديو
+                    vid_id = url.split('v=')[1].split('&')[0]
+                    embed_url = f"https://www.youtube.com/embed/{vid_id}"
+                    
+                    found_media.append({
+                        "type": "embed",
+                        "url": embed_url,
+                        "description": f"Official YouTube Reveal: {target_keyword}",
+                        "score": 10 # أولوية قصوى
+                    })
+                    log(f"      🎥 Found Official YouTube Video: {vid_id}")
+                except: pass
+                continue # ننتقل للرابط التالي ولا نحاول الدخول لصفحة يوتيوب
+
+            # إذا لم يكن يوتيوب، نتحقق هل هو موقع رسمي
+            if is_official_looking_url(url, target_keyword):
                 target_url = url
                 break
         
+        # إذا لم نجد موقعاً رسمياً (لكن ربما وجدنا يوتيوب)، نكتفي بما وجدنا
         if not target_url:
+            if found_media:
+                log(f"      ⚠️ No official site found, but found {len(found_media)} videos.")
+                return found_media
             log("      ⚠️ No official-looking source found via Smart Hunt.")
             return []
 
@@ -129,7 +152,7 @@ def smart_media_hunt(target_keyword, category):
         positive_signals = ["demo", "showcase", "tutorial", "interface", "example", "generated", "result", "how to", "workflow", "reveal", "trailer"]
         negative_signals = ["logo", "icon", "background", "hero", "banner", "loader", "spinner", "team", "hiring", "avatar", "profile", "footer"]
 
-        # 3. استخراج الوسائط بذكاء
+        # 3. استخراج الوسائط بذكاء من الموقع الرسمي
         
         # أ) البحث عن فيديوهات (MP4/WebM)
         for video in soup.find_all('video'):
@@ -148,10 +171,10 @@ def smart_media_hunt(target_keyword, category):
                     "type": "video", 
                     "url": src, 
                     "description": context,
-                    "score": sum(1 for sig in positive_signals if sig in context) + 2 # Video gets bonus score
+                    "score": sum(1 for sig in positive_signals if sig in context) + 2
                 })
 
-        # ب) البحث عن YouTube/Vimeo Embeds
+        # ب) البحث عن YouTube/Vimeo Embeds داخل الموقع
         for iframe in soup.find_all('iframe'):
             src = iframe.get('src', '')
             if 'youtube.com/embed' in src or 'player.vimeo.com' in src:
