@@ -13,12 +13,9 @@ def search_reddit_threads(keyword):
     """
     يبحث عن نقاشات حقيقية (ليست أخباراً) باستخدام فلاتر جوجل الذكية.
     """
-    # البحث عن كلمات تدل على تجربة حقيقية
-    # نستخدم -giveaway لاستبعاد المسابقات
-    search_query = f"site:reddit.com {keyword} (review OR 'after using' OR 'problem with' OR 'my thoughts') -giveaway"
+    search_query = f"site:reddit.com {keyword} (review OR 'after using' OR 'problem with' OR 'my thoughts' OR 'demo') -giveaway"
     encoded = urllib.parse.quote(search_query)
     
-    # نستخدم بحث جوجل العام بصيغة RSS لأنه أدق وأسرع من API ريديت ولا يحتاج مفاتيح
     url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
     
     try:
@@ -26,11 +23,9 @@ def search_reddit_threads(keyword):
         threads = []
         if feed.entries:
             for entry in feed.entries[:4]: 
-                # تنظيف الرابط
-                real_link = entry.link
                 threads.append({
                     "title": entry.title,
-                    "link": real_link
+                    "link": entry.link
                 })
         return threads
     except Exception as e:
@@ -39,31 +34,51 @@ def search_reddit_threads(keyword):
 
 def extract_smart_opinions(reddit_url):
     """
-    يسحب التعليقات ويحلل محتواها لاستخراج 'الذهب' فقط (JSON Trick).
+    يسحب التعليقات + الوسائط البصرية (فيديو/GIF) من المنشور.
     """
     try:
         clean_url = reddit_url.split("?")[0]
-        if not clean_url.endswith(".json"):
-            json_url = f"{clean_url}.json"
-        else:
-            json_url = clean_url
+        json_url = f"{clean_url}.json" if not clean_url.endswith(".json") else clean_url
 
-        # User-Agent ضروري جداً لتجنب خطأ 429
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0'
         }
         
         r = requests.get(json_url, headers=headers, timeout=10)
-        if r.status_code != 200: return []
+        if r.status_code != 200: return [], []
 
         data = r.json()
         
-        # محاولة استخراج اسم المجتمع (Subreddit) لإعطاء مصداقية
-        try:
-            subreddit = data[0]['data']['children'][0]['data']['subreddit_name_prefixed'] # ex: r/Android
-        except:
-            subreddit = "Reddit Discussion"
+        # 1. استخراج بيانات المنشور الرئيسي (للبحث عن الوسائط)
+        main_post = data[0]['data']['children'][0]['data']
+        subreddit = main_post.get('subreddit_name_prefixed', "Reddit")
+        post_title = main_post.get('title', 'Reddit Post')
+        
+        media_found = []
 
+        # أ) البحث عن روابط مباشرة (صور/GIFs)
+        if 'url_overridden_by_dest' in main_post:
+            url = main_post['url_overridden_by_dest']
+            if any(ext in url.lower() for ext in ['.jpg', '.png', '.gif', '.mp4']):
+                m_type = "video" if url.endswith('.mp4') else "gif" if url.endswith('.gif') else "image"
+                media_found.append({
+                    "type": m_type,
+                    "url": url,
+                    "description": f"Community Demo: {post_title[:60]}"
+                })
+
+        # ب) البحث عن فيديوهات Reddit المرفوعة مباشرة
+        if main_post.get('is_video') and main_post.get('media'):
+            try:
+                vid_url = main_post['media']['reddit_video']['fallback_url']
+                media_found.append({
+                    "type": "video",
+                    "url": vid_url,
+                    "description": f"User Video Review: {post_title[:60]}"
+                })
+            except: pass
+
+        # 2. استخراج التعليقات (النصوص)
         comments_data = data[1]['data']['children']
         insights = []
         
@@ -71,60 +86,53 @@ def extract_smart_opinions(reddit_url):
             c_data = comm.get('data', {})
             body = c_data.get('body', '')
             score = c_data.get('score', 0)
-            permalink = c_data.get('permalink', '')
-            author = c_data.get('author', 'User')
             
-            # فلتر الجودة:
-            # 1. الطول مناسب (ليس كلمة واحدة وليس مقالاً طويلاً جداً)
-            # 2. يحتوي على كلمات تدل على التجربة
             if len(body) > 60 and body not in ["[deleted]", "[removed]"]:
                 markers = ["i noticed", "in my experience", "battery", "bug", "glitch", "crash", "actually", "worth it", "slow", "fast", "update"]
                 if any(m in body.lower() for m in markers) or score > 5:
-                    
-                    # بناء رابط دقيق للتعليق نفسه
-                    full_link = f"https://www.reddit.com{permalink}"
-                    
                     insights.append({
                         "source_name": subreddit,
-                        "author": author,
-                        "text": body[:500].replace("\n", " "), # تنظيف
-                        "url": full_link,
+                        "author": c_data.get('author', 'User'),
+                        "text": body[:500].replace("\n", " "),
+                        "url": f"https://www.reddit.com{c_data.get('permalink', '')}",
                         "score": score
                     })
         
-        # نرتب حسب الأهمية (Score)
         insights.sort(key=lambda x: x['score'], reverse=True)
-        return insights[:3] # نأخذ أفضل 3 من كل خيط
+        return insights[:3], media_found # نعيد (التعليقات، الوسائط)
 
     except Exception as e:
-        # logger.error(f"Extraction error: {e}")
-        return []
+        return [], []
 
 def get_community_intel(keyword):
     """
-    المحرك الرئيسي: يعيد تقريراً نصياً مهيكلاً للـ AI
+    المحرك الرئيسي: يعيد تقريراً نصياً + قائمة بالوسائط البصرية.
     """
-    logger.info(f"🧠 Mining Reddit intelligence for: '{keyword}'...")
+    logger.info(f"🧠 Mining Reddit intelligence & visuals for: '{keyword}'...")
     threads = search_reddit_threads(keyword)
     
-    if not threads: return ""
+    if not threads: return "", []
     
     all_insights = []
+    all_media = [] # قائمة جديدة لتجميع الوسائط
+    
     for thread in threads:
         if "reddit.com" in thread['link']:
-            ops = extract_smart_opinions(thread['link'])
+            ops, media = extract_smart_opinions(thread['link'])
             all_insights.extend(ops)
+            all_media.extend(media) # إضافة الوسائط المكتشفة
             time.sleep(0.5)
             
-    if not all_insights: return ""
+    # إزالة الوسائط المكررة
+    unique_media = list({v['url']:v for v in all_media}.values())
     
-    # تنسيق البيانات بشكل صارم للـ Prompt
-    # هذا التنسيق يجبر الـ AI على فهم الرابط والمصدر
+    if not all_insights: return "", unique_media
+    
+    # بناء التقرير النصي
     report = "\n=== 📢 REAL COMMUNITY FEEDBACK (INTEGRATE THIS) ===\n"
     report += "INSTRUCTIONS: Use these real user quotes to validate or criticize the news. \n"
     report += "CRITICAL: When citing, you MUST hyperlink the text 'community discussion' or the Subreddit name (e.g., r/Gadgets) to the provided URL.\n\n"
     
-    # نختار أفضل 4 آراء متنوعة وفريدة
     unique_insights = list({v['text']:v for v in all_insights}.values())[:4]
     
     for i, item in enumerate(unique_insights):
@@ -133,4 +141,5 @@ def get_community_intel(keyword):
         report += f"LINK: {item['url']} (Link strictly to this)\n"
         report += f"USER SAID: \"{item['text']}\"\n"
         
-    return report
+    # نعيد التقرير النصي + قائمة الوسائط
+    return report, unique_media
