@@ -82,6 +82,41 @@ ARTICLE_STYLE = """
         font-weight: 600;
         color: #3498db;
     }
+    .Sources {
+        background-color: #f0f4f8;
+        padding: 25px;
+        border-radius: 12px;
+        margin-top: 60px;
+        border: 1px solid #dbe2e8;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+    }
+    .Sources h3 {
+        margin-top: 0;
+        font-size: 20px;
+        color: #2c3e50;
+        border-bottom: 2px solid #3498db;
+        display: inline-block;
+        padding-bottom: 5px;
+        margin-bottom: 15px;
+    }
+    .Sources ul {
+        list-style-type: disc;
+        padding-left: 20px;
+        color: #555;
+    }
+    .Sources li {
+        margin-bottom: 8px;
+        font-size: 16px;
+    }
+    .Sources a {
+        font-weight: 600;
+        color: #2980b9;
+        border-bottom: none;
+    }
+    .Sources a:hover {
+        text-decoration: underline;
+        color: #c0392b;
+
 </style>
 """
 
