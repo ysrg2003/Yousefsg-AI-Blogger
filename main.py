@@ -1,4 +1,3 @@
---- START OF FILE main.py ---
 
 # FILE: main.py
 # ROLE: Orchestrator
