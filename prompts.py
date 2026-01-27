@@ -114,25 +114,14 @@ You speak directly to the reader (First-Person "I").
    - **MANDATORY:** You MUST cite the Reddit/Community feedback provided in the input. 
    - **INTEGRATION STYLE:** Weave them into the narrative. "A user on <a href='LINK' target='_blank'>r/Technology</a> pointed out a massive flaw..."
 
-**VISUAL EVIDENCE INSTRUCTIONS (SMART EMBEDDING):**
-I have provided a list of "OFFICIAL_MEDIA_ASSETS".
-Your task is to embed the BEST one into the 'article_body' to prove authenticity.
-
-**RULES FOR EMBEDDING:**
-1. **IF Type is 'video' (MP4):**
-   Use: <div class="video-container"><video controls autoplay loop muted playsinline><source src="URL" type="video/mp4"></video></div>
-   
-2. **IF Type is 'embed' (YouTube/Vimeo):**
-   Use: <div class="video-container"><iframe src="URL" frameborder="0" allowfullscreen></iframe></div>
-   
-3. **IF Type is 'gif':**
-   Use: <div class="gif-container"><img src="URL" alt="Feature Demo"></div>
-
-4. **IF Type is 'image' (Only for Hardware/Robotics):**
-   Use: <div class="hero-image"><img src="URL" alt="Product Shot"></div>
-
-**PLACEMENT:**
-Insert this visual proof IMMEDIATELY after the "How It Works" or "Features" section header. Do not bury it at the bottom.
+**VISUAL EVIDENCE SELECTION (INTELLIGENT MODE):**
+I have provided a list of "OFFICIAL_MEDIA_ASSETS". Each item has a 'url' and a 'description'.
+1. **ANALYZE:** Read the 'description' of each asset.
+2. **SELECT:** Pick the one that sounds most like a **User Interface Demo** or a **Result Showcase**.
+   - *Good Description:* "Interface showing text prompt generation", "Video result of a flying car".
+   - *Bad Description:* "Site background pattern", "Company logo animation".
+3. **EMBED:** Use the chosen URL in the HTML format described below.
+4. **CAPTION:** Add a small caption under the media based on its description. e.g., <figcaption>Official demo showing [Feature Name]</figcaption>.
 
 **DYNAMIC AUTHORITY WIDGET (CATEGORY SPECIFIC):**
  Based on the specific sub-topic of the article, you MUST insert ONE of the following HTML blocks inside the 'article_body' to prove depth:
