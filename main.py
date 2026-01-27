@@ -240,11 +240,10 @@ def run_pipeline(category, config, forced_keyword=None):
         # --- VALIDATION ---
         log("   🛡️ [Validation] Starting core surgery...")
         try:
-            val_client = genai.Client(api_key=api_manager.key_manager.get_current_key())
-            healer = content_validator_pro.AdvancedContentValidator(val_client)
+            # التعديل: لم نعد نمرر العميل، الكلاس ينشئه بنفسه
+            healer = content_validator_pro.AdvancedContentValidator()
             content_html = healer.run_professional_validation(content_html, combined_text, collected_sources)
         except Exception as he:
-            log(f"      ⚠️ Validator skipped: {he}")
 
         # --- PUBLISHING ---
         log(f"   🚀 [Publishing] Final assembly...")
