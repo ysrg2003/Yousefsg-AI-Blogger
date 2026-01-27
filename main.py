@@ -263,19 +263,7 @@ def run_pipeline(category, config, forced_keyword=None):
         fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
         fb_cap = fb_dat.get('FB_Hook', title)
 
-        # --- SOURCES SECTION ---
-        sources_block = """
-        <div style="margin-top: 40px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #3498db;">
-            <h3 style="margin-top: 0; font-size: 18px; color: #2c3e50;">📚 Sources & References</h3>
-            <ul style="margin-bottom: 0; padding-left: 20px; color: #555;">
-        """
-        for src in collected_sources:
-            safe_title = src['title'].replace('"', '').replace("'", "")
-            sources_block += f'<li style="margin-bottom: 8px;"><a href="{src["url"]}" target="_blank" rel="nofollow noopener" style="text-decoration: none; color: #3498db; font-weight: 600;">{safe_title}</a> <span style="font-size: 0.85em; color: #7f8c8d;">({src["domain"]})</span></li>'
-        sources_block += "</ul></div>"
-        content_html += sources_block
-
-        # --- UPDATED AUTHOR BOX (WITH REDDIT) ---
+        
         author_box = """
         <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
             <div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:25px;">
