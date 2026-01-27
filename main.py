@@ -139,10 +139,13 @@ def run_pipeline(category, config, forced_keyword=None):
         
         log(f"   📸 Dual-Hunt Complete. Total Unique Visual Proofs: {len(unique_visuals)}")
 
+        
         # --- VISUAL EVIDENCE PRE-PROCESSING (THE EDITOR'S BRAIN) ---
         visual_evidence_html = ""
         if unique_visuals:
-            best_visual = unique_visuals[0]
+            # نعطي الأولوية القصوى للـ embed لأنها الأكثر موثوقية
+            best_visual = sorted(unique_visuals, key=lambda x: (x['type'] == 'embed', x.get('score', 0)), reverse=True)[0]
+            
             v_type = best_visual['type']
             v_url = best_visual['url']
             v_desc = best_visual.get('description', 'Visual Evidence')
@@ -150,13 +153,21 @@ def run_pipeline(category, config, forced_keyword=None):
             log(f"      ✅ Editor's Pick: A '{v_type}' with description: '{v_desc[:50]}...'")
             caption = f"<figcaption>Source: {urllib.parse.urlparse(v_url).netloc}</figcaption>"
             
+            # فقط الـ embed يتم تضمينه مباشرة
             if v_type == "embed":
-                visual_evidence_html = f'<div class="video-container"><iframe src="{v_url}" frameborder="0" allowfullscreen></iframe>{caption}</div>'
-            elif v_type == "video":
-                visual_evidence_html = f'<div class="video-container"><video controls autoplay loop muted playsinline><source src="{v_url}" type="video/mp4"></video>{caption}</div>'
-            elif v_type in ["gif", "image"]:
-                visual_evidence_html = f'<div class="gif-container"><img src="{v_url}" alt="{v_desc}" style="width:100%; border-radius:8px;">{caption}</div>'
-        
+                visual_evidence_html = f'<div class="video-container" style="margin-bottom: 5px;"><iframe src="{v_url}" frameborder="0" allowfullscreen></iframe></div>{caption}'
+            
+            # الأنواع الأخرى (فيديو مباشر، GIF) نعرضها كرابط أنيق لتجنب الكسر
+            elif v_type in ["video", "gif", "image"]:
+                visual_evidence_html = f'''
+                <div class="prompt-card" style="text-align:center; padding: 25px; background: #2c3e50; border-left-color: #3498db;">
+                    <span class="prompt-label" style="color: #fff;">👁️ VISUAL EVIDENCE AVAILABLE</span>
+                    <p style="color: #ecf0f1; font-size: 16px;">A {v_type} demonstrating this feature was found.</p>
+                    <a href="{v_url}" target="_blank" rel="noopener noreferrer" style="display:inline-block; padding: 10px 20px; background: #3498db; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px; font-weight: bold;">Watch Demo Here</a>
+                    {caption}
+                </div>
+                '''
+          
         # --- CODE-ENFORCED FALLBACK ---
         if not visual_evidence_html and visual_strategy.startswith("hunt_for_"):
             log("      ⚠️ Hunt failed. Overwriting directive to 'generate_comparison_table'.")
