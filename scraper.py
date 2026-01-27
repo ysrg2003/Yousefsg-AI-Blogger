@@ -24,6 +24,12 @@ def resolve_and_scrape(google_url):
     prefs = {
         "profile.managed_default_content_settings.images": 2,
         "profile.managed_default_content_settings.stylesheets": 2,
+        "profile.managed_default_content_settings.fonts": 2,       # Block Fonts
+        "profile.default_content_setting_values.notifications": 2, # Block Notifications
+        "profile.managed_default_content_settings.popups": 2,      # Block Popups
+    }
+    chrome_options.add_experimental_option("prefs", prefs)
+
     }
     chrome_options.add_experimental_option("prefs", prefs)
     # -----------------------------------------------------------------
@@ -33,9 +39,9 @@ def resolve_and_scrape(google_url):
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         
-        # --- FIX: Increased timeout from 25 to 59 seconds ---
+        # --- FIX: Increased timeout from 25 to 90 seconds ---
         # This gives heavy, ad-filled news sites more time to load before failing.
-        driver.set_page_load_timeout(59) 
+        driver.set_page_load_timeout(90) 
         # ----------------------------------------------------
         
         driver.get(google_url)
