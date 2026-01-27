@@ -309,6 +309,11 @@ def run_pipeline(category, config, forced_keyword=None):
             schema = final['schemaMarkup']
             schema['@type'] = "TechArticle"
             schema['proficiencyLevel'] = "Beginner"
+
+           current_iso_date = datetime.datetime.now().isoformat()
+            schema['datePublished'] = current_iso_date
+            schema['dateModified'] = current_iso_date # مهم جداً للتحديثات
+        
             schema['author'] = {
                 "@type": "Person",
                 "name": "Yousef S.",
