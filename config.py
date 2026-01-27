@@ -1,3 +1,6 @@
+# FILE: config.py
+# ROLE: Shared Configuration & Constants
+
 import datetime
 
 USER_AGENTS = [
@@ -20,6 +23,7 @@ BORING_KEYWORDS = [
     "Executive", "Knorex", "Partner", "Agreement", "B2B", "Enterprise"
 ]
 
+# --- UPDATED CSS: Added .ai-sources-box style ---
 ARTICLE_STYLE = """
 <style>
     .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.8; color: #333; font-size: 18px; }
@@ -32,6 +36,36 @@ ARTICLE_STYLE = """
     .toc-box ul { list-style: none; padding: 0; }
     .toc-box li { margin-bottom: 10px; border-bottom: 1px dashed #eee; padding-bottom: 5px; }
     .toc-box a { text-decoration: none; border: none; font-weight: 600; color: #555; }
+    
+    /* NEW SOURCES BOX DESIGN */
+    .ai-sources-box {
+        margin-top: 40px; 
+        padding: 25px; 
+        background-color: #f8f9fa; 
+        border-radius: 12px; 
+        border-left: 5px solid #3498db;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .ai-sources-box h3 {
+        margin-top: 0 !important;
+        color: #2c3e50 !important;
+        font-size: 20px !important;
+        border-bottom: 1px solid #e1e4e8;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+    }
+    .ai-sources-box ul {
+        margin-bottom: 0; 
+        padding-left: 20px; 
+        color: #555;
+    }
+    .ai-sources-box li {
+        margin-bottom: 8px;
+    }
+    .ai-sources-box a {
+        font-weight: 600;
+        color: #3498db;
+    }
 </style>
 """
 
