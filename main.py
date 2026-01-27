@@ -1,7 +1,7 @@
 
 # FILE: main.py
 # ROLE: Orchestrator
-# CORRECTED VERSION: Restored original content assembly logic, removed hardcoded sources.
+# FIX: Removed the redundant and fragile Step E (Final Polish). Step D's output is now final.
 
 import os
 import json
@@ -64,11 +64,11 @@ def run_pipeline(category, config, forced_keyword=None):
     
     collected_sources = []
     search_strategies = [
-        target_keyword,
-        f"{target_keyword} news",
-        f"{target_keyword} review OR analysis",
-        f"{category} {target_keyword}",
-        f"{category} news"
+        f'"{target_keyword}"',
+        f'{target_keyword} news update',
+        f'{target_keyword} review OR analysis OR features',
+        f'{category} {target_keyword}',
+        f'{category} news'
     ]
     
     required_terms = target_keyword.lower().split()
@@ -94,12 +94,10 @@ def run_pipeline(category, config, forced_keyword=None):
                 log(f"         ⛔ Skipped Boring: {item['title']}")
                 continue
                 
-            # Resolve URL FIRST
             f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
             
             if not f_url: continue
 
-            # Duplicate Check
             is_duplicate = False
             f_domain = urllib.parse.urlparse(f_url).netloc.replace('www.', '')
             for s in collected_sources:
@@ -171,18 +169,11 @@ def run_pipeline(category, config, forced_keyword=None):
             required_keys=["finalTitle", "finalContent"]
         )
         
-         try:
-            final = api_manager.generate_step_strict(
-                model_name, 
-                PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), 
-                "Step E (Final Polish)",
-                required_keys=["finalTitle", "finalContent"]
-                
-        except Exception as e:
-            log(f"      ⚠️ Step E failed. Fallback to Step D. Error: {e}")
-            final = json_d
-            final['imageGenPrompt'] = final.get('finalTitle', target_keyword)
-            final['imageOverlayText'] = "LATEST NEWS"
+        # --- FIX: REMOVED UNNECESSARY STEP E ---
+        # Step E was a fragile JSON formatting step that is already handled by the api_manager.
+        # The output from Step D is now considered the final, clean version.
+        final = json_d
+        # ----------------------------------------
         
         title, content_html = final.get('finalTitle', 'Untitled'), final.get('finalContent', '<p>Error</p>')
         
@@ -264,11 +255,6 @@ def run_pipeline(category, config, forced_keyword=None):
         fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
         fb_cap = fb_dat.get('FB_Hook', title)
 
-        # --- FIX: REMOVED THE HARDCODED SOURCES BLOCK ---
-        # The AI is responsible for generating the sources section now,
-        # and the CSS in config.py will style it. This prevents duplication and errors.
-        
-        # --- AUTHOR BOX ---
         author_box = """
         <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
             <div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:25px;">
@@ -302,12 +288,9 @@ def run_pipeline(category, config, forced_keyword=None):
             schema = final['schemaMarkup']
             schema['@type'] = "TechArticle"
             schema['proficiencyLevel'] = "Beginner"
-
-            # --- FIX: FORCE CURRENT DATE ---
             current_iso_date = datetime.datetime.now().isoformat()
             schema['datePublished'] = current_iso_date
             schema['dateModified'] = current_iso_date
-            
             schema['author'] = {
                 "@type": "Person",
                 "name": "Yousef S.",
