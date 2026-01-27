@@ -1,6 +1,6 @@
 # FILE: main.py
 # ROLE: Orchestrator
-# FINAL VERSION: Implements the Dual-Hunt Strategy for maximum visual evidence acquisition.
+# FINAL VERSION: Implements Dual-Hunt, Pre-processing, and Code-Enforced Fallbacks.
 
 import os
 import json
@@ -95,7 +95,7 @@ def run_pipeline(category, config, forced_keyword=None):
                 if len(collected_sources) >= 3: break
                 if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS): continue
                     
-                # CRITICAL FIX: Now correctly unpacks 5 values
+                # CRITICAL FIX: Correctly unpacks 5 values now
                 f_url, f_title, text, f_image, media_in_source = scraper.resolve_and_scrape(item['link'])
                 
                 if not f_url or not text: continue
@@ -124,10 +124,9 @@ def run_pipeline(category, config, forced_keyword=None):
         reddit_media = []
         reddit_context = ""
 
-        # Execute hunt only if the director ordered it
         if visual_strategy.startswith("hunt_for_"):
             log("   📸 Directive is 'Hunt'. Launching dedicated visual hunt...")
-            official_media = scraper.smart_media_hunt(target_keyword, category)
+            official_media = scraper.smart_media_hunt(target_keyword, category, visual_strategy)
             reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
         else:
             log(f"   🎨 Directive is '{visual_strategy}'. Skipping dedicated media hunt.")
@@ -140,8 +139,26 @@ def run_pipeline(category, config, forced_keyword=None):
         
         log(f"   📸 Dual-Hunt Complete. Total Unique Visual Proofs: {len(unique_visuals)}")
 
-        # --- FALLBACK LOGIC (CODE-ENFORCED) ---
-        if not unique_visuals and visual_strategy.startswith("hunt_for_"):
+        # --- VISUAL EVIDENCE PRE-PROCESSING (THE EDITOR'S BRAIN) ---
+        visual_evidence_html = ""
+        if unique_visuals:
+            best_visual = unique_visuals[0]
+            v_type = best_visual['type']
+            v_url = best_visual['url']
+            v_desc = best_visual.get('description', 'Visual Evidence')
+
+            log(f"      ✅ Editor's Pick: A '{v_type}' with description: '{v_desc[:50]}...'")
+            caption = f"<figcaption>Source: {urllib.parse.urlparse(v_url).netloc}</figcaption>"
+            
+            if v_type == "embed":
+                visual_evidence_html = f'<div class="video-container"><iframe src="{v_url}" frameborder="0" allowfullscreen></iframe>{caption}</div>'
+            elif v_type == "video":
+                visual_evidence_html = f'<div class="video-container"><video controls autoplay loop muted playsinline><source src="{v_url}" type="video/mp4"></video>{caption}</div>'
+            elif v_type in ["gif", "image"]:
+                visual_evidence_html = f'<div class="gif-container"><img src="{v_url}" alt="{v_desc}" style="width:100%; border-radius:8px;">{caption}</div>'
+        
+        # --- CODE-ENFORCED FALLBACK ---
+        if not visual_evidence_html and visual_strategy.startswith("hunt_for_"):
             log("      ⚠️ Hunt failed. Overwriting directive to 'generate_comparison_table'.")
             visual_strategy = "generate_comparison_table"
 
@@ -154,10 +171,8 @@ def run_pipeline(category, config, forced_keyword=None):
         
         payload = f"METADATA: {json.dumps({'keyword': target_keyword, 'category': category})}\n"
         payload += f"VISUAL_STRATEGY_DIRECTIVE: \"{visual_strategy}\"\n"
-        payload += f"VISUAL_EVIDENCE_LINKS: {json.dumps(unique_visuals)}\n"
+        payload += f"PRE_GENERATED_VISUAL_HTML: {json.dumps(visual_evidence_html)}\n" # Pass ready-made HTML
         payload += f"\nDATA:\n{combined_text}"
-        
-        # ... (The rest of the file continues exactly as it was) ...
         
         json_b = api_manager.generate_step_strict(
             model_name, 
