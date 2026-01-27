@@ -243,7 +243,6 @@ You must return a JSON object with EXACTLY these keys. Do NOT merge them.
 3.  No Markdown.
 4.  Ensure strictly valid JSON syntax.
 """
-
 # ------------------------------------------------------------------
 # PROMPT C: VISUALS & SEO (The "Magazine Editor")
 # ------------------------------------------------------------------
