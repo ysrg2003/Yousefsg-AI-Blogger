@@ -198,26 +198,63 @@ class AdvancedContentValidator:
             return resp.text.replace("```html", "").replace("```", "").strip()
         except: return None
 
+    
     def restore_link_integrity(self, html_content, sources_metadata):
         soup = BeautifulSoup(html_content, 'html.parser')
         links = soup.find_all('a', href=True)
+        
+        # القائمة البيضاء: مواقع نثق بها ولا نفحصها لأنها تحظر البوتات
+        TRUSTED_DOMAINS = [
+            "reddit.com", "youtube.com", "youtu.be", "twitter.com", "x.com", 
+            "facebook.com", "instagram.com", "linkedin.com", "t.co", "discord.com",
+            "discord.gg", "github.com", "google.com", "wikipedia.org"
+        ]
+
         for link in links:
             url = link['href']
-            if any(x in url for x in ["latestai.me", "facebook.com", "instagram.com", "x.com", "youtube.com", "reddit.com"]) or url.startswith('#'):
+            
+            # 1. إصلاح الروابط التي تبدأ بـ www (يضيف https لتجنب فتح نفس الصفحة)
+            if url.startswith('www.'):
+                url = 'https://' + url
+                link['href'] = url
+            
+            # تخطي الروابط الداخلية والهاشتاج
+            if any(x in url for x in ["latestai.me", "#", "javascript:", "mailto:"]) or not url.startswith('http'):
                 continue
+
+            # 2. تخطي الفحص لمواقع التواصل الاجتماعي (لتجنب الحظر والخطأ)
+            if any(domain in url.lower() for domain in TRUSTED_DOMAINS):
+                continue 
+
+            # 3. فحص الروابط الأخرى فقط
             try:
-                r = self.session.head(url, timeout=3, allow_redirects=True)
-                if r.status_code >= 400: raise Exception("Dead Link")
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                # نستخدم stream=True لتقليل استهلاك البيانات
+                r = self.session.head(url, headers=headers, timeout=3, allow_redirects=True)
+                
+                # نعتبر الرابط ميتاً فقط في حالة 404 (غير موجود) أو 500 (خطأ خادم)
+                # نتجاهل 403 (Forbidden) و 429 (Too Many Requests) لأنها غالباً حماية ضد البوتات
+                if r.status_code in [404, 500, 502, 503]: 
+                    raise Exception("Dead Link")
             except:
+                # إذا فشل الرابط فعلياً، نحاول استبداله بمصدر موثوق
                 parsed = urlparse(url)
                 domain = parsed.netloc.replace('www.', '')
                 replacement = None
-                for src in sources_metadata:
-                    if domain in src['url']:
-                        replacement = src['url']
-                        break
-                if replacement: link['href'] = replacement
-                elif sources_metadata: link['href'] = sources_metadata[0]['url']
+                
+                if sources_metadata:
+                    for src in sources_metadata:
+                        if domain in src['url']:
+                            replacement = src['url']
+                            break
+                    
+                    if replacement: 
+                        link['href'] = replacement
+                    else:
+                        # هام جداً: إذا لم نجد بديلاً، نترك الرابط الأصلي كما هو!
+                        # في السابق كان يتم إفساده، الآن نتركه لأن احتمال أن يكون سليماً عالٍ
+                        pass 
+
         return str(soup)
 
     def verify_quotes(self, html_content, source_text):
