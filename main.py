@@ -1,6 +1,6 @@
 # FILE: main.py
 # ROLE: Orchestrator
-# FINAL VERSION: Integrated with AI Creative Director for intelligent visual strategy.
+# FINAL VERSION: Implements the Dual-Hunt Strategy for maximum visual evidence acquisition.
 
 import os
 import json
@@ -52,7 +52,7 @@ def run_pipeline(category, config, forced_keyword=None):
 
         if not target_keyword: return False
 
-        # 2. CREATIVE DIRECTOR (NEW STEP)
+        # 2. CREATIVE DIRECTOR (Decides the visual approach)
         log("   🎬 [Creative Director] Deciding on visual strategy...")
         try:
             strategy_prompt = PROMPT_VISUAL_STRATEGY.format(target_keyword=target_keyword, category=category)
@@ -63,7 +63,7 @@ def run_pipeline(category, config, forced_keyword=None):
             log(f"      👉 Directive Received: '{visual_strategy}'")
         except Exception as e:
             log(f"      ⚠️ Visual Strategy failed: {e}. Defaulting to fallback.")
-            visual_strategy = "generate_comparison_table" # Safe fallback
+            visual_strategy = "generate_comparison_table"
 
         # 3. SEMANTIC GUARD
         log("   🧠 Checking memory to avoid repetition...")
@@ -72,18 +72,18 @@ def run_pipeline(category, config, forced_keyword=None):
             log("   🚫 Duplication detected. Stopping this keyword.")
             return False
 
-        # 4. SMART MULTI-SOURCE HUNTING (FOR TEXT)
-        log("   🕵️‍♂️ Starting Source Hunting Mission (Target: 3 Sources)...")
+        # 4. OMNIVORE HUNT (TEXT + INCIDENTAL MEDIA from news articles)
+        log("   🕵️‍♂️ Starting Omni-Hunt Mission (Text & Visuals from News)...")
         
         collected_sources = []
+        media_from_news = []
+        
         search_strategies = [
             f'"{target_keyword}"',
             f'{target_keyword} news update',
             f'{target_keyword} review OR analysis OR features',
-            f'{category} {target_keyword}',
-            f'{category} news'
         ]
-        
+
         for strategy in search_strategies:
             if len(collected_sources) >= 3: break
             log(f"   🏹 Strategy: '{strategy}'")
@@ -95,37 +95,55 @@ def run_pipeline(category, config, forced_keyword=None):
                 if len(collected_sources) >= 3: break
                 if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS): continue
                     
-                f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
-                if not f_url: continue
+                # CRITICAL FIX: Now correctly unpacks 5 values
+                f_url, f_title, text, f_image, media_in_source = scraper.resolve_and_scrape(item['link'])
+                
+                if not f_url or not text: continue
 
                 f_domain = urllib.parse.urlparse(f_url).netloc.replace('www.', '')
                 if any(s['domain'].replace('www.', '') == f_domain for s in collected_sources): continue
                 
-                if text:
-                    log(f"         ✅ Source Captured! ({len(text)} chars) from {f_domain}")
-                    collected_sources.append({
-                        "title": f_title or item['title'], "url": f_url, "text": text,
-                        "date": item.get('date', 'Today'), "source_image": f_image or item.get('image'),
-                        "domain": f_domain
-                    })
+                log(f"         ✅ Source Captured! ({len(text)} chars) from {f_domain}")
+                collected_sources.append({
+                    "title": f_title or item['title'], "url": f_url, "text": text,
+                    "date": item.get('date', 'Today'), "source_image": f_image or item.get('image'),
+                    "domain": f_domain
+                })
+                
+                if media_in_source:
+                    media_from_news.extend(media_in_source)
+            
             time.sleep(1)
 
         if len(collected_sources) < 2:
-            log(f"   ❌ Failed to collect enough sources (Found {len(collected_sources)}). Aborting.")
+            log(f"   ❌ Failed to collect enough sources. Aborting.")
             return False
 
-        # 5. ADAPTIVE VISUAL HUNT (EXECUTES DIRECTOR'S ORDERS)
-        all_visual_proofs = []
+        # 5. DEDICATED VISUAL HUNT (SNIPER & REDDIT)
+        official_media = []
+        reddit_media = []
         reddit_context = ""
+
+        # Execute hunt only if the director ordered it
         if visual_strategy.startswith("hunt_for_"):
-            log("   📸 Directive is 'Hunt'. Launching Visual Detective...")
-            reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
+            log("   📸 Directive is 'Hunt'. Launching dedicated visual hunt...")
             official_media = scraper.smart_media_hunt(target_keyword, category)
-            all_visual_proofs = reddit_media + official_media
-            log(f"      📸 Total Visual Proofs Found: {len(all_visual_proofs)} items")
+            reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
         else:
-            log(f"   🎨 Directive is '{visual_strategy}'. Skipping media hunt.")
+            log(f"   🎨 Directive is '{visual_strategy}'. Skipping dedicated media hunt.")
             reddit_context, _ = reddit_manager.get_community_intel(target_keyword)
+
+        # --- MERGE ALL VISUALS ---
+        all_visuals = media_from_news + official_media + reddit_media
+        unique_visuals = list({v['url']:v for v in all_visuals}.values())
+        unique_visuals.sort(key=lambda x: x.get('score', 0), reverse=True)
+        
+        log(f"   📸 Dual-Hunt Complete. Total Unique Visual Proofs: {len(unique_visuals)}")
+
+        # --- FALLBACK LOGIC (CODE-ENFORCED) ---
+        if not unique_visuals and visual_strategy.startswith("hunt_for_"):
+            log("      ⚠️ Hunt failed. Overwriting directive to 'generate_comparison_table'.")
+            visual_strategy = "generate_comparison_table"
 
         # 6. SYNTHESIS & GENERATION
         log("   ✍️ [Generation Started] Preparing research data...")
@@ -136,8 +154,10 @@ def run_pipeline(category, config, forced_keyword=None):
         
         payload = f"METADATA: {json.dumps({'keyword': target_keyword, 'category': category})}\n"
         payload += f"VISUAL_STRATEGY_DIRECTIVE: \"{visual_strategy}\"\n"
-        payload += f"VISUAL_EVIDENCE_LINKS: {json.dumps(all_visual_proofs)}\n"
+        payload += f"VISUAL_EVIDENCE_LINKS: {json.dumps(unique_visuals)}\n"
         payload += f"\nDATA:\n{combined_text}"
+        
+        # ... (The rest of the file continues exactly as it was) ...
         
         json_b = api_manager.generate_step_strict(
             model_name, 
