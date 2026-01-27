@@ -1,5 +1,6 @@
 # FILE: config.py
 # ROLE: Shared Configuration & Constants
+# UPDATED: Added 'scroll-margin-top' to fix Sticky Header overlap issue.
 
 import datetime
 
@@ -23,21 +24,32 @@ BORING_KEYWORDS = [
     "Executive", "Knorex", "Partner", "Agreement", "B2B", "Enterprise"
 ]
 
-# --- UPDATED CSS: Added .ai-sources-box style ---
+# --- UPDATED CSS ---
 ARTICLE_STYLE = """
 <style>
     .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.8; color: #333; font-size: 18px; }
-    h2 { color: #111; font-weight: 800; margin-top: 50px; border-bottom: 3px solid #f1c40f; padding-bottom: 10px; }
-    h3 { color: #2980b9; font-weight: 700; margin-top: 30px; }
+    
+    /* FIX: Scroll Margin to prevent Sticky Header overlap */
+    h2, h3 { 
+        color: #111; 
+        font-weight: 800; 
+        margin-top: 50px; 
+        border-bottom: 3px solid #f1c40f; 
+        padding-bottom: 10px;
+        scroll-margin-top: 100px; /* The Magic Fix */
+    }
+    
+    h3 { color: #2980b9; font-weight: 700; margin-top: 30px; border-bottom: none; }
+    
     blockquote { background: #f9f9f9; border-left: 5px solid #2ecc71; margin: 20px 0; padding: 15px 25px; font-style: italic; }
     a { color: #3498db; text-decoration: none; border-bottom: 1px dotted #3498db; }
     a:hover { color: #e74c3c; border-bottom: 1px solid #e74c3c; }
+    
     .toc-box { background: #fdfdfd; border: 1px solid #eee; padding: 20px; border-radius: 10px; margin-bottom: 40px; }
     .toc-box ul { list-style: none; padding: 0; }
     .toc-box li { margin-bottom: 10px; border-bottom: 1px dashed #eee; padding-bottom: 5px; }
     .toc-box a { text-decoration: none; border: none; font-weight: 600; color: #555; }
     
-    /* NEW SOURCES BOX DESIGN */
     .ai-sources-box {
         margin-top: 40px; 
         padding: 25px; 
