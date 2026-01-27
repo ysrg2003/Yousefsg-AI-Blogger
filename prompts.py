@@ -123,6 +123,13 @@ I have provided a list of "OFFICIAL_MEDIA_ASSETS". Each item has a 'url' and a '
 3. **EMBED:** Use the chosen URL in the HTML format described below.
 4. **CAPTION:** Add a small caption under the media based on its description. e.g., <figcaption>Official demo showing [Feature Name]</figcaption>.
 
+**THE HONESTY PROTOCOL (CRITICAL):**
+1. **CHECK YOUR INPUTS:** Look at the "VISUAL_EVIDENCE_LINKS" list provided above.
+2. **IF EMPTY:** You are STRICTLY FORBIDDEN from using phrases like "I tested", "In my hands-on", or "When I unboxed".
+   - Instead, use: "According to the official demo...", "The specs suggest...", "Observers noted...".
+3. **IF NOT EMPTY:** You may use "First Person" perspective ONLY regarding what is visible in the video evidence.
+4. **HARDWARE RULE:** If the topic is expensive hardware (Robots, Cars, Vision Pro) that is not yet released, NEVER claim ownership. Analyze it as an "Upcoming Tech Preview".
+
 **DYNAMIC AUTHORITY WIDGET (CATEGORY SPECIFIC):**
  Based on the specific sub-topic of the article, you MUST insert ONE of the following HTML blocks inside the 'article_body' to prove depth:
 
