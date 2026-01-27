@@ -1,3 +1,4 @@
+
 import time
 import random
 from selenium import webdriver
@@ -18,15 +19,28 @@ def resolve_and_scrape(google_url):
     chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
     chrome_options.add_argument("--mute-audio") 
 
+    # --- OPTIMIZATION: Block images and CSS for much faster loading ---
+    # This tells Chrome not to waste time on visual elements we don't need.
+    prefs = {
+        "profile.managed_default_content_settings.images": 2,
+        "profile.managed_default_content_settings.stylesheets": 2,
+    }
+    chrome_options.add_experimental_option("prefs", prefs)
+    # -----------------------------------------------------------------
+
     driver = None
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(25) 
+        
+        # --- FIX: Increased timeout from 25 to 59 seconds ---
+        # This gives heavy, ad-filled news sites more time to load before failing.
+        driver.set_page_load_timeout(59) 
+        # ----------------------------------------------------
         
         driver.get(google_url)
         
-        # حلقة الانتظار (من الكود الأصلي)
+        # Wait for the URL to redirect from Google to the actual news site
         start_wait = time.time()
         final_url = google_url
         while time.time() - start_wait < 15: 
@@ -39,12 +53,13 @@ def resolve_and_scrape(google_url):
         final_title = driver.title
         page_source = driver.page_source
         
+        # Skip video galleries and YouTube links which don't have good text content
         bad_segments = ["/video/", "/watch", "/gallery/", "/photos/", "youtube.com"]
         if any(seg in final_url.lower() for seg in bad_segments):
             log(f"      ⚠️ Skipped Video/Gallery URL: {final_url}")
             return None, None, None, None
 
-        # استخراج الصورة (تحسين ضروري)
+        # Attempt to extract the main article image (og:image)
         soup = BeautifulSoup(page_source, 'html.parser')
         og_image = None
         try:
@@ -55,6 +70,7 @@ def resolve_and_scrape(google_url):
                 if meta_img: og_image = meta_img.get('content')
         except: pass
 
+        # Primary extraction method using Trafilatura (very effective)
         extracted_text = trafilatura.extract(
             page_source, 
             include_comments=False, 
@@ -65,13 +81,15 @@ def resolve_and_scrape(google_url):
         if extracted_text and len(extracted_text) > 800:
             return final_url, final_title, extracted_text, og_image
 
+        # Fallback method using BeautifulSoup if Trafilatura fails
         for script in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
             script.extract()
         fallback_text = soup.get_text(" ", strip=True)
         
-        if len(fallback_text) > 800:
+        if fallback_text and len(fallback_text) > 800:
             return final_url, final_title, fallback_text, og_image
             
+        # If both methods fail, return nothing
         return None, None, None, None
 
     except Exception as e:
@@ -79,5 +97,7 @@ def resolve_and_scrape(google_url):
         return None, None, None, None
     finally:
         if driver:
-            try: driver.quit()
-            except: pass
+            try: 
+                driver.quit()
+            except: 
+                pass
