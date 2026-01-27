@@ -1,7 +1,8 @@
+--- START OF FILE main.py ---
 
 # FILE: main.py
 # ROLE: Orchestrator
-# FIX: Removed the redundant and fragile Step E (Final Polish). Step D's output is now final.
+# FINAL CORRECTED VERSION: Fixed SyntaxError by ensuring try/except block is complete.
 
 import os
 import json
@@ -31,112 +32,112 @@ from prompts import *
 def run_pipeline(category, config, forced_keyword=None):
     model_name = config['settings'].get('model_name', "gemini-2.5-flash")
     
-    # 1. STRATEGY
-    target_keyword = ""
-    if forced_keyword:
-        log(f"   👉 [Mode: Manual Fallback] Keyword: '{forced_keyword}'")
-        target_keyword = forced_keyword
-    else:
-        log(f"   👉 [Mode: AI Strategist] Category: {category}")
-        recent = history_manager.get_recent_titles_string(category=category)
-        try:
-            seo_p = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today(), history=recent)
-            seo_plan = api_manager.generate_step_strict(
-                model_name, seo_p, "SEO Strategy", required_keys=["target_keyword"]
-            )
-            target_keyword = seo_plan.get('target_keyword')
-            log(f"   🎯 AI Goal: {target_keyword}")
-        except Exception as e:
-            log(f"   ❌ SEO Strategy failed: {e}")
+    try:
+        # 1. STRATEGY
+        target_keyword = ""
+        if forced_keyword:
+            log(f"   👉 [Mode: Manual Fallback] Keyword: '{forced_keyword}'")
+            target_keyword = forced_keyword
+        else:
+            log(f"   👉 [Mode: AI Strategist] Category: {category}")
+            recent = history_manager.get_recent_titles_string(category=category)
+            try:
+                seo_p = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today(), history=recent)
+                seo_plan = api_manager.generate_step_strict(
+                    model_name, seo_p, "SEO Strategy", required_keys=["target_keyword"]
+                )
+                target_keyword = seo_plan.get('target_keyword')
+                log(f"   🎯 AI Goal: {target_keyword}")
+            except Exception as e:
+                log(f"   ❌ SEO Strategy failed: {e}")
+                return False
+
+        if not target_keyword: return False
+
+        # 2. SEMANTIC GUARD
+        log("   🧠 Checking memory to avoid repetition...")
+        history_str = history_manager.get_recent_titles_string(limit=200)
+        if history_manager.check_semantic_duplication(target_keyword, history_str):
+            log("   🚫 Duplication detected. Stopping this keyword.")
             return False
 
-    if not target_keyword: return False
-
-    # 2. SEMANTIC GUARD
-    log("   🧠 Checking memory to avoid repetition...")
-    history_str = history_manager.get_recent_titles_string(limit=200)
-    if history_manager.check_semantic_duplication(target_keyword, history_str):
-        log("   🚫 Duplication detected. Stopping this keyword.")
-        return False
-
-    # 3. SMART MULTI-SOURCE HUNTING
-    log("   🕵️‍♂️ Starting Source Hunting Mission (Target: 3 Sources)...")
-    
-    collected_sources = []
-    search_strategies = [
-        f'"{target_keyword}"',
-        f'{target_keyword} news update',
-        f'{target_keyword} review OR analysis OR features',
-        f'{category} {target_keyword}',
-        f'{category} news'
-    ]
-    
-    required_terms = target_keyword.lower().split()
-    significant_keyword = max(required_terms, key=len) if required_terms else ""
-
-    for strategy in search_strategies:
-        if len(collected_sources) >= 3:
-            log("   ✅ Quota Met: 3 Sources Collected.")
-            break
-            
-        log(f"   🏹 Strategy: '{strategy}'")
+        # 3. SMART MULTI-SOURCE HUNTING
+        log("   🕵️‍♂️ Starting Source Hunting Mission (Target: 3 Sources)...")
         
-        items = news_fetcher.get_real_news_rss(strategy, category)
-        if not items:
-            items = news_fetcher.get_gnews_api_sources(strategy, category)
-            
-        if not items: continue
+        collected_sources = []
+        search_strategies = [
+            f'"{target_keyword}"',
+            f'{target_keyword} news update',
+            f'{target_keyword} review OR analysis OR features',
+            f'{category} {target_keyword}',
+            f'{category} news'
+        ]
+        
+        required_terms = target_keyword.lower().split()
+        significant_keyword = max(required_terms, key=len) if required_terms else ""
 
-        for item in items:
-            if len(collected_sources) >= 3: break
-            
-            if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
-                log(f"         ⛔ Skipped Boring: {item['title']}")
-                continue
+        for strategy in search_strategies:
+            if len(collected_sources) >= 3:
+                log("   ✅ Quota Met: 3 Sources Collected.")
+                break
                 
-            f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
+            log(f"   🏹 Strategy: '{strategy}'")
             
-            if not f_url: continue
+            items = news_fetcher.get_real_news_rss(strategy, category)
+            if not items:
+                items = news_fetcher.get_gnews_api_sources(strategy, category)
+                
+            if not items: continue
 
-            is_duplicate = False
-            f_domain = urllib.parse.urlparse(f_url).netloc.replace('www.', '')
-            for s in collected_sources:
-                s_domain = s['domain'].replace('www.', '')
-                if f_url == s['url'] or f_domain == s_domain:
-                    is_duplicate = True
-                    break
-            
-            if is_duplicate:
-                log(f"         ⚠️ Skipped Duplicate Source: {f_domain}")
-                continue
-            
-            if text:
-                if strategy != f"{category} news" and significant_keyword and significant_keyword not in text.lower():
-                    log(f"         ⚠️ Skipped: Text missing keyword.")
+            for item in items:
+                if len(collected_sources) >= 3: break
+                
+                if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
+                    log(f"         ⛔ Skipped Boring: {item['title']}")
                     continue
+                    
+                f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
+                
+                if not f_url: continue
 
-                log(f"         ✅ Source Captured! ({len(text)} chars) from {f_domain}")
-                collected_sources.append({
-                    "title": f_title or item['title'], 
-                    "url": f_url, 
-                    "text": text,
-                    "date": item.get('date', 'Today'), 
-                    "source_image": f_image if f_image else item.get('image'),
-                    "domain": f_domain
-                })
-        
-        time.sleep(1)
+                is_duplicate = False
+                f_domain = urllib.parse.urlparse(f_url).netloc.replace('www.', '')
+                for s in collected_sources:
+                    s_domain = s['domain'].replace('www.', '')
+                    if f_url == s['url'] or f_domain == s_domain:
+                        is_duplicate = True
+                        break
+                
+                if is_duplicate:
+                    log(f"         ⚠️ Skipped Duplicate Source: {f_domain}")
+                    continue
+                
+                if text:
+                    if strategy != f"{category} news" and significant_keyword and significant_keyword not in text.lower():
+                        log(f"         ⚠️ Skipped: Text missing keyword.")
+                        continue
 
-    if len(collected_sources) < 2:
-        log(f"   ❌ Failed to collect enough sources (Found {len(collected_sources)}). Aborting.")
-        return False
+                    log(f"         ✅ Source Captured! ({len(text)} chars) from {f_domain}")
+                    collected_sources.append({
+                        "title": f_title or item['title'], 
+                        "url": f_url, 
+                        "text": text,
+                        "date": item.get('date', 'Today'), 
+                        "source_image": f_image if f_image else item.get('image'),
+                        "domain": f_domain
+                    })
+            
+            time.sleep(1)
 
-    # 4. REDDIT INTEL
-    log("   📱 Harvesting Reddit opinions...")
-    reddit_context = reddit_manager.get_community_intel(target_keyword)
+        if len(collected_sources) < 2:
+            log(f"   ❌ Failed to collect enough sources (Found {len(collected_sources)}). Aborting.")
+            return False
 
-    # 5. SYNTHESIS & GENERATION
-    try:
+        # 4. REDDIT INTEL
+        log("   📱 Harvesting Reddit opinions...")
+        reddit_context = reddit_manager.get_community_intel(target_keyword)
+
+        # 5. SYNTHESIS & GENERATION
         log("   ✍️ [Generation Started] Preparing research data...")
         combined_text = ""
         for i, src in enumerate(collected_sources):
@@ -169,11 +170,7 @@ def run_pipeline(category, config, forced_keyword=None):
             required_keys=["finalTitle", "finalContent"]
         )
         
-        # --- FIX: REMOVED UNNECESSARY STEP E ---
-        # Step E was a fragile JSON formatting step that is already handled by the api_manager.
-        # The output from Step D is now considered the final, clean version.
         final = json_d
-        # ----------------------------------------
         
         title, content_html = final.get('finalTitle', 'Untitled'), final.get('finalContent', '<p>Error</p>')
         
@@ -307,16 +304,13 @@ def run_pipeline(category, config, forced_keyword=None):
             }
             full_body += f'\n<script type="application/ld+json">{json.dumps(schema)}</script>'
 
-        
         p_url = publisher.publish_post(title, full_body, [category, "Tech News", "Reviews"])
         
-        # --- START OF NEW LOGIC BLOCK ---
         if p_url:
             history_manager.update_kg(title, p_url, category)
             log(f"   ✅ [SUCCESS] Published LIVE at: {p_url}")
             
             try:
-                # 1. Update YouTube descriptions with the live article URL
                 log("   🔄 Updating YouTube descriptions with article link...")
                 youtube_update_text = f"👇 Read the full, in-depth article here:\n{p_url}"
                 if vid_main:
@@ -324,10 +318,8 @@ def run_pipeline(category, config, forced_keyword=None):
                 if vid_short:
                     youtube_manager.update_video_description(vid_short, youtube_update_text)
 
-                # 2. Distribute to social media with the URL
                 social_manager.distribute_content(fb_cap, p_url, img_url)
                 if fb_path:
-                    # Pass the article URL to the Reels function
                     social_manager.post_reel_to_facebook(fb_path, fb_cap, p_url)
             except Exception as social_e:
                 log(f"   ⚠️ Social media distribution/update failed: {social_e}")
@@ -336,7 +328,11 @@ def run_pipeline(category, config, forced_keyword=None):
         else:
             log("   ❌ Blogger API failed to publish.")
             return False
-        # --- END OF NEW LOGIC BLOCK ---
+
+    except Exception as e:
+        log(f"❌ PIPELINE CRASHED: {e}")
+        traceback.print_exc()
+        return False
 
 def main():
     try:
