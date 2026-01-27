@@ -146,7 +146,8 @@ def post_to_facebook(content, image_url, link):
     except Exception as e:
         print(f"   ❌ FB Connection Error: {e}")
 
-def post_reel_to_facebook(video_path, caption):
+# The function signature now accepts 'article_url'
+def post_reel_to_facebook(video_path, caption, article_url):
     current_token = os.getenv('FB_PAGE_ACCESS_TOKEN')
     try:
         renewed = check_and_renew_facebook_token()
@@ -164,11 +165,13 @@ def post_reel_to_facebook(video_path, caption):
 
     print("   🚀 Uploading FB Reel...")
     
-    # نستخدم السيرفر المخصص للفيديو
     post_url = f"https://graph-video.facebook.com/{page_id}/videos"
     
+    # Create the final caption with the article link included
+    final_caption = f"{caption}\n\n🔗 Read the full story: {article_url}"
+    
     payload = {
-        'description': caption,
+        'description': final_caption, # Use the new caption
         'access_token': current_token,
         'published': 'true'
     }
@@ -176,7 +179,6 @@ def post_reel_to_facebook(video_path, caption):
     try:
         with open(video_path, 'rb') as f:
             files = {'source': (os.path.basename(video_path), f, 'video/mp4')}
-            # وقت طويل للرفع
             r = requests.post(post_url, data=payload, files=files, timeout=200)
             
         if r.status_code == 200:
@@ -186,7 +188,7 @@ def post_reel_to_facebook(video_path, caption):
             
     except Exception as e:
         print(f"   ❌ FB Reel Error: {e}")
-
+        
 # ==============================================================================
 # MAIN ORCHESTRATOR
 # ==============================================================================
