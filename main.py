@@ -1,6 +1,8 @@
+--- START OF FILE main.py ---
+
 # FILE: main.py
 # ROLE: Orchestrator
-# UPDATED: Added Reddit to Author Box.
+# CORRECTED VERSION: Restored original content assembly logic, removed hardcoded sources.
 
 import os
 import json
@@ -263,7 +265,11 @@ def run_pipeline(category, config, forced_keyword=None):
         fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
         fb_cap = fb_dat.get('FB_Hook', title)
 
+        # --- FIX: REMOVED THE HARDCODED SOURCES BLOCK ---
+        # The AI is responsible for generating the sources section now,
+        # and the CSS in config.py will style it. This prevents duplication and errors.
         
+        # --- AUTHOR BOX ---
         author_box = """
         <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
             <div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:25px;">
@@ -298,11 +304,11 @@ def run_pipeline(category, config, forced_keyword=None):
             schema['@type'] = "TechArticle"
             schema['proficiencyLevel'] = "Beginner"
 
-            # --- FIX: FORCE CURRENT DATE (NO AI HALLUCINATIONS) ---
+            # --- FIX: FORCE CURRENT DATE ---
             current_iso_date = datetime.datetime.now().isoformat()
             schema['datePublished'] = current_iso_date
             schema['dateModified'] = current_iso_date
-            # ------------------------------------------------------
+            
             schema['author'] = {
                 "@type": "Person",
                 "name": "Yousef S.",
