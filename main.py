@@ -307,23 +307,36 @@ def run_pipeline(category, config, forced_keyword=None):
             }
             full_body += f'\n<script type="application/ld+json">{json.dumps(schema)}</script>'
 
+        
         p_url = publisher.publish_post(title, full_body, [category, "Tech News", "Reviews"])
+        
+        # --- START OF NEW LOGIC BLOCK ---
         if p_url:
             history_manager.update_kg(title, p_url, category)
             log(f"   ✅ [SUCCESS] Published LIVE at: {p_url}")
+            
             try:
-                social_manager.distribute_content(f"{fb_cap}\n\n{p_url}", p_url, img_url)
-                if fb_path: social_manager.post_reel_to_facebook(fb_path, fb_cap)
-            except: pass
+                # 1. Update YouTube descriptions with the live article URL
+                log("   🔄 Updating YouTube descriptions with article link...")
+                youtube_update_text = f"👇 Read the full, in-depth article here:\n{p_url}"
+                if vid_main:
+                    youtube_manager.update_video_description(vid_main, youtube_update_text)
+                if vid_short:
+                    youtube_manager.update_video_description(vid_short, youtube_update_text)
+
+                # 2. Distribute to social media with the URL
+                social_manager.distribute_content(fb_cap, p_url, img_url)
+                if fb_path:
+                    # Pass the article URL to the Reels function
+                    social_manager.post_reel_to_facebook(fb_path, fb_cap, p_url)
+            except Exception as social_e:
+                log(f"   ⚠️ Social media distribution/update failed: {social_e}")
+            
             return True
         else:
             log("   ❌ Blogger API failed to publish.")
             return False
-
-    except Exception as e:
-        log(f"❌ PIPELINE CRASHED: {e}")
-        traceback.print_exc()
-        return False
+        # --- END OF NEW LOGIC BLOCK ---
 
 def main():
     try:
