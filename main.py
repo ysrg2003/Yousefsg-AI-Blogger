@@ -171,13 +171,13 @@ def run_pipeline(category, config, forced_keyword=None):
             required_keys=["finalTitle", "finalContent"]
         )
         
-        try:
+         try:
             final = api_manager.generate_step_strict(
                 model_name, 
                 PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), 
                 "Step E (Final Polish)",
                 required_keys=["finalTitle", "finalContent"]
-            )
+                
         except Exception as e:
             log(f"      ⚠️ Step E failed. Fallback to Step D. Error: {e}")
             final = json_d
