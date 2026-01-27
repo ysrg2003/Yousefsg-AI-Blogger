@@ -237,7 +237,7 @@ def process_source_image(source_url, overlay_text, filename_title):
         return upload_to_github_cdn(img_byte_arr, safe_name)
     except: return None
 def generate_and_upload_image(prompt_text, overlay_text=""):
-log(f"   🎨 Generating Professional AI Thumbnail for: {prompt_text[:50]}...")
+    log(f"   🎨 Generating Professional AI Thumbnail for: {prompt_text[:50]}...")
     
     # --- الخلطة السرية للاحترافية ---
     style_prefix = "A high-end cinematic editorial tech photograph visualizing "
