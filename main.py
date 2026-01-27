@@ -1,6 +1,6 @@
 # FILE: main.py
-# ROLE: Orchestrator
-# UPDATED: Added Reddit to Author Box.
+# DESCRIPTION: The main orchestrator for the AI Blogger Automation project.
+# VERSION: Final Production - Full Logic Included.
 
 import os
 import json
@@ -13,6 +13,7 @@ import traceback
 import re
 from google import genai 
 
+# Custom Modules Imports
 from config import log, FORBIDDEN_PHRASES, ARTICLE_STYLE, BORING_KEYWORDS
 import api_manager
 import news_fetcher
@@ -30,7 +31,9 @@ from prompts import *
 def run_pipeline(category, config, forced_keyword=None):
     model_name = config['settings'].get('model_name', "gemini-2.5-flash")
     
-    # 1. STRATEGY
+    # =====================================================
+    # 1. STRATEGY & KEYWORD SELECTION
+    # =====================================================
     target_keyword = ""
     if forced_keyword:
         log(f"   👉 [Mode: Manual Fallback] Keyword: '{forced_keyword}'")
@@ -49,19 +52,26 @@ def run_pipeline(category, config, forced_keyword=None):
             log(f"   ❌ SEO Strategy failed: {e}")
             return False
 
-    if not target_keyword: return False
+    if not target_keyword:
+        return False
 
-    # 2. SEMANTIC GUARD
+    # =====================================================
+    # 2. SEMANTIC GUARD (PREVENT DUPLICATES)
+    # =====================================================
     log("   🧠 Checking memory to avoid repetition...")
     history_str = history_manager.get_recent_titles_string(limit=200)
     if history_manager.check_semantic_duplication(target_keyword, history_str):
         log("   🚫 Duplication detected. Stopping this keyword.")
         return False
 
-    # 3. SMART MULTI-SOURCE HUNTING
+    # =====================================================
+    # 3. SMART MULTI-SOURCE HUNTING (HUNTER LOOP)
+    # =====================================================
     log("   🕵️‍♂️ Starting Source Hunting Mission (Target: 3 Sources)...")
     
     collected_sources = []
+    
+    # Define search strategies to ensure we find content
     search_strategies = [
         target_keyword,
         f"{target_keyword} news",
@@ -73,6 +83,7 @@ def run_pipeline(category, config, forced_keyword=None):
     required_terms = target_keyword.lower().split()
     significant_keyword = max(required_terms, key=len) if required_terms else ""
 
+    # Loop through strategies until we have enough sources
     for strategy in search_strategies:
         if len(collected_sources) >= 3:
             log("   ✅ Quota Met: 3 Sources Collected.")
@@ -80,29 +91,45 @@ def run_pipeline(category, config, forced_keyword=None):
             
         log(f"   🏹 Strategy: '{strategy}'")
         
+        # Try RSS first
         items = news_fetcher.get_real_news_rss(strategy, category)
+        # Fallback to GNews API if RSS fails or returns nothing
         if not items:
             items = news_fetcher.get_gnews_api_sources(strategy, category)
             
-        if not items: continue
+        if not items:
+            log("      ⚠️ No items found for this strategy. Next...")
+            continue
 
         for item in items:
             if len(collected_sources) >= 3: break
             
+            # Filter 1: Boring Keywords
             if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
                 log(f"         ⛔ Skipped Boring: {item['title']}")
                 continue
                 
-            # Resolve URL FIRST
+            # Filter 2: Title Relevance (Strict, except for broad category search)
+            if strategy != f"{category} news" and significant_keyword and len(significant_keyword) > 3:
+                if significant_keyword not in item['title'].lower():
+                    log(f"         ⚠️ Skipped Irrelevant Title: '{item['title']}'")
+                    continue
+
+            # Filter 3: Duplicate URL Check (Preliminary)
+            if any(s['url'] == item['link'] for s in collected_sources): continue
+            
+            # --- CRITICAL: RESOLVE URL & EXTRACT IMAGE ---
             f_url, f_title, text, f_image = scraper.resolve_and_scrape(item['link'])
             
-            if not f_url: continue
+            if not f_url: continue # Skip if resolution failed
 
-            # Duplicate Check
+            # Filter 4: Duplicate Check on RESOLVED Domain/URL
             is_duplicate = False
             f_domain = urllib.parse.urlparse(f_url).netloc.replace('www.', '')
+            
             for s in collected_sources:
                 s_domain = s['domain'].replace('www.', '')
+                # Check if URL matches OR if Domain matches (to ensure diversity)
                 if f_url == s['url'] or f_domain == s_domain:
                     is_duplicate = True
                     break
@@ -112,6 +139,7 @@ def run_pipeline(category, config, forced_keyword=None):
                 continue
             
             if text:
+                # Filter 5: Body Relevance (Strict)
                 if strategy != f"{category} news" and significant_keyword and significant_keyword not in text.lower():
                     log(f"         ⚠️ Skipped: Text missing keyword.")
                     continue
@@ -126,17 +154,22 @@ def run_pipeline(category, config, forced_keyword=None):
                     "domain": f_domain
                 })
         
+        # Polite delay between strategies
         time.sleep(1)
 
     if len(collected_sources) < 2:
         log(f"   ❌ Failed to collect enough sources (Found {len(collected_sources)}). Aborting.")
         return False
 
+    # =====================================================
     # 4. REDDIT INTEL
+    # =====================================================
     log("   📱 Harvesting Reddit opinions...")
     reddit_context = reddit_manager.get_community_intel(target_keyword)
 
+    # =====================================================
     # 5. SYNTHESIS & GENERATION
+    # =====================================================
     try:
         log("   ✍️ [Generation Started] Preparing research data...")
         combined_text = ""
@@ -146,13 +179,15 @@ def run_pipeline(category, config, forced_keyword=None):
         
         payload = f"METADATA: {json.dumps({'keyword': target_keyword})}\n\nDATA:\n{combined_text}"
         
+        # Step B: Drafting
         json_b = api_manager.generate_step_strict(
             model_name, 
             PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), 
-            "Step B (Writer)",
+            "Step B (Writer)", 
             required_keys=["headline", "article_body"]
         )
         
+        # Step C: SEO & Linking
         kg_links = history_manager.get_relevant_kg_for_linking(json_b.get('headline', target_keyword), category)
         input_c = {"draft_content": json_b, "sources_data": [{"title": s['title'], "url": s['url']} for s in collected_sources]}
         
@@ -163,6 +198,7 @@ def run_pipeline(category, config, forced_keyword=None):
             required_keys=["finalTitle", "finalContent"]
         )
         
+        # Step D: Humanizing
         json_d = api_manager.generate_step_strict(
             model_name, 
             PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), 
@@ -170,10 +206,17 @@ def run_pipeline(category, config, forced_keyword=None):
             required_keys=["finalTitle", "finalContent"]
         )
         
+        # Step E: Final Polish (With Fallback)
+        # We pass the sources list so the AI can integrate them naturally
+        input_e = {
+            "content": json_d,
+            "sources_list": [{"title": s['title'], "url": s['url'], "domain": s['domain']} for s in collected_sources]
+        }
+        
         try:
             final = api_manager.generate_step_strict(
                 model_name, 
-                PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), 
+                PROMPT_E_TEMPLATE.format(json_input=json.dumps(input_e)), 
                 "Step E (Final Polish)",
                 required_keys=["finalTitle", "finalContent"]
             )
@@ -184,8 +227,11 @@ def run_pipeline(category, config, forced_keyword=None):
             final['imageOverlayText'] = "LATEST NEWS"
         
         title, content_html = final.get('finalTitle', 'Untitled'), final.get('finalContent', '<p>Error</p>')
-        
-        # --- MULTIMEDIA SECTION ---
+        seo_data = final.get('seo', {})
+
+        # =====================================================
+        # 6. MULTIMEDIA SECTION (IMAGES)
+        # =====================================================
         log("   🖼️ [Image Mission] Starting...")
         img_url = None
         c_imgs = [{'url': src['source_image']} for src in collected_sources if src.get('source_image')]
@@ -200,12 +246,15 @@ def run_pipeline(category, config, forced_keyword=None):
             log("      ⚠️ NO SOURCE IMAGE: Activating AI Generation Backup...")
             img_url = image_processor.generate_and_upload_image(final.get('imageGenPrompt', title), final.get('imageOverlayText'))
 
-        # --- VIDEO GENERATION ---
+        # =====================================================
+        # 7. VIDEO GENERATION
+        # =====================================================
         log("   🎬 [Video Mission] Starting...")
         vid_main, vid_short, vid_html, fb_path = None, None, "", None
         summ = re.sub('<[^<]+?>','', content_html)[:2500]
         
         script_json = None
+        # Retry loop for script generation
         for attempt in range(1, 4):
             log(f"      🎬 Generating Script (Attempt {attempt}/3)...")
             try:
@@ -231,6 +280,7 @@ def run_pipeline(category, config, forced_keyword=None):
                 ts, out = int(time.time()), os.path.abspath("output")
                 os.makedirs(out, exist_ok=True)
                 
+                # Render Main Video
                 rr = video_renderer.VideoRenderer(output_dir=out, width=1920, height=1080)
                 pm = rr.render_video(script_json, title, f"main_{ts}.mp4")
                 if pm:
@@ -239,6 +289,7 @@ def run_pipeline(category, config, forced_keyword=None):
                     if vid_main:
                         vid_html = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
                 
+                # Render Short Video
                 rs = video_renderer.VideoRenderer(output_dir=out, width=1080, height=1920)
                 ps = rs.render_video(script_json, title, f"short_{ts}.mp4")
                 if ps:
@@ -249,33 +300,26 @@ def run_pipeline(category, config, forced_keyword=None):
         else:
             log("      ❌ Failed to generate video script after 3 attempts.")
 
-        # --- VALIDATION ---
+        # =====================================================
+        # 8. VALIDATION & REPAIR
+        # =====================================================
         log("   🛡️ [Validation] Starting core surgery...")
         try:
             val_client = genai.Client(api_key=api_manager.key_manager.get_current_key())
             healer = content_validator_pro.AdvancedContentValidator(val_client)
+            # This step will: Fix TOC, Style Sources, Check Facts, Fix Links
             content_html = healer.run_professional_validation(content_html, combined_text, collected_sources)
         except Exception as he:
             log(f"      ⚠️ Validator skipped: {he}")
 
-        # --- PUBLISHING ---
+        # =====================================================
+        # 9. PUBLISHING
+        # =====================================================
         log(f"   🚀 [Publishing] Final assembly...")
         fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
         fb_cap = fb_dat.get('FB_Hook', title)
 
-        # --- SOURCES SECTION ---
-        sources_block = """
-        <div style="margin-top: 40px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #3498db;">
-            <h3 style="margin-top: 0; font-size: 18px; color: #2c3e50;">📚 Sources & References</h3>
-            <ul style="margin-bottom: 0; padding-left: 20px; color: #555;">
-        """
-        for src in collected_sources:
-            safe_title = src['title'].replace('"', '').replace("'", "")
-            sources_block += f'<li style="margin-bottom: 8px;"><a href="{src["url"]}" target="_blank" rel="nofollow noopener" style="text-decoration: none; color: #3498db; font-weight: 600;">{safe_title}</a> <span style="font-size: 0.85em; color: #7f8c8d;">({src["domain"]})</span></li>'
-        sources_block += "</ul></div>"
-        content_html += sources_block
-
-        # --- UPDATED AUTHOR BOX (WITH REDDIT) ---
+        # Author Box (Full Version with Reddit)
         author_box = """
         <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
             <div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:25px;">
@@ -305,10 +349,17 @@ def run_pipeline(category, config, forced_keyword=None):
         
         full_body = ARTICLE_STYLE + img_h + vid_html + final_c + author_box
         
+        # Schema Markup (TechArticle + Current Date)
         if 'schemaMarkup' in final and final['schemaMarkup']: 
             schema = final['schemaMarkup']
             schema['@type'] = "TechArticle"
             schema['proficiencyLevel'] = "Beginner"
+            
+            # Force Current Date to satisfy Google News
+            current_iso = datetime.datetime.now().isoformat()
+            schema['datePublished'] = current_iso
+            schema['dateModified'] = current_iso
+
             schema['author'] = {
                 "@type": "Person",
                 "name": "Yousef S.",
