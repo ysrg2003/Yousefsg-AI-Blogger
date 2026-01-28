@@ -66,7 +66,6 @@ def audit_live_article(url, config, iteration=1):
             contents=prompt,
             config=types.GenerateContentConfig(
                 tools=[google_tool], 
-                response_mime_type="application/json",
                 temperature=current_temp 
             )
         )
