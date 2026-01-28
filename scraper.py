@@ -179,6 +179,7 @@ def smart_media_hunt(target_keyword, category, directive):
     search_query = get_smart_query_by_category(target_keyword, category, directive)
     
     chrome_options = Options()
+    chrome_options.page_load_strategy = 'eager'
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
