@@ -30,7 +30,7 @@ def extract_urls_fallback(text):
             clean_links.append(link)
     return list(set(clean_links)) # إزالة التكرار
 
-def smart_hunt(topic, config):
+def smart_hunt(topic, config,mode="general"):
     """
     المهمة: الذهاب إلى جوجل، البحث، الفلترة، وإعادة أفضل 3-5 مصادر موثوقة.
     """
