@@ -59,4 +59,42 @@ def publish_post(title, content, labels):
         return None
 
     
+
+def update_existing_post(post_id, title, content):
+    """
+    تحديث مقال موجود مسبقاً على بلوجر باستخدام معرف المقال (Post ID).
+    يُستخدم هذا بعد عملية التدقيق (Audit) لتحسين جودة المقال.
+    """
+    token = get_blogger_token()
+    if not token:
+        log("❌ Failed to get Blogger token for update.")
+        return False
+        
+    blog_id = os.getenv('BLOGGER_BLOG_ID')
+    # رابط الـ API الخاص بتحديث المقالات (PUT request)
+    url = f"https://www.googleapis.com/blogger/v3/blogs/{blog_id}/posts/{post_id}"
     
+    headers = {
+        "Authorization": f"Bearer {token}", 
+        "Content-Type": "application/json"
+    }
+    
+    # البيانات التي سيتم تحديثها
+    body = {
+        "kind": "blogger#post",
+        "id": post_id,
+        "blog": {"id": blog_id},
+        "title": title,
+        "content": content
+    }
+    
+    try:
+        # نستخدم PUT لاستبدال المحتوى القديم بالمحتوى المحسن
+        r = requests.put(url, headers=headers, json=body, timeout=30)
+        r.raise_for_status()
+        log(f"   ✅ Post updated successfully on Blogger (ID: {post_id})")
+        return True
+    except requests.exceptions.RequestException as e:
+        error_msg = e.response.text if e.response else str(e)
+        log(f"   ❌ Blogger Update API Error: {error_msg}")
+        return False
