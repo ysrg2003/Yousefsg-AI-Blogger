@@ -36,7 +36,7 @@ def smart_hunt(topic, config):
     """
     # نستخدم الموديل الذي يدعم Grounding (Flash 2.0 ممتاز في السرعة والدقة)
     # ملاحظة: يمكنك تغييره حسب المتاح في مفتاحك، لكن 2.0 هو الأفضل للبحث حالياً
-    model_name = "gemini-3-flash-preview" 
+    model_name = "gemini-2.5-flash" 
     
     log(f"   🕵️‍♂️ [AI Researcher] Conducting deep web search for: '{topic}'...")
     
