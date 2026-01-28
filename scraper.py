@@ -1,3 +1,7 @@
+# FILE: scraper.py
+# ROLE: Advanced Web Scraper & Visual Hunter.
+# FEATURES: AI-Guided Media Hunt, Selenium Fallback, Smart Anti-Detection.
+
 import time
 import random
 import urllib.parse
@@ -14,66 +18,51 @@ from config import log, USER_AGENTS
 # 1. CONFIGURATION & BLACKLISTS
 # ==============================================================================
 
-# scraper.py
-
-# 1. قائمة المواقع الضعيفة (UGC) التي تضرب الـ Authority
+# Domains to avoid for visual hunting (Low quality or paywalled)
 NEWS_DOMAINS_BLACKLIST = [
     "techcrunch", "theverge", "engadget", "wired", "cnet", "forbes", 
     "businessinsider", "nytimes", "wsj", "bloomberg", "reuters", "cnn",
     "bbc", "medium", "reddit", "wikipedia", "latestai", "techradar",
     "vocal.media", "aol.com", "msn.com", "yahoo.com", "marketwatch.com", 
-    "indiacsr.in", "officechai.com" # أضفنا المواقع الضعيفة التي انتقدها الخبير
+    "indiacsr.in", "officechai.com"
 ]
 
-# 2. قائمة الروابط "التقنية" التي يجب ألا تُعتبر وسائط أبداً
+# Technical links that should never be considered media
 MEDIA_LINK_BLACKLIST = [
     "googletagmanager", "google-analytics", "doubleclick", "pixel", 
-    "adsystem", "adnxs", "script", "tracker", "analytics", "fb.com/tr"
+    "adsystem", "adnxs", "script", "tracker", "analytics", "fb.com/tr",
+    "1x1", "spacer", "blank", "tracking"
 ]
 
-# تعديل دالة extract_media_from_soup لإضافة الفلتر الصارم
-def extract_media_from_soup(soup, base_url, directive):
-    candidates = []
-    # ... (نفس الكود السابق) ...
-    
-    for video in soup.find_all(['video', 'iframe']):
-        src = video.get('src') or (video.find('source') and video.find('source').get('src'))
-        if not src: continue
-        
-        # الفلتر الجديد: منع الأكواد والسكريبتات
-        if any(bad in src.lower() for bad in MEDIA_LINK_BLACKLIST):
-            continue
-            
-        # ... (باقي الكود) ...
-
 # ==============================================================================
-# 2. HELPER FUNCTIONS (SMART CONTEXT & EXTRACTION)
+# 2. HELPER FUNCTIONS
 # ==============================================================================
 
 def get_smart_query_by_category(keyword, category, directive):
     """
-    Generates a highly specific search query based on the Creative Director's directive.
+    Generates specific queries based on the visual directive.
     """
-    base = f"{keyword} official"
+    base = f"{keyword}"
     
     if directive == "hunt_for_screenshot":
-        return f"{base} UI interface screenshot features blog"
+        return f"{base} official UI interface screenshot dashboard"
     if directive == "hunt_for_video":
         if "Robotics" in category or "Hardware" in category:
-            return f"{base} reveal video demonstration"
-        return f"{base} demo showcase video"
+            return f"{base} official reveal video demonstration"
+        return f"{base} official demo walkthrough"
     
-    # Fallback for other directives or errors
-    return f"{base} announcement blog"
+    return f"{base} official visual guide"
 
 def is_official_looking_url(url, keyword):
     try:
         domain = urllib.parse.urlparse(url).netloc.lower()
         if any(news in domain for news in NEWS_DOMAINS_BLACKLIST): return False
+        # Simple heuristic: shorter domains often main product sites
         return True
     except: return False
 
 def extract_element_context(element):
+    """Extracts text context around an image/video to validate relevance."""
     context = []
     for attr in ['alt', 'title', 'aria-label']:
         if element.get(attr): context.append(element[attr])
@@ -84,66 +73,123 @@ def extract_element_context(element):
     return " | ".join(context) if context else "No description available"
 
 def extract_media_from_soup(soup, base_url, directive):
+    """
+    Parses HTML to find high-value media (Videos, GIFs, Screenshots).
+    """
     candidates = []
-    positive_signals = ["demo", "showcase", "tutorial", "interface", "example", "generated", "result", "how to", "workflow", "reveal", "trailer", "robot", "prototype", "screenshot", "UI"]
-    negative_signals = ["logo", "icon", "background", "banner", "loader", "spinner", "avatar", "profile", "footer", "ad", "advertisement"]
+    positive_signals = ["demo", "showcase", "tutorial", "interface", "dashboard", "generated", "result", "how to", "workflow", "reveal", "trailer", "robot", "prototype", "screenshot", "UI"]
+    negative_signals = ["logo", "icon", "background", "banner", "loader", "spinner", "avatar", "profile", "footer", "ad", "advertisement", "promo"]
 
-    # Always search for videos and GIFs as they are high-value
+    # 1. Search for Videos (Iframe/Video tags)
     for video in soup.find_all(['video', 'iframe']):
         src = video.get('src') or (video.find('source') and video.find('source').get('src'))
         if not src: continue
+        
+        # Normalize URL
         if src.startswith('//'): src = 'https:' + src
         if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
+        
+        # Filter Junk
+        if any(bad in src.lower() for bad in MEDIA_LINK_BLACKLIST): continue
         
         context = extract_element_context(video).lower()
         if any(bad in context or bad in src for bad in negative_signals): continue
         
         m_type = "embed" if 'youtube' in src or 'vimeo' in src else "video"
-        candidates.append({"type": m_type, "url": src, "description": context, "score": sum(1 for sig in positive_signals if sig in context) + (3 if m_type == "embed" else 2)})
+        score = sum(1 for sig in positive_signals if sig in context) + (3 if m_type == "embed" else 2)
+        
+        candidates.append({"type": m_type, "url": src, "description": context, "score": score})
 
+    # 2. Search for Images (GIFs & Static)
     for img in soup.find_all('img', src=True):
         src = img['src']
-        if src.endswith('.gif'):
-            if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
-            context = extract_element_context(img).lower()
-            if any(bad in context or bad in src for bad in negative_signals): continue
-            candidates.append({"type": "gif", "url": src, "description": context, "score": sum(1 for sig in positive_signals if sig in context) + 1})
-
-    # Specifically search for static images if the directive is 'hunt_for_screenshot'
-    if directive == "hunt_for_screenshot":
-        for img in soup.find_all('img', src=True):
-            src = img.get('src')
-            if not src or not any(src.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.webp']): continue
-            
-            if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
-            context = extract_element_context(img).lower()
-            if any(bad in context or bad in src for bad in negative_signals): continue
-            
-            # Only add if there's some positive context indicating it's not just a random image
-            score = sum(1 for sig in positive_signals if sig in context)
-            if score > 0:
-                candidates.append({"type": "image", "url": src, "description": context, "score": score})
+        if not src: continue
+        
+        # Normalize
+        if src.startswith('//'): src = 'https:' + src
+        if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
+        
+        # Filter Junk
+        if any(bad in src.lower() for bad in MEDIA_LINK_BLACKLIST): continue
+        
+        context = extract_element_context(img).lower()
+        if any(bad in context or bad in src for bad in negative_signals): continue
+        
+        # Prioritize GIFs
+        if src.lower().endswith('.gif'):
+            candidates.append({"type": "gif", "url": src, "description": context, "score": sum(1 for sig in positive_signals if sig in context) + 2})
+        
+        # If directive is for screenshots, allow static images
+        elif directive == "hunt_for_screenshot":
+            if any(ext in src.lower() for ext in ['.png', '.jpg', '.jpeg', '.webp']):
+                # Strict size check handled by score logic mostly, here we just filter icons
+                if "icon" not in src.lower() and "logo" not in src.lower():
+                    score = sum(1 for sig in positive_signals if sig in context)
+                    if score > 0: # Only relevant images
+                        candidates.append({"type": "image", "url": src, "description": context, "score": score})
 
     return candidates
 
 # ==============================================================================
-# 3. THE DUAL-HUNT WEAPONS
+# 3. THE SMART HUNTER (AI + SELENIUM)
 # ==============================================================================
 
 def smart_media_hunt(target_keyword, category, directive):
+    """
+    Hybrid Hunt:
+    1. Uses AI Researcher to find direct visual links (Fast/Smart).
+    2. Falls back to Selenium Sniper Hunt if AI fails (Robust).
+    """
+    log(f"      🎯 Sniper Hunt: Searching for Visual Proofs ('{directive}')...")
+    
+    all_media = []
+
+    # --- STRATEGY A: AI RESEARCHER (The Smart Way) ---
+    try:
+        import ai_researcher
+        # Ask AI to find specific visual evidence
+        ai_visuals = ai_researcher.smart_hunt(target_keyword, {}, mode="visual")
+        
+        if ai_visuals:
+            log(f"         ✨ AI found {len(ai_visuals)} candidate visuals.")
+            for item in ai_visuals:
+                url = item.get('url') or item.get('link')
+                if not url: continue
+                
+                # Determine type
+                m_type = "image"
+                if "youtube" in url or "vimeo" in url: m_type = "embed"
+                elif url.endswith(".mp4") or url.endswith(".webm"): m_type = "video"
+                
+                all_media.append({
+                    "type": m_type,
+                    "url": url,
+                    "description": item.get('description', f"Visual evidence for {target_keyword}"),
+                    "score": 10 # High trust for AI results
+                })
+    except Exception as e:
+        log(f"         ⚠️ AI Visual Hunt failed: {e}")
+
+    # If AI satisfied the hunt, return early
+    if len(all_media) >= 2:
+        return all_media
+
+    # --- STRATEGY B: SELENIUM SNIPER (The Manual Way) ---
+    log("         🕵️‍♂️ Switching to Selenium Sniper for deep visual search...")
     search_query = get_smart_query_by_category(target_keyword, category, directive)
-    log(f"      🎯 Sniper Hunt: Searching Google for '{search_query}'...")
     
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
+    
     driver = None
-    all_media = []
-
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(60)
+        driver.set_page_load_timeout(45)
+        
+        # Search Google
         driver.get(f"https://www.google.com/search?q={urllib.parse.quote(search_query)}")
         time.sleep(2)
         
@@ -153,44 +199,58 @@ def smart_media_hunt(target_keyword, category, directive):
             url = link.get_attribute('href')
             if not url: continue
 
+            # Quick Win: YouTube Video
             if "youtube.com/watch" in url and directive == "hunt_for_video":
                 try:
                     vid_id = url.split('v=')[1].split('&')[0]
                     embed_url = f"https://www.youtube.com/embed/{vid_id}"
-                    all_media.append({"type": "embed", "url": embed_url, "description": f"Official YouTube Reveal: {target_keyword}", "score": 10})
-                    log(f"         🎯 Sniper Found YouTube Video: {vid_id}")
+                    all_media.append({"type": "embed", "url": embed_url, "description": f"Official YouTube Reveal: {target_keyword}", "score": 9})
+                    log(f"         🎯 Sniper Found YouTube: {vid_id}")
                 except: pass
                 continue
 
+            # Deep Scan: Official Sites
             if is_official_looking_url(url, target_keyword):
-                log(f"         🎯 Sniper Target Acquired: {url}")
-                driver.get(url)
-                time.sleep(4)
-                soup = BeautifulSoup(driver.page_source, 'html.parser')
-                media_in_page = extract_media_from_soup(soup, url, directive)
-                if media_in_page:
-                    all_media.extend(media_in_page)
-                break 
+                log(f"         🎯 Sniper Scanning: {url}")
+                try:
+                    driver.get(url)
+                    time.sleep(3)
+                    soup = BeautifulSoup(driver.page_source, 'html.parser')
+                    media_in_page = extract_media_from_soup(soup, url, directive)
+                    if media_in_page:
+                        all_media.extend(media_in_page)
+                        log(f"            📸 Found {len(media_in_page)} visuals inside.")
+                except: continue
+                
+                if len(all_media) >= 3: break # Enough found
+
     except Exception as e:
-        log(f"      ⚠️ Sniper Hunt Error: {e}")
+        log(f"      ⚠️ Selenium Sniper Error: {e}")
     finally:
         if driver: driver.quit()
     
     return all_media
 
 def resolve_and_scrape(google_url):
-    log(f"      📰 Omni-Scraper: Hunting Text & Visuals in {google_url[:50]}...")
+    """
+    Resolves redirects (e.g. Google News links) and scrapes text + media.
+    """
+    log(f"      📰 Omni-Scraper: Extracting content from {google_url[:50]}...")
+    
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
+    
     driver = None
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(90)
+        driver.set_page_load_timeout(60)
+        
         driver.get(google_url)
         
+        # Handle Google News Redirects
         final_url = google_url
         start_wait = time.time()
         while time.time() - start_wait < 15: 
@@ -204,17 +264,20 @@ def resolve_and_scrape(google_url):
         page_source = driver.page_source
         soup = BeautifulSoup(page_source, 'html.parser')
 
-        found_media = extract_media_from_soup(soup, final_url, "hunt_for_video") # Default to hunting for videos here
-        if found_media: log(f"         📸 Found {len(found_media)} visual asset(s) in this source.")
+        # Always hunt for video embeds in scraped articles (high value)
+        found_media = extract_media_from_soup(soup, final_url, "hunt_for_video") 
+        if found_media: log(f"         📸 Found {len(found_media)} embedded visuals.")
 
         og_image = (soup.find('meta', property='og:image') or {}).get('content')
         
+        # Extract Main Text
         extracted_text = trafilatura.extract(page_source, include_comments=False, favor_precision=True)
         
         if extracted_text and len(extracted_text) > 600:
             return final_url, final_title, extracted_text, og_image, found_media
 
         return None, None, None, None, []
+        
     except Exception as e:
         log(f"      ❌ Scraper Error: {e}")
         return None, None, None, None, []
