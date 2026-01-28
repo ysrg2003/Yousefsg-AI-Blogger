@@ -110,7 +110,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             log("   ⚠️ AI Research failed. Activating Intelligent Legacy Fallback...")
             core_entity = target_keyword
             try:
-                extraction_prompt = f"From this long title, extract only the primary product or technology name (2-3 words max): '{target_keyword}'"
+                extraction_prompt = f"Extract the full official name of the product or technology from this title: '{target_keyword}'. Return ONLY the name (e.g., 'Luma AI Dream Machine'), no extra text."
                 entity_response = api_manager.generate_step_strict("gemini-2.5-flash", extraction_prompt, "Core Entity Extraction")
                 core_entity = str(next(iter(entity_response.values())) if isinstance(entity_response, dict) else entity_response).strip('"{}\n:key_value ')
                 log(f"      🔍 Extracted Core Entity for search: '{core_entity}'")
