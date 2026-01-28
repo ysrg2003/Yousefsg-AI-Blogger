@@ -14,11 +14,37 @@ from config import log, USER_AGENTS
 # 1. CONFIGURATION & BLACKLISTS
 # ==============================================================================
 
+# scraper.py
+
+# 1. قائمة المواقع الضعيفة (UGC) التي تضرب الـ Authority
 NEWS_DOMAINS_BLACKLIST = [
     "techcrunch", "theverge", "engadget", "wired", "cnet", "forbes", 
     "businessinsider", "nytimes", "wsj", "bloomberg", "reuters", "cnn",
-    "bbc", "medium", "reddit", "wikipedia", "latestai", "techradar"
+    "bbc", "medium", "reddit", "wikipedia", "latestai", "techradar",
+    "vocal.media", "aol.com", "msn.com", "yahoo.com", "marketwatch.com", 
+    "indiacsr.in", "officechai.com" # أضفنا المواقع الضعيفة التي انتقدها الخبير
 ]
+
+# 2. قائمة الروابط "التقنية" التي يجب ألا تُعتبر وسائط أبداً
+MEDIA_LINK_BLACKLIST = [
+    "googletagmanager", "google-analytics", "doubleclick", "pixel", 
+    "adsystem", "adnxs", "script", "tracker", "analytics", "fb.com/tr"
+]
+
+# تعديل دالة extract_media_from_soup لإضافة الفلتر الصارم
+def extract_media_from_soup(soup, base_url, directive):
+    candidates = []
+    # ... (نفس الكود السابق) ...
+    
+    for video in soup.find_all(['video', 'iframe']):
+        src = video.get('src') or (video.find('source') and video.find('source').get('src'))
+        if not src: continue
+        
+        # الفلتر الجديد: منع الأكواد والسكريبتات
+        if any(bad in src.lower() for bad in MEDIA_LINK_BLACKLIST):
+            continue
+            
+        # ... (باقي الكود) ...
 
 # ==============================================================================
 # 2. HELPER FUNCTIONS (SMART CONTEXT & EXTRACTION)
