@@ -40,7 +40,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     The main autonomous pipeline.
     Handles Strategy -> Research -> Writing -> Media -> Publishing -> Indexing.
     """
-    model_name = config['settings'].get('model_name', "gemini-2.5-flash")
+    model_name = config['settings'].get('model_name', "gemini-3-flash-preview")
     
     try:
         # ======================================================================
