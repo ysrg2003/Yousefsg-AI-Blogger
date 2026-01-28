@@ -60,6 +60,7 @@ def audit_live_article(url, config, iteration=1):
     }}
     """
 
+    
     try:
         response = client.models.generate_content(
             model="gemini-2.5-flash",
@@ -70,10 +71,22 @@ def audit_live_article(url, config, iteration=1):
             )
         )
         
-        # Clean & Parse
+        # --- التعديل الجذري هنا ---
+        if not response or not response.text:
+            log("      ⚠️ Auditor received an empty response. Skipping this round.")
+            return None
+
+        # تنظيف النص بأمان
         raw = response.text.replace("```json", "").replace("```", "").strip()
-        result = json.loads(raw)
         
+        # استخدام المفسر الذكي لضمان عدم حدوث خطأ في الـ JSON
+        from api_manager import master_json_parser
+        result = master_json_parser(raw)
+        
+        if not result:
+            log("      ⚠️ Failed to parse Auditor JSON. Skipping.")
+            return None
+            
         score = float(result.get('quality_score', 0))
         log(f"      📝 Audit Score (R{iteration}): {score}/10 | Verdict: {result.get('verdict')}")
         
