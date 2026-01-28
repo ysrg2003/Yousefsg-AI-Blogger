@@ -118,7 +118,7 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
         if not parsed_data:
             log(f"      ⚠️ Parsing failed. Triggering AI Repair...")
             repair_resp = client.models.generate_content(
-                model="gemini-2.5-flash", 
+                model="gemini-3-flash-preview", 
                 contents=f"Fix this broken JSON:\n{response.text[:5000]}", 
                 config=generation_config
             )
