@@ -188,37 +188,60 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             local_fb_video = ps
             vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{title[:50]} #Shorts", "Read more in link.", ["shorts", category])
 
-        # ======================================================================
-        # 7. PERFECTION LOOP (PUBLISH -> AUDIT -> FIX -> REPEAT)
-        # ======================================================================
-        
 
+
+        # ======================================================================
+        # 7. ASSET INJECTION & PUBLISHING
+        # ======================================================================
         log("   🔗 Injecting Assets into HTML...")
 
+        # 1. تجهيز كود الفيديو (YouTube Embed)
         video_html = ""
-       if vid_main:
-           video_html = f"""
-           <div style="margin: 20px 0; text-align: center;">
-           <iframe width="100%" height="450" src="{vid_main.replace('watch?v=', 'embed/')}" frameborder="0" allowfullscreen></iframe>
-        </div>
-    """
-        image_html = f'<div style="text-align: center; margin-bottom: 30px;"><img src="{img_url}" style="width: 100%; border-radius: 15px;" alt="{title}"></div>'
+        if vid_main:
+            # ملاحظة: youtube_manager يعيد رابط embed بالفعل، لكننا نضمن ذلك هنا
+            embed_url = vid_main.replace("watch?v=", "embed/")
+            video_html = f"""
+            <div class="video-container" style="margin: 25px 0; text-align: center;">
+                <iframe width="100%" height="450" src="{embed_url}" 
+                        frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowfullscreen style="border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></iframe>
+            </div>
+            """
+
+        # 2. تجهيز كود الصورة الرئيسية (Featured Image)
+        image_html = ""
+        if img_url:
+            image_html = f"""
+            <div class="featured-image" style="text-align: center; margin-bottom: 35px;">
+                <img src="{img_url}" style="width: 100%; max-width: 1200px; border-radius: 15px; box-shadow: 0 6px 20px rgba(0,0,0,0.15);" alt="{title}">
+            </div>
+            """
+
+        # 3. دمج العناصر: الصورة أولاً، ثم الفيديو، ثم نص المقال
         full_body_html = image_html + video_html + full_body_html
+
         log("   🚀 [Publishing] Initial Draft...")
         pub_result = publisher.publish_post(title, full_body_html, [category])
-        published_url, post_id = (pub_result if isinstance(pub_result, tuple) else (pub_result, None))
+        
+        # التعامل مع النتيجة (رابط المقال ومعرفه)
+        if isinstance(pub_result, tuple):
+            published_url, post_id = pub_result
+        else:
+            published_url, post_id = pub_result, None
 
         if not published_url or not post_id:
             log("   ❌ CRITICAL FAILURE: Could not publish the initial draft.")
             return False
         
+        # حلقة تحسين الجودة (Audit & Fix)
         quality_score, attempts, MAX_RETRIES = 0, 0, 2
         while quality_score < 9.0 and attempts < MAX_RETRIES:
             attempts += 1
             log(f"   🔄 [Quality Loop] Audit Round {attempts}...")
             
             audit_report = live_auditor.audit_live_article(published_url, config, iteration=attempts)
-            if not audit_report: break
+            if not audit_report: 
+                break
             
             quality_score = float(audit_report.get('quality_score', 0))
             if quality_score >= 9.0:
@@ -232,9 +255,10 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 if publisher.update_existing_post(post_id, title, fixed_html):
                     full_body_html = fixed_html
                     time.sleep(5)
-                else: break
-            else: break
-
+                else: 
+                    break
+            else: 
+                break
         # ======================================================================
         # 8. FINALIZATION & DISTRIBUTION
         # ======================================================================
