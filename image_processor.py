@@ -164,7 +164,7 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
         inputs = [prompt]
         for img in valid_images: inputs.append(types.Part.from_bytes(data=img['data'], mime_type="image/jpeg"))
         
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=inputs)
+        response = client.models.generate_content(model="gemini-3-flash-preview", contents=inputs)
         match = re.search(r'\d+', response.text)
         if match:
             idx = int(match.group())
