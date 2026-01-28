@@ -108,16 +108,17 @@ def smart_hunt(topic, config, mode="general"):
 
     # 4. Execute Search with the CORRECTED SYNTAX
     try:
+        
         response = client.models.generate_content(
-            model=model_name,
-            contents=user_prompt,
-            tools=[google_search_tool],  # CRITICAL FIX: 'tools' is a top-level argument
-            system_instruction=system_instruction,
-            generation_config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.2
-            )
-        )
+    model=model_name,
+    contents=user_prompt,
+    config=types.GenerateContentConfig(  # التعديل هنا: وضع الأدوات داخل الـ config
+        tools=[google_search_tool],
+        system_instruction=system_instruction,
+        response_mime_type="application/json",
+        temperature=0.2
+    )
+)
         
         raw_text = response.text.replace("```json", "").replace("```", "").strip()
         results = []
