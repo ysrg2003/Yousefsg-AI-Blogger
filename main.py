@@ -39,7 +39,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     Executes the full content lifecycle:
     Strategy -> Smart Research -> Synthesis -> Media Production -> Publishing -> Distribution.
     """
-    model_name = config['settings'].get('model_name', "gemini-3-flash-preview")
+    model_name = config['settings'].get('model_name', "gemini-2.5-flash")
     
     try:
         # ======================================================================
@@ -120,7 +120,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             try:
                 extraction_prompt = f"From this long title, extract only the primary product or technology name (2-3 words max): '{target_keyword}'"
                 # Using a light model for this simple task to save quota
-                entity_response = api_manager.generate_step_strict("gemini-1.5-flash-latest", extraction_prompt, "Core Entity Extraction")
+                entity_response = api_manager.generate_step_strict("gemini-2.5-flash", extraction_prompt, "Core Entity Extraction")
                 
                 # Handle different possible JSON/text responses
                 if isinstance(entity_response, dict):
