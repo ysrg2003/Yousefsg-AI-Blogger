@@ -191,29 +191,20 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         # 7. PERFECTION LOOP (PUBLISH -> AUDIT -> FIX -> REPEAT)
         # ======================================================================
-        log("   🚀 [Publishing] Initial Draft...")
-
-        # تعديل في main.py - قبل سطر النشر مباشرة
-log("   🔗 Injecting Assets into HTML...")
-
-# تجهيز كود الفيديو (إذا وجد)
-video_html = ""
-if vid_main:
-    video_html = f"""
-    <div style="margin: 20px 0; text-align: center;">
-        <iframe width="100%" height="450" src="{vid_main.replace('watch?v=', 'embed/')}" frameborder="0" allowfullscreen></iframe>
-    </div>
-    """
-
-# تجهيز كود الصورة الرئيسية
-image_html = f'<div style="text-align: center; margin-bottom: 30px;"><img src="{img_url}" style="width: 100%; border-radius: 15px;" alt="{title}"></div>'
-
-# دمج كل شيء في بداية المقال
-full_body_html = image_html + video_html + full_body_html
-
-# الآن نقوم بالنشر
-log("   🚀 [Publishing] Initial Draft...")
         
+
+        log("   🔗 Injecting Assets into HTML...")
+
+        video_html = ""
+       if vid_main:
+           video_html = f"""
+           <div style="margin: 20px 0; text-align: center;">
+           <iframe width="100%" height="450" src="{vid_main.replace('watch?v=', 'embed/')}" frameborder="0" allowfullscreen></iframe>
+        </div>
+    """
+        image_html = f'<div style="text-align: center; margin-bottom: 30px;"><img src="{img_url}" style="width: 100%; border-radius: 15px;" alt="{title}"></div>'
+        full_body_html = image_html + video_html + full_body_html
+        log("   🚀 [Publishing] Initial Draft...")
         pub_result = publisher.publish_post(title, full_body_html, [category])
         published_url, post_id = (pub_result if isinstance(pub_result, tuple) else (pub_result, None))
 
