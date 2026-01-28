@@ -50,8 +50,12 @@ def publish_post(title, content, labels):
         r = requests.post(url, headers=headers, json=body)
         r.raise_for_status()
         link = r.json().get('url')
+        post_id = data.get('id')
         log(f"✅ Published LIVE: {link}")
-        return link
+        return link, post_id
     except requests.exceptions.RequestException as e:
         log(f"❌ Blogger API Error: {e.response.text if e.response else e}")
         return None
+
+    
+    
