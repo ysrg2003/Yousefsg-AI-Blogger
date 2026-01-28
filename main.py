@@ -106,27 +106,31 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         collected_sources = []
         media_from_news = []
         
-        # Search Strategies
+        # تبسيط استراتيجيات البحث لزيادة فرص النجاح
         search_strategies = [
-            f'"{target_keyword}"',
-            f'{target_keyword} news update',
-            f'{target_keyword} review OR analysis',
+            f'{target_keyword}', # بحث عام بدون قيود
+            f'{target_keyword} guide',
+            f'{target_keyword} news',
         ]
 
         for strategy in search_strategies:
-            if len(collected_sources) >= 3: break
+            if len(collected_sources) >= 2: break # نكتفي بمصدرين
             log(f"   🏹 Search Strategy: '{strategy}'")
             
-            # Fetch raw links (RSS first, then GNews API)
+            # Fetch raw links
             raw_items = news_fetcher.get_real_news_rss(strategy, category)
-            if not raw_items: raw_items = news_fetcher.get_gnews_api_sources(strategy, category)
+            
+            # إذا فشل RSS، نستخدم GNews فوراً
+            if not raw_items: 
+                raw_items = news_fetcher.get_gnews_api_sources(strategy, category)
+            
             if not raw_items: continue
 
             # AI Auditor (Vet Sources)
             vetted_items = news_fetcher.ai_vet_sources(raw_items, model_name)
             
             for item in vetted_items:
-                if len(collected_sources) >= 3: break
+                if len(collected_sources) >= 2: break
                 
                 # Filter boring keywords
                 if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
@@ -157,10 +161,12 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             
             time.sleep(1)
 
-        if len(collected_sources) < 2:
-            log(f"   ❌ Failed to collect sufficient sources (Found {len(collected_sources)}). Aborting.")
+        # --- التعديل الحاسم: قبول مصدر واحد فقط ---
+        min_sources = 1 if is_cluster_topic else 2
+        if len(collected_sources) < min_sources:
+            log(f"   ❌ Failed to collect sufficient sources (Found {len(collected_sources)}, Needed {min_sources}). Aborting.")
             return False
-
+            
         # ======================================================================
         # 5. VISUAL HUNT & REDDIT INTEL
         # ======================================================================
