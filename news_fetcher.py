@@ -156,14 +156,13 @@ def get_gnews_api_sources(query, category):
 
 def get_real_news_rss(query_keywords, category=None):
     try:
-        base_query = query_keywords.strip()
-        if "," in base_query:
-            topics = [t.strip() for t in base_query.split(',') if t.strip()]
-            base_query = random.choice(topics)
-            log(f"   🎯 Targeted Search Focus: '{base_query}'")
-
+        # تنظيف الاستعلام من التعقيدات الزائدة لزيادة فرص العثور على نتائج
+        base_query = query_keywords.replace('"', '').strip()
+        
+        # إزالة when:2d إذا كانت تسبب مشاكل، أو تركها إذا كنت مصراً عليها
+        # سنقوم بترميزها بشكل آمن
         if "when:" not in base_query:
-            full_query = f"{base_query} when:2d"
+            full_query = f"{base_query} when:7d" # وسعنا النطاق لـ 7 أيام لضمان النتائج
         else:
             full_query = base_query
 
@@ -180,6 +179,16 @@ def get_real_news_rss(query_keywords, category=None):
                 title_clean = entry.title.split(' - ')[0]
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
             return items 
+        
+        # --- التغيير الجذري هنا ---
+        # ألغينا البحث العام عن القسم (Category Fallback)
+        # لكي نسمح لـ GNews API بالعمل في main.py
+            log(f"   ⚠️ RSS Empty for '{base_query}'. Returning empty list to trigger GNews.")
+            return [] 
+            
+        except Exception as e:
+            log(f"❌ RSS Error: {e}")
+            return []
         
         elif category:
             log(f"   ⚠️ RSS Empty. Fallback to Category: {category}")
