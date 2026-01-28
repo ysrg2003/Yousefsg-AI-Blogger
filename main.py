@@ -1,8 +1,7 @@
 # FILE: main.py
-# ROLE: Orchestrator (The "AI Editor-in-Chief")
-# VERSION: 5.0 - THE OMNI-HUNT & AI-AUDITOR EDITION
-# DESCRIPTION: Fully integrated system with Creative Director, AI Source Vetting, 
-# Dual-Hunt Strategy, and Pre-Generated Visual HTML.
+# ROLE: Orchestrator V6.0 (The Empire Builder Edition)
+# DESCRIPTION: Fully integrated system with Topic Clusters, Instant Indexing, 
+# Content Gardening, and Omni-Channel Distribution.
 
 import os
 import json
@@ -13,12 +12,11 @@ import datetime
 import urllib.parse
 import traceback
 import re
-from google import genai 
 
-# Import Core Configurations
+# --- Core Configurations ---
 from config import log, FORBIDDEN_PHRASES, ARTICLE_STYLE, BORING_KEYWORDS
 
-# Import System Modules
+# --- Standard Modules ---
 import api_manager
 import news_fetcher
 import scraper
@@ -32,22 +30,31 @@ import video_renderer
 import youtube_manager
 from prompts import *
 
-def run_pipeline(category, config, forced_keyword=None):
+# --- NEW V6.0 MODULES ---
+import cluster_manager
+import indexer
+import gardener
+
+def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     """
-    The main autonomous pipeline for a single category.
+    The main autonomous pipeline.
+    Handles Strategy -> Research -> Writing -> Media -> Publishing -> Indexing.
     """
     model_name = config['settings'].get('model_name', "gemini-2.5-flash")
     
     try:
         # ======================================================================
-        # 1. SEO STRATEGY (The Brain)
+        # 1. STRATEGY & KEYWORD SELECTION
         # ======================================================================
         target_keyword = ""
+        
         if forced_keyword:
-            log(f"   👉 [Mode: Manual Fallback] Keyword: '{forced_keyword}'")
+            strategy_type = "Cluster Strategy" if is_cluster_topic else "Manual Fallback"
+            log(f"   👉 [Strategy: {strategy_type}] Target: '{forced_keyword}'")
             target_keyword = forced_keyword
         else:
-            log(f"   👉 [Mode: AI Strategist] Category: {category}")
+            # Fallback: AI Daily Hunt (If Cluster Manager returned nothing)
+            log(f"   👉 [Strategy: AI Daily Hunt] Scanning Category: {category}")
             recent_history = history_manager.get_recent_titles_string(category=category)
             try:
                 seo_p = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today(), history=recent_history)
@@ -63,7 +70,21 @@ def run_pipeline(category, config, forced_keyword=None):
         if not target_keyword: return False
 
         # ======================================================================
-        # 2. CREATIVE DIRECTOR (The Visual Strategist)
+        # 2. SEMANTIC GUARD (Anti-Repetition)
+        # ======================================================================
+        # If it's a Cluster Topic, we trust the plan and skip the check.
+        # If it's a Daily Hunt, we must check for duplicates.
+        if not is_cluster_topic:
+            log("   🧠 Checking memory to avoid repetition...")
+            history_str = history_manager.get_recent_titles_string(limit=200)
+            if history_manager.check_semantic_duplication(target_keyword, history_str):
+                log(f"   🚫 Duplication detected for '{target_keyword}'. Stopping.")
+                return False
+        else:
+            log("   🛡️ Cluster Topic detected. Bypassing semantic guard to ensure series continuity.")
+
+        # ======================================================================
+        # 3. CREATIVE DIRECTOR (Visual Strategy)
         # ======================================================================
         log("   🎬 [Creative Director] Deciding on visual strategy...")
         try:
@@ -78,45 +99,32 @@ def run_pipeline(category, config, forced_keyword=None):
             visual_strategy = "generate_comparison_table"
 
         # ======================================================================
-        # 3. SEMANTIC GUARD (Anti-Repetition)
+        # 4. OMNI-HUNT (Research Phase)
         # ======================================================================
-        log("   🧠 Checking memory to avoid repetition...")
-        history_str = history_manager.get_recent_titles_string(limit=200)
-        if history_manager.check_semantic_duplication(target_keyword, history_str):
-            log(f"   🚫 Duplication detected for '{target_keyword}'. Stopping.")
-            return False
-
-        # ======================================================================
-        # 4. OMNIVORE HUNT (Text & Incidental Media)
-        # ======================================================================
-        log("   🕵️‍♂️ Starting Omni-Hunt Mission (Text & Visuals from News)...")
+        log("   🕵️‍♂️ Starting Omni-Hunt Mission...")
         
         collected_sources = []
         media_from_news = []
         
+        # Search Strategies
         search_strategies = [
             f'"{target_keyword}"',
             f'{target_keyword} news update',
-            f'{target_keyword} review OR analysis OR features',
+            f'{target_keyword} review OR analysis',
         ]
 
         for strategy in search_strategies:
             if len(collected_sources) >= 3: break
             log(f"   🏹 Search Strategy: '{strategy}'")
             
-            # Fetch raw links
+            # Fetch raw links (RSS first, then GNews API)
             raw_items = news_fetcher.get_real_news_rss(strategy, category)
             if not raw_items: raw_items = news_fetcher.get_gnews_api_sources(strategy, category)
             if not raw_items: continue
 
-            # --- AI SOURCE AUDITOR (Pre-Vetting) ---
-            log(f"      🕵️‍♂️ AI Auditor: Vetting {len(raw_items)} source domains...")
+            # AI Auditor (Vet Sources)
             vetted_items = news_fetcher.ai_vet_sources(raw_items, model_name)
             
-            if not vetted_items:
-                log("      ⚠️ All sources rejected by AI Auditor for this strategy.")
-                continue
-
             for item in vetted_items:
                 if len(collected_sources) >= 3: break
                 
@@ -124,12 +132,12 @@ def run_pipeline(category, config, forced_keyword=None):
                 if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS):
                     continue
                     
-                # Scrape Content + Visuals (Returns 5 values)
+                # Scrape Content
                 f_url, f_title, text, f_image, media_in_source = scraper.resolve_and_scrape(item['link'])
                 
                 if not f_url or not text: continue
 
-                # Avoid duplicate domains in the same article
+                # Domain Deduplication
                 f_domain = urllib.parse.urlparse(f_url).netloc.replace('www.', '')
                 if any(s['domain'] == f_domain for s in collected_sources):
                     continue
@@ -144,7 +152,6 @@ def run_pipeline(category, config, forced_keyword=None):
                     "domain": f_domain
                 })
                 
-                # Collect incidental media found during scraping
                 if media_in_source:
                     media_from_news.extend(media_in_source)
             
@@ -155,61 +162,43 @@ def run_pipeline(category, config, forced_keyword=None):
             return False
 
         # ======================================================================
-        # 5. DEDICATED VISUAL HUNT (Sniper & Reddit)
+        # 5. VISUAL HUNT & REDDIT INTEL
         # ======================================================================
         official_media = []
         reddit_media = []
         reddit_context = ""
 
+        # Sniper Hunt (Google Search for specific visuals)
         if visual_strategy.startswith("hunt_for_"):
             log(f"   📸 Directive is 'Hunt'. Launching Dedicated Sniper...")
-            # Sniper Hunt with Directive awareness
             official_media = scraper.smart_media_hunt(target_keyword, category, visual_strategy)
-            # Reddit Hunt
-            reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
-        else:
-            log(f"   🎨 Directive is '{visual_strategy}'. Skipping dedicated hunt.")
-            reddit_context, _ = reddit_manager.get_community_intel(target_keyword)
+        
+        # Reddit Hunt
+        reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
 
         # ======================================================================
-        # 6. VISUAL SELECTION & HTML PRE-PROCESSING
+        # 6. VISUAL SELECTION & HTML PREP
         # ======================================================================
-        # Merge all visual evidence from all hunting methods
         all_visuals = media_from_news + official_media + reddit_media
-        
-        # Deduplicate by URL
         unique_visuals = list({v['url']:v for v in all_visuals}.values())
-        # Sort by score (quality)
         unique_visuals.sort(key=lambda x: x.get('score', 0), reverse=True)
         
-        log(f"   📸 Dual-Hunt Complete. Total Unique Visual Proofs: {len(unique_visuals)}")
-
         visual_evidence_html = ""
         if unique_visuals:
-            # --- SELF-LEARNING BLACKLIST GUARD ---
-            # Filter out any junk code links (GTM/Analytics/Pixels)
+            # Filter Blacklisted Media Links
             clean_visuals = [v for v in unique_visuals if not any(bad in v['url'].lower() for bad in scraper.MEDIA_LINK_BLACKLIST)]
             
             if clean_visuals:
-                # Prioritize 'embed' (YouTube) for 100% reliability
-                best_visual = sorted(clean_visuals, key=lambda x: (x['type'] == 'embed', x.get('score', 0)), reverse=True)[0]
-                
+                best_visual = clean_visuals[0]
                 v_type = best_visual['type']
                 v_url = best_visual['url']
-                v_desc = best_visual.get('description', 'Visual Evidence')
-                
-                log(f"      ✅ Editor's Pick: A '{v_type}' - Title: '{v_desc[:40]}...'")
-                
-                # Format Caption
                 source_domain = urllib.parse.urlparse(v_url).netloc
-                caption = f"<figcaption>Demonstration source: {source_domain}</figcaption>"
+                caption = f"<figcaption>Source: {source_domain}</figcaption>"
                 
-                # Generate HTML Block based on type
                 if v_type == "embed":
                     visual_evidence_html = f'<div class="video-container" style="margin-bottom:10px;"><iframe src="{v_url}" frameborder="0" allowfullscreen loading="lazy"></iframe></div>{caption}'
                 elif v_type == "video":
-                    # Use Link Card for raw MP4s to avoid broken autoplay issues on some browsers
-                    visual_evidence_html = f'''
+                     visual_evidence_html = f'''
                     <div class="prompt-card" style="text-align:center; padding:25px; background:#2c3e50; border-left:5px solid #3498db;">
                         <span class="prompt-label" style="color:#fff;">👁️ VIDEO DEMONSTRATION</span>
                         <p style="color:#ecf0f1; font-size:16px;">A video showcasing this feature is available from the official source.</p>
@@ -217,35 +206,22 @@ def run_pipeline(category, config, forced_keyword=None):
                         {caption}
                     </div>'''
                 elif v_type in ["gif", "image"]:
-                    visual_evidence_html = f'<div class="gif-container" style="text-align:center; margin-bottom:20px;"><img src="{v_url}" alt="{v_desc}" style="width:100%; border-radius:10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">{caption}</div>'
+                    visual_evidence_html = f'<div class="gif-container" style="text-align:center; margin-bottom:20px;"><img src="{v_url}" alt="Demo" style="width:100%; border-radius:10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">{caption}</div>'
 
-            # Update Blacklist if junk was found
-            for v in unique_visuals:
-                if any(bad in v['url'].lower() for bad in scraper.MEDIA_LINK_BLACKLIST):
-                    log(f"      🚨 Junk Link Detected! Punishing domain...")
-                    bad_dom = urllib.parse.urlparse(v['url']).netloc
-                    reputation = news_fetcher.get_domain_reputation()
-                    if bad_dom not in reputation['blacklist']:
-                        reputation['blacklist'].append(bad_dom)
-                        news_fetcher.save_domain_reputation(reputation)
-                        log(f"      ⛔ Domain '{bad_dom}' blacklisted permanently.")
-
-        # --- CODE-ENFORCED FALLBACK ---
-        # If no real visuals were found, force the writer to generate a widget
+        # Fallback if hunt failed
         if not visual_evidence_html and visual_strategy.startswith("hunt_for_"):
-            log("      ⚠️ All hunts failed. Overwriting directive to 'generate_comparison_table'.")
             visual_strategy = "generate_comparison_table"
 
         # ======================================================================
-        # 7. SYNTHESIS (The Writer)
+        # 7. SYNTHESIS (Writer -> SEO -> Humanizer)
         # ======================================================================
-        log("   ✍️ [Step B] Synthesizing research & visuals...")
+        log("   ✍️ Synthesizing Content...")
+        
         combined_text_data = ""
         for i, src in enumerate(collected_sources):
             combined_text_data += f"\n--- SOURCE {i+1}: {src['domain']} ---\nURL: {src['url']}\nCONTENT:\n{src['text'][:9000]}\n"
         if reddit_context: combined_text_data += f"\n\n{reddit_context}\n"
         
-        # Prepare structured payload for the Prompt
         payload = {
             "keyword": target_keyword,
             "category": category,
@@ -255,6 +231,7 @@ def run_pipeline(category, config, forced_keyword=None):
             "research_data": combined_text_data
         }
         
+        # Step B: Writer
         json_b = api_manager.generate_step_strict(
             model_name, 
             PROMPT_B_TEMPLATE.format(json_input=json.dumps(payload), forbidden_phrases=str(FORBIDDEN_PHRASES)), 
@@ -262,17 +239,12 @@ def run_pipeline(category, config, forced_keyword=None):
             required_keys=["headline", "article_body", "verdict"]
         )
         
-        # ======================================================================
-        # 8. SEO & HUMANIZING (Polishing)
-        # ======================================================================
-        log("   🎨 [Step C & D] SEO optimization and vibe check...")
-        
+        # Step C: SEO & Linking
         kg_links = history_manager.get_relevant_kg_for_linking(json_b.get('headline', target_keyword), category)
         input_c = {
             "draft_content": json_b, 
             "sources_data": [{"title": s['title'], "url": s['url']} for s in collected_sources]
         }
-        
         json_c = api_manager.generate_step_strict(
             model_name, 
             PROMPT_C_TEMPLATE.format(json_input=json.dumps(input_c), knowledge_graph=kg_links), 
@@ -280,61 +252,52 @@ def run_pipeline(category, config, forced_keyword=None):
             required_keys=["finalTitle", "finalContent"]
         )
         
-        json_d = api_manager.generate_step_strict(
+        # Step D: Humanizer
+        final_article = api_manager.generate_step_strict(
             model_name, 
             PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), 
             "Step D (Humanizing)",
             required_keys=["finalTitle", "finalContent"]
         )
         
-        final_article = json_d
         title = final_article.get('finalTitle', target_keyword)
         content_html = final_article.get('finalContent', '<p>Error generating content.</p>')
 
         # ======================================================================
-        # 9. MULTIMEDIA ASSETS (Images & Videos)
+        # 8. ASSETS GENERATION (Images & Video)
         # ======================================================================
         log("   🖼️ [Image Mission] Starting...")
         img_url = None
-        # Collect all possible source images
         candidate_images = [{'url': src['source_image']} for src in collected_sources if src.get('source_image')]
         
         if candidate_images:
-            log(f"      🔍 Selecting best from {len(candidate_images)} source images...")
             selected_img_url = image_processor.select_best_image_with_gemini(model_name, title, candidate_images)
             if selected_img_url:
                 img_url = image_processor.process_source_image(selected_img_url, final_article.get('imageOverlayText'), title)
         
-        # AI Generation Fallback
         if not img_url:
-            log("      ⚠️ Backup: Generating AI Image...")
             img_url = image_processor.generate_and_upload_image(final_article.get('imageGenPrompt', title), final_article.get('imageOverlayText'))
 
-        # --- VIDEO PRODUCTION ---
+        # Video Production
         log("   🎬 [Video Mission] Producing YouTube & Shorts...")
         vid_main, vid_short, vid_html_block, local_fb_video = None, None, "", None
         clean_summary = re.sub('<[^<]+?>','', content_html)[:2500]
         
-        script_json = None
         try:
             v_script_data = api_manager.generate_step_strict(
                 model_name, 
                 PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=clean_summary), 
                 "Video Script"
             )
-            if 'video_script' in v_script_data and isinstance(v_script_data['video_script'], list):
-                script_json = v_script_data['video_script']
-        except Exception as e:
-            log(f"      ⚠️ Video Script Generation failed: {e}")
-
-        if script_json:
-            try:
+            script_json = v_script_data.get('video_script')
+            
+            if script_json:
                 v_meta = api_manager.generate_step_strict(model_name, PROMPT_YOUTUBE_METADATA.format(draft_title=title), "YT Meta", required_keys=["title", "description"])
                 ts_stamp = int(time.time())
                 output_folder = os.path.abspath("output")
                 os.makedirs(output_folder, exist_ok=True)
                 
-                # Render Landscape Video
+                # Render Main Video
                 rr = video_renderer.VideoRenderer(output_dir=output_folder, width=1920, height=1080)
                 path_main = rr.render_video(script_json, title, f"main_{ts_stamp}.mp4")
                 if path_main:
@@ -343,39 +306,25 @@ def run_pipeline(category, config, forced_keyword=None):
                     if vid_main:
                         vid_html_block = f'<div class="video-container" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%;" src="https://www.youtube.com/embed/{vid_main}" frameborder="0" allowfullscreen></iframe></div>'
                 
-                # Render Portrait Video (Shorts)
+                # Render Shorts
                 rs = video_renderer.VideoRenderer(output_dir=output_folder, width=1080, height=1920)
                 path_short = rs.render_video(script_json, title, f"short_{ts_stamp}.mp4")
                 if path_short:
                     local_fb_video = path_short
                     vid_short, _ = youtube_manager.upload_video_to_youtube(path_short, title[:90]+" #Shorts", v_desc, v_meta.get('tags',[])+['shorts'])
-            except Exception as ve:
-                log(f"      ⚠️ Video Production Error: {ve}")
+        except Exception as ve:
+            log(f"      ⚠️ Video Production Error: {ve}")
 
         # ======================================================================
-        # 10. VALIDATION & FINAL ASSEMBLY (Core Surgeon)
+        # 9. VALIDATION & ASSEMBLY
         # ======================================================================
         log("   🛡️ [Validation] Performing Core Surgery...")
         try:
             healer = content_validator_pro.AdvancedContentValidator()
             content_html = healer.run_professional_validation(content_html, combined_text_data, collected_sources)
         except Exception as he:
-            log(f"      ⚠️ Validator skipped due to error: {he}")
+            log(f"      ⚠️ Validator skipped: {he}")
 
-        # Assemble Final Body
-        fb_hook_data = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
-        fb_caption = fb_hook_data.get('FB_Hook', title)
-
-        # Handle Schema Injection
-        schema_json = ""
-        if 'schemaMarkup' in final_article and final_article['schemaMarkup']:
-            try:
-                schema_json = f'\n<script type="application/ld+json">{json.dumps(final_article["schemaMarkup"])}</script>'
-            except: pass
-
-        # Primary Image HTML
-        primary_img_html = f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}"><img src="{img_url}" width="1200" height="630" style="max-width:100%; border-radius:12px; box-shadow:0 8px 25px rgba(0,0,0,0.15);" /></a></div>' if img_url else ""
-        
         # Author Box
         author_box_html = """
         <div style="margin-top:60px; padding:35px; background:#fcfcfc; border-left: 6px solid #2ecc71; border-radius:15px; font-family:sans-serif; box-shadow: 0 5px 15px rgba(0,0,0,0.05);">
@@ -391,25 +340,50 @@ def run_pipeline(category, config, forced_keyword=None):
         </div>
         """
 
+        # Schema JSON
+        schema_json = ""
+        if 'schemaMarkup' in final_article and final_article['schemaMarkup']:
+            try: schema_json = f'\n<script type="application/ld+json">{json.dumps(final_article["schemaMarkup"])}</script>'
+            except: pass
+
+        # Final Body Assembly
+        primary_img_html = f'<div class="separator" style="clear:both;text-align:center;margin-bottom:30px;"><a href="{img_url}"><img src="{img_url}" width="1200" height="630" style="max-width:100%; border-radius:12px; box-shadow:0 8px 25px rgba(0,0,0,0.15);" /></a></div>' if img_url else ""
         full_article_body = ARTICLE_STYLE + primary_img_html + vid_html_block + content_html + author_box_html + schema_json
 
         # ======================================================================
-        # 11. PUBLISHING & DISTRIBUTION
+        # 10. PUBLISHING & DISTRIBUTION
         # ======================================================================
         log(f"   🚀 [Publishing] Sending to Blogger...")
-        published_url = publisher.publish_post(title, full_article_body, [category, "Tech Insights", "AI Evolution"])
         
-        if published_url:
-            history_manager.update_kg(title, published_url, category)
+        # NOTE: publisher.publish_post MUST return (url, post_id) tuple in V6.0
+        pub_result = publisher.publish_post(title, full_article_body, [category, "Tech Insights", "AI Evolution"])
+        
+        if pub_result:
+            # Handle both tuple (url, id) and single url (legacy support)
+            if isinstance(pub_result, tuple):
+                published_url, post_id = pub_result
+            else:
+                published_url, post_id = pub_result, None
+
             log(f"   ✅ [SUCCESS] Article live at: {published_url}")
             
+            # 1. Update Knowledge Graph (With Post ID for Gardener)
+            history_manager.update_kg(title, published_url, category, post_id)
+            
+            # 2. INSTANT INDEXING (V6.0 Feature)
+            indexer.submit_url(published_url)
+            
+            # 3. Social Distribution
             try:
-                # Update YouTube Descriptions
+                fb_hook_data = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
+                fb_caption = fb_hook_data.get('FB_Hook', title)
+                
+                # YouTube Update
                 yt_update_text = f"👇 Read the full technical analysis here:\n{published_url}"
                 if vid_main: youtube_manager.update_video_description(vid_main, yt_update_text)
                 if vid_short: youtube_manager.update_video_description(vid_short, yt_update_text)
                 
-                # Facebook Distribution
+                # Facebook
                 social_manager.distribute_content(fb_caption, published_url, img_url)
                 if local_fb_video:
                     social_manager.post_reel_to_facebook(local_fb_video, fb_caption, published_url)
@@ -428,7 +402,10 @@ def run_pipeline(category, config, forced_keyword=None):
 
 def main():
     """
-    EntryPoint: Loads config and cycles through categories.
+    EntryPoint V6.0:
+    1. Run Gardener (Maintenance)
+    2. Run Cluster Strategy (Series Building)
+    3. Fallback to Manual/Daily Hunt
     """
     try:
         if not os.path.exists('config_advanced.json'):
@@ -438,39 +415,60 @@ def main():
         with open('config_advanced.json','r') as f: 
             cfg = json.load(f)
             
+        # --- PHASE 1: THE GARDENER (Maintenance) ---
+        log("\n🌱 [Phase 1] Running Digital Gardener...")
+        gardener.run_daily_maintenance(cfg)
+        
+        # --- PHASE 2: CONTENT GENERATION ---
         all_categories = list(cfg['categories'].keys())
         random.shuffle(all_categories)
         log(f"🎲 Session Sequence: {all_categories}")
         
         published_successfully = False
+        
         for current_cat in all_categories:
             log(f"\n📂 CATEGORY FOCUS: {current_cat}")
             
-            # Try AI Strategy first
-            if run_pipeline(current_cat, cfg):
-                published_successfully = True
-                break
-                
-            # If AI Strategy fails or duplicates, try manual topics
+            # A. CLUSTER STRATEGY (Priority #1)
+            # Check if we have an active series or need to start one
+            cluster_topic, is_cluster = cluster_manager.get_strategic_topic(current_cat, cfg)
+            
+            if cluster_topic:
+                if run_pipeline(current_cat, cfg, forced_keyword=cluster_topic, is_cluster_topic=is_cluster):
+                    published_successfully = True
+                    break # One article per run is enough
+            
+            # B. MANUAL FALLBACK (Priority #2)
+            # If Cluster Manager failed or returned nothing, check manual list
             trending_topics = cfg['categories'][current_cat].get('trending_focus', '')
-            if trending_topics:
-                log(f"   ⚠️ AI Strategist found no unique leads. Trying Manual Fallbacks...")
+            if trending_topics and not is_cluster:
+                log(f"   ⚠️ Cluster Strategy yielded no topic. Checking Manual List...")
                 topics_list = [t.strip() for t in trending_topics.split(',') if t.strip()]
                 random.shuffle(topics_list)
+                
                 for manual_topic in topics_list:
-                    if run_pipeline(current_cat, cfg, forced_keyword=manual_topic):
+                    if run_pipeline(current_cat, cfg, forced_keyword=manual_topic, is_cluster_topic=False):
                         published_successfully = True
                         break
                 if published_successfully: break
-        
+
+            # C. AI DAILY HUNT (Priority #3 - Last Resort)
+            # If both Cluster and Manual failed, let AI find news
+            if not published_successfully:
+                log(f"   ⚠️ Manual List exhausted. Attempting AI Daily Hunt...")
+                if run_pipeline(current_cat, cfg, forced_keyword=None, is_cluster_topic=False):
+                    published_successfully = True
+                    break
+
         if published_successfully:
-            log("\n✅ MISSION COMPLETE: Article published and distributed.")
+            log("\n✅ MISSION COMPLETE: Article published, indexed, and distributed.")
             history_manager.perform_maintenance_cleanup()
         else:
             log("\n❌ MISSION FAILED: No articles met the quality threshold today.")
             
     except Exception as e:
         log(f"❌ CRITICAL ERROR IN MAIN: {e}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()
