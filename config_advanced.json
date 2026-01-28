@@ -15,7 +15,7 @@
   },
   "settings": {
     "date_range_query": "when:2d",
-    "model_name": "gemini-3-flash-preview",
+    "model_name": "gemini-2.5-flash",
     "adsense_optimization": true
   }
 }
