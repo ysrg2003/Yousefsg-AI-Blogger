@@ -63,6 +63,7 @@ def save_domain_reputation(data):
     except: pass
 
 def ai_vet_sources(items, model_name):
+    
     """
     Uses the AI Engine (via api_manager) to audit new domains.
     Logic:
@@ -222,7 +223,7 @@ def get_gnews_api_sources(query, category):
     
     # 2. Add negative filtering to save quota and improve quality
     # Limiting negative sites filter to top 5 to keep URL length managed and avoid 414 URI Too Long
-    hard_filters = " ".join([f"-site:{site}" for site in SEED_BLACKLIST[:3]])
+    hard_filters = " ".join([f"-site:{site}" for site in SEED_BLACKLIST[:2]])
     final_query = f"{clean_q} {hard_filters}"
 
     log(f"   📡 Querying GNews API for: '{clean_q}'...")
