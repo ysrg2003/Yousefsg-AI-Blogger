@@ -67,94 +67,48 @@ def generate_search_plan(topic, client, model_name):
         }
 
 def smart_hunt(topic, config, mode="general"):
-    """
-    The Master Research Function. It plans, then executes the search.
-    """
-    # Use a fast, stable model that supports tools reliably
     model_name = "gemini-2.5-flash" 
-    
     key = key_manager.get_current_key()
-    if not key:
-        log("      ❌ API Key Error: No keys available for AI Researcher.")
-        return []
-
+    if not key: return []
     client = genai.Client(api_key=key)
     
-    # 1. PLAN THE SEARCH (This solves the "long title" problem)
     search_plan = generate_search_plan(topic, client, model_name)
-    
-    # Determine which optimized query to use based on the mode
-    active_query = search_plan.get("news_query", topic) # Default to news
-    if mode == "official":
-        active_query = search_plan.get("official_query", topic)
-    if mode == "visual":
-        active_query = search_plan.get("visual_query", topic)
+    active_query = search_plan.get("news_query", topic)
+    if mode == "official": active_query = search_plan.get("official_query", topic)
+    if mode == "visual": active_query = search_plan.get("visual_query", topic)
     
     log(f"   🕵️‍♂️ [AI Researcher] Executing ({mode}) search for: '{active_query}'")
-
-    # 2. Configure Google Search Tool
     google_search_tool = types.Tool(google_search=types.GoogleSearch())
 
-    # 3. Dynamic Prompting based on the optimized query
-    if mode == "visual":
-        system_instruction = "Find pages with UI screenshots, demos, or graphs. Ignore text-only pages."
-        user_prompt = f"Find 3 pages with strong VISUAL EVIDENCE for: '{active_query}'. OUTPUT JSON."
-    elif mode == "official":
-        system_instruction = "Find ONLY the Official Documentation, GitHub Repository, Whitepaper, or Company Blog."
-        user_prompt = f"Find the OFFICIAL source links for: '{active_query}'. OUTPUT JSON."
-    else: # "general"
-        system_instruction = "Find high-authority, recent articles. BAN forums and social media."
-        user_prompt = f"Find top 3 authoritative sources for: '{active_query}'. OUTPUT JSON: [{{'title': '...', 'link': '...'}}]"
-
-    # 4. Execute Search with the CORRECTED SYNTAX
-    try:
-        
-        response = client.models.generate_content(
-    model=model_name,
-    contents=user_prompt,
-    config=types.GenerateContentConfig(  # التعديل هنا: وضع الأدوات داخل الـ config
+    # تم إزالة response_mime_type من هنا لحل المشكلة
+    config_gen = types.GenerateContentConfig(
         tools=[google_search_tool],
-        system_instruction=system_instruction,
-        response_mime_type="application/json",
+        system_instruction="Find high-authority sources. Return ONLY a JSON list of objects with 'title' and 'link'.",
         temperature=0.2
     )
-)
-        
-        raw_text = response.text.replace("```json", "").replace("```", "").strip()
-        results = []
 
-        try:
-            parsed_data = json.loads(raw_text)
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=f"Find 3 sources for: '{active_query}'. Output JSON format.",
+            config=config_gen
+        )
+        
+        # تنظيف النص المستلم لأنه لن يكون JSON صافي
+        raw_text = response.text.replace("```json", "").replace("```", "").strip()
+        
+        # استخدام المفسر الذكي من api_manager
+        from api_manager import master_json_parser
+        parsed_data = master_json_parser(raw_text)
+        
+        results = []
+        if parsed_data and isinstance(parsed_data, list):
             for item in parsed_data:
                 url = item.get('link') or item.get('url')
-                if not url: continue
-                
-                domain = url.split("//")[-1].split("/")[0].lower()
-                # Strict Filtering
-                if any(bad in domain for bad in LOW_QUALITY_DOMAINS) or "google.com/search" in url:
-                    continue
-                
-                results.append({
-                    "title": item.get('title', 'AI Source'),
-                    "link": url,
-                    "url": url, # for compatibility
-                    "description": item.get('description') or item.get('snippet', 'Source found by AI'),
-                    "type": item.get('type', 'article'),
-                    "date": "Recent"
-                })
-        except json.JSONDecodeError:
-            log("      ⚠️ JSON Parsing failed. Using Regex fallback.")
-            found_links = extract_urls_fallback(raw_text)
-            for link in found_links:
-                results.append({"title": "AI Source (Fallback)", "link": link, "url": link, "description": "Extracted via regex", "type": "article"})
-
-        if results:
-            log(f"      ✅ [AI Researcher] Found {len(results)} valid sources for '{active_query}'.")
-            return results
-        else:
-            log(f"      ⚠️ AI Researcher found 0 sources for '{active_query}'.")
-            return []
-
+                if url:
+                    results.append({"title": item.get('title', 'Source'), "link": url, "url": url})
+        
+        return results
     except Exception as e:
         log(f"      ❌ AI Researcher CRASHED: {e}")
         return []
