@@ -146,7 +146,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # 6. WRITING, ASSETS, and VIDEO PRODUCTION
         # ======================================================================
         log("   ✍️ Synthesizing Content...")
-        combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + reddit_context
+        media_context = "\n".join([f"IMAGE_URL: {m['url']} (Description: {m['description']})" for s in collected_sources for m in s.get('media', [])])
+        combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + reddit_context + "\nFOUND_MEDIA:\n" + media_context
         payload = {"keyword": target_keyword, "research_data": combined_text, "visual_strategy_directive": visual_strategy}
         
         json_b = api_manager.generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=json.dumps(payload), forbidden_phrases="[]"), "Writer", ["headline", "article_body"])
