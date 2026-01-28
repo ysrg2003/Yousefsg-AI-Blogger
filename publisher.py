@@ -49,8 +49,9 @@ def publish_post(title, content, labels):
     try:
         r = requests.post(url, headers=headers, json=body)
         r.raise_for_status()
-        link = r.json().get('url')
-        post_id = data.get('id')
+        data = r.json()  # أولاً: احفظ الاستجابة في متغير
+        link = data.get('url') # ثانياً: استخرج الرابط
+        post_id = data.get('id') # ثالثاً: استخرج المعرف
         log(f"✅ Published LIVE: {link}")
         return link, post_id
     except requests.exceptions.RequestException as e:
