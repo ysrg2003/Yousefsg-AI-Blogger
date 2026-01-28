@@ -231,6 +231,58 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         log("   🚀 [Publishing] Initial Draft...")
         pub_result = publisher.publish_post(title, full_body_html, [category])
         published_url, post_id = (pub_result if isinstance(pub_result, tuple) else (pub_result, None))
+
+        if not published_url or not post_id:
+            log("   ❌ CRITICAL FAILURE: Could not publish the initial draft.")
+            return False
+
+        # ======================================================================
+        # 7.5 QUALITY IMPROVEMENT LOOP (AUDIT -> REMEDY -> UPDATE)
+        # ======================================================================
+        quality_score, attempts, MAX_RETRIES = 0, 0, 3 
+        
+        while quality_score < 9.5 and attempts < MAX_RETRIES:
+            attempts += 1
+            log(f"   🔄 [Quality Loop] Audit Round {attempts}...")
+            
+            # 1. المحقق يدخل الرابط فعلياً ويحلل المحتوى
+            audit_report = live_auditor.audit_live_article(published_url, target_keyword, iteration=attempts)
+            
+            if not audit_report:
+                log("      ⚠️ Quality Audit failed to return a report. Skipping loop.")
+                break
+            
+            quality_score = float(audit_report.get('quality_score', 0))
+            
+            if quality_score >= 9.5:
+                log(f"      🌟 Excellence Achieved! Score: {quality_score}/10. No further fixes needed.")
+                break
+            
+            log(f"      ⚠️ Score {quality_score}/10. Auditor found issues. Starting surgery...")
+            
+            # 2. الجراح يعالج المقال بناءً على التقرير + البحث الأصلي (combined_text)
+            fixed_html = remedy.fix_article_content(
+                full_body_html, 
+                audit_report, 
+                target_keyword, 
+                combined_text, 
+                iteration=attempts
+            )
+            
+            # 3. تحديث المقال على بلوجر إذا نجحت عملية التصحيح
+            if fixed_html and len(fixed_html) > 1000:
+                # ملاحظة: يجب التأكد من وجود دالة update_existing_post في ملف publisher.py
+                if publisher.update_existing_post(post_id, title, fixed_html):
+                    full_body_html = fixed_html
+                    log(f"      ✅ Article updated on Blogger. Waiting for sync...")
+                    time.sleep(10) # وقت مستقطع لضمان تحديث الصفحة قبل التدقيق القادم
+                else:
+                    log("      ❌ Failed to update the post on Blogger. Breaking loop.")
+                    break
+            else:
+                log("      ⚠️ Remedy agent failed to produce a valid fix. Breaking loop.")
+                break
+
         # ======================================================================
         # 8. FINALIZATION & DISTRIBUTION
         # ======================================================================
