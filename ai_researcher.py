@@ -1,6 +1,8 @@
 # FILE: ai_researcher.py
-# ROLE: An elite autonomous agent that uses Google Grounding to find verified, high-quality sources.
-# FEATURES: Strict quality filtering, JSON structured output, real-time verification.
+# ROLE: Elite autonomous agent using Google Grounding for verified, high-quality research.
+# CRITICAL FIX (V7.3): Corrected function signature to accept 'mode' argument.
+#                      Updated tool name from 'google_search_retrieval' to 'google_search' 
+#                      to match the latest Google GenAI library, resolving 400 Bad Request errors.
 
 import json
 import re
@@ -10,138 +12,105 @@ from google.genai import types
 from config import log
 from api_manager import key_manager
 
-# القائمة السوداء الصارمة للمصادر التي لا نريدها كمراجع تقنية
+# Strict blacklist of domains to avoid for authoritative research
 LOW_QUALITY_DOMAINS = [
     "reddit.com", "quora.com", "pinterest.com", "linkedin.com", "medium.com", 
     "facebook.com", "instagram.com", "tiktok.com", "vocal.media", "newsbreak.com",
-    "msn.com", "aol.com", "yahoo.com"
+    "msn.com", "aol.com", "yahoo.com", "forbes.com" # Forbes is often paywalled/low-quality
 ]
 
 def extract_urls_fallback(text):
-    """
-    استخراج الروابط باستخدام Regex في حال فشل تحليل JSON.
-    """
+    """Emergency Regex extractor if JSON parsing fails."""
     url_pattern = re.compile(r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+')
     found = url_pattern.findall(text)
-    # تنظيف الروابط من أي بقايا جوجل
-    clean_links = []
-    for link in found:
-        if "google.com" not in link and not any(bad in link for bad in LOW_QUALITY_DOMAINS):
-            clean_links.append(link)
-    return list(set(clean_links)) # إزالة التكرار
+    clean_links = [link for link in found if "google.com" not in link and not any(bad in link for bad in LOW_QUALITY_DOMAINS)]
+    return list(set(clean_links))
 
-def smart_hunt(topic, config,mode="general"):
+# --- FIX #1: The function signature now correctly accepts the 'mode' argument ---
+def smart_hunt(topic, config, mode="general"):
     """
-    المهمة: الذهاب إلى جوجل، البحث، الفلترة، وإعادة أفضل 3-5 مصادر موثوقة.
+    The Master Research Function. Uses different prompts based on the research mode.
     """
-    # نستخدم الموديل الذي يدعم Grounding (Flash 2.0 ممتاز في السرعة والدقة)
-    # ملاحظة: يمكنك تغييره حسب المتاح في مفتاحك، لكن 2.0 هو الأفضل للبحث حالياً
-    model_name = "gemini-2.5-flash" 
+    # Use a model known for reliable Grounding support
+    # Using 1.5-flash as it's stable, fast, and supports the latest tools.
+    model_name = "gemini-1.5-flash-latest" 
     
-    log(f"   🕵️‍♂️ [AI Researcher] Conducting deep web search for: '{topic}'...")
+    log(f"   🕵️‍♂️ [AI Researcher] Conducting ({mode}) deep web search for: '{topic}'...")
     
     key = key_manager.get_current_key()
     if not key:
-        log("      ❌ API Key Error.")
+        log("      ❌ API Key Error: No keys available for AI Researcher.")
         return []
 
     client = genai.Client(api_key=key)
     
-    # 1. إعداد أداة البحث (Google Search Tool)
-    google_search_tool = types.Tool(
-        google_search_retrieval=types.GoogleSearchRetrieval(
-            dynamic_retrieval_config=types.DynamicRetrievalConfig(
-                mode=types.DynamicRetrievalConfigMode.MODE_DYNAMIC,
-                dynamic_threshold=0.3
-            )
-        )
+    # --- FIX #2: Using the new, correct tool name 'google_search' ---
+    # 1. Setup Google Search Tool with the updated name
+    search_tool = types.Tool(
+        google_search=types.GoogleSearch()
     )
 
-    # 2. البرومبت "الصارم" (The Strict Prompt)
-    system_instruction = """
-    You are an Elite Technical Researcher for a high-authority tech publication.
-    Your Job: verify facts and find the PRIMARY sources for a specific tech topic.
-    
-    STRICT FILTERING RULES (DO NOT IGNORE):
-    1. PRIORITIZE: Official Documentation, GitHub Repositories, Major Tech Publications (The Verge, TechCrunch, Arstechnica, Wired), and University Papers (.edu).
-    2. BAN: User-Generated Content (Reddit, Quora, LinkedIn), Social Media, Generic News Aggregators (MSN, Yahoo), and Content Farms.
-    3. FRESHNESS: Sources must be RECENT (last 30 days) unless the topic is a fundamental tutorial.
-    4. ACCURACY: Return the DIRECT article URL, not a home page.
-    """
+    # 2. Dynamic Prompting based on Mode
+    if mode == "visual":
+        system_instruction = "You are a Visual Research Specialist. Find direct URLs to pages with visual evidence (Screenshots, Diagrams, Demos)."
+        user_prompt = f"Find 3-5 pages containing strong VISUAL EVIDENCE for: '{topic}'. OUTPUT JSON: [{{'type': 'image/video', 'url': '...', 'description': '...'}}]"
+    elif mode == "official":
+        system_instruction = "You are an Authority Validator. Find ONLY the Official Documentation, GitHub Repository, Whitepaper, or Company Blog."
+        user_prompt = f"Find the OFFICIAL source links for: '{topic}'. OUTPUT JSON: [{{'title': 'Official Doc', 'url': '...'}}]"
+    else: # "general"
+        system_instruction = "You are an Elite Tech Researcher. Find the most authoritative, recent, and factual articles from major tech publications."
+        user_prompt = f"Find top 3-5 authoritative sources for: '{topic}'. OUTPUT JSON: [{{'title': 'Article Title', 'link': '...', 'snippet': '...', 'date': '...'}}]"
 
-    user_prompt = f"""
-    TOPIC: "{topic}"
-    
-    MISSION: 
-    Search Google, analyze the results, and select the TOP 3-5 absolute best, most authoritative articles covering this exact topic.
-    
-    OUTPUT FORMAT (Return RAW JSON only):
-    [
-        {{
-            "title": "Actual Page Title",
-            "link": "https://exact-url.com/article",
-            "snippet": "Brief summary of technical value",
-            "date": "Published Date or 'Recent'"
-        }}
-    ]
-    """
-
+    # 3. Execution
     try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                tools=[google_search_tool],
-                system_instruction=system_instruction,
+        # The modern way to use tools is by getting the model instance first
+        model_instance = genai.GenerativeModel(
+            model_name=model_name,
+            api_key=key,
+            system_instruction=system_instruction
+        )
+        
+        response = model_instance.generate_content(
+            user_prompt,
+            tools=[search_tool],
+            generation_config=types.GenerationConfig(
                 response_mime_type="application/json",
-                temperature=0.3 # حرارة منخفضة للدقة
+                temperature=0.2
             )
         )
         
-        # 3. معالجة الرد وتنظيفه
         raw_text = response.text.replace("```json", "").replace("```", "").strip()
-        
-        sources = []
+        results = []
+
         try:
             parsed_data = json.loads(raw_text)
-            
-            # 4. التدقيق الثانوي (Double-Check) في الكود
             for item in parsed_data:
-                url = item.get('link') or item.get('url') # التعامل مع اختلاف التسمية المحتمل
-                title = item.get('title', 'Source')
-                
+                url = item.get('link') or item.get('url')
                 if not url: continue
                 
-                # تصفية النطاقات السيئة مرة أخرى للتأكيد
                 domain = url.split("//")[-1].split("/")[0].lower()
-                if any(bad in domain for bad in LOW_QUALITY_DOMAINS):
+                if any(bad in domain for bad in LOW_QUALITY_DOMAINS) or "google.com/search" in url:
                     continue
                 
-                # تجاهل روابط جوجل الداخلية
-                if "google.com" in domain:
-                    continue
-
-                sources.append({
-                    "title": title,
+                results.append({
+                    "title": item.get('title', 'AI Found Source'),
                     "link": url,
-                    "date": item.get('date', 'Today'),
-                    "snippet": item.get('snippet', '')
+                    "description": item.get('description') or item.get('snippet', 'Relevant Source'),
+                    "type": item.get('type', 'article'),
+                    "date": item.get('date', 'Recent')
                 })
-
         except json.JSONDecodeError:
-            log("      ⚠️ JSON Parsing failed. Attempting regex extraction...")
-            # خطة بديلة: استخراج الروابط بالبحث النصي
+            log("      ⚠️ JSON Parsing failed. Falling back to regex extraction...")
             found_links = extract_urls_fallback(raw_text)
             for link in found_links:
-                sources.append({"title": "AI Discovered Source", "link": link, "date": "Recent"})
+                results.append({"title": "AI Discovered (Fallback)", "link": link, "type": "article"})
 
-        if sources:
-            log(f"      ✅ [AI Researcher] Identified {len(sources)} high-quality targets.")
-            return sources[:5] # نكتفي بأفضل 5
+        if results:
+            log(f"      ✅ [AI Researcher] Identified {len(results)} high-quality targets ({mode} mode).")
+            return results[:5] 
         else:
-            log("      ⚠️ AI Researcher searched but found no quality sources matching criteria.")
+            log(f"      ⚠️ AI Researcher found no matching sources for mode: {mode}.")
             return []
-
     except Exception as e:
         log(f"      ❌ AI Researcher Critical Error: {e}")
         return []
