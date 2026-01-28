@@ -40,6 +40,7 @@ def update_kg(title, url, section, post_id=None):
             "title": title,
             "url": url,
             "section": section,
+            post_id=None,
             "date": str(datetime.date.today())
         }
 
