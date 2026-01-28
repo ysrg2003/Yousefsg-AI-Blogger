@@ -186,9 +186,9 @@ def get_real_news_rss(query_keywords, category=None):
             log(f"   ⚠️ RSS Empty for '{base_query}'. Returning empty list to trigger GNews.")
             return [] 
             
-        except Exception as e:
-            log(f"❌ RSS Error: {e}")
-            return []
+            except Exception as e:
+                log(f"❌ RSS Error: {e}")
+                return []
         
         elif category:
             log(f"   ⚠️ RSS Empty. Fallback to Category: {category}")
