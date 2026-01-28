@@ -146,15 +146,34 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # 6. WRITING, ASSETS, and VIDEO PRODUCTION
         # ======================================================================
         log("   ✍️ Synthesizing Content...")
-        media_context = "\n".join([f"IMAGE_URL: {m['url']} (Description: {m['description']})" for s in collected_sources for m in s.get('media', [])])
-        combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + reddit_context + "\nFOUND_MEDIA:\n" + media_context
-        payload = {"keyword": target_keyword, "research_data": combined_text, "visual_strategy_directive": visual_strategy}
+        
+        # --- إصلاح: تجميع الوسائط المكتشفة لتحويلها إلى HTML قبل الكتابة ---
+        visual_evidence_html = ""
+        all_discovered_media = []
+        for s in collected_sources:
+            if s.get('media'): all_discovered_media.extend(s['media'])
+        
+        if all_discovered_media:
+            # نأخذ أفضل صورتين مكتشفتين (Screenshots/Evidence)
+            top_media = sorted(all_discovered_media, key=lambda x: x.get('score', 0), reverse=True)[:2]
+            for m in top_media:
+                visual_evidence_html += f'<div class="visual-evidence" style="text-align:center; margin:20px 0;"><img src="{m["url"]}" style="max-width:100%; border-radius:8px; border:1px solid #ddd;" alt="{m["description"]}"><p style="font-style:italic; color:#666; font-size:14px;">{m["description"]}</p></div>\n'
+
+        combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + reddit_context
+        
+        # نمرر الـ visual_evidence_html للكاتب لكي يدمجها
+        payload = {
+            "keyword": target_keyword, 
+            "research_data": combined_text, 
+            "visual_strategy_directive": visual_strategy,
+            "PRE_GENERATED_VISUAL_HTML": visual_evidence_html # هذا هو المفتاح المفقود
+        }
         
         json_b = api_manager.generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=json.dumps(payload), forbidden_phrases="[]"), "Writer", ["headline", "article_body"])
-        title, content = json_b['headline'], json_b['article_body']
         
         sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
-        kg_links = history_manager.get_relevant_kg_for_linking(title, category)
+        kg_links = history_manager.get_relevant_kg_for_linking(json_b['headline'], category)
+        
         json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps({"draft_content": json_b, "sources_data": sources_data}), knowledge_graph=kg_links), "SEO", ["finalTitle", "finalContent"])
         final_article = api_manager.generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), "Humanizer", ["finalTitle", "finalContent"])
         
@@ -163,102 +182,55 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         log("   🎨 Generating Assets...")
         img_url = image_processor.generate_and_upload_image(final_article.get('imageGenPrompt', title))
         
-        log("   🎬 GUARANTEED Video Production...")
-        script_json = None
-        try:
-            summ = re.sub('<[^<]+?>', '', full_body_html)[:1000]
-            vs = api_manager.generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script")
-            script_json = vs.get('video_script')
-        except: pass
-        if not script_json: # Fallback Script
-            log("      ⚠️ AI Script failed. Using Fallback Script.")
-            script_json = [{"type": "send", "text": f"News about {title[:20]}!"}, {"type": "receive", "text": "Tell me more!"}, {"type": "send", "text": "Full story in the article!"}]
+        log("   🎬 Video Production & Upload...")
+        # --- إصلاح: استلام رابط الـ Embed الصحيح من اليوتيوب ---
+        vid_main_url, vid_short_url = None, None
         
+        # توليد السيناريو
+        summ = re.sub('<[^<]+?>', '', full_body_html)[:1000]
+        vs = api_manager.generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script")
+        script_json = vs.get('video_script', [])
+
+        rr = video_renderer.VideoRenderer(output_dir="output")
         ts = int(time.time())
-        out_dir = "output"
-        os.makedirs(out_dir, exist_ok=True)
-        rr = video_renderer.VideoRenderer(output_dir=out_dir)
-        pm = rr.render_video(script_json, title, f"main_{ts}.mp4")
-        vid_main, vid_short, local_fb_video = None, None, None
-        if pm: vid_main, _ = youtube_manager.upload_video_to_youtube(pm, title, "Read more in link.", ["tech", category])
         
-        rs = video_renderer.VideoRenderer(output_dir=out_dir, width=1080, height=1920)
+        # فيديو اليوتيوب العادي
+        pm = rr.render_video(script_json, title, f"main_{ts}.mp4")
+        if pm:
+            _, vid_main_url = youtube_manager.upload_video_to_youtube(pm, title, "Technical Analysis", ["tech", category])
+        
+        # فيديو الشورتس
+        rs = video_renderer.VideoRenderer(output_dir="output", width=1080, height=1920)
         ps = rs.render_video(script_json, title, f"short_{ts}.mp4")
         if ps:
             local_fb_video = ps
-            vid_short, _ = youtube_manager.upload_video_to_youtube(ps, f"{title[:50]} #Shorts", "Read more in link.", ["shorts", category])
-
-
+            _, vid_short_url = youtube_manager.upload_video_to_youtube(ps, f"{title[:50]} #Shorts", "Quick Review", ["shorts", category])
 
         # ======================================================================
         # 7. ASSET INJECTION & PUBLISHING
         # ======================================================================
         log("   🔗 Injecting Assets into HTML...")
 
-        # 1. تجهيز كود الفيديو (YouTube Embed)
+        # حقن الفيديو
         video_html = ""
-        if vid_main:
-            # ملاحظة: youtube_manager يعيد رابط embed بالفعل، لكننا نضمن ذلك هنا
-            embed_url = vid_main.replace("watch?v=", "embed/")
+        if vid_main_url:
             video_html = f"""
             <div class="video-container" style="margin: 25px 0; text-align: center;">
-                <iframe width="100%" height="450" src="{embed_url}" 
-                        frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                        allowfullscreen style="border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></iframe>
+                <iframe width="100%" height="450" src="{vid_main_url}" frameborder="0" allowfullscreen style="border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></iframe>
             </div>
             """
 
-        # 2. تجهيز كود الصورة الرئيسية (Featured Image)
+        # حقن الصورة الرئيسية
         image_html = ""
         if img_url:
-            image_html = f"""
-            <div class="featured-image" style="text-align: center; margin-bottom: 35px;">
-                <img src="{img_url}" style="width: 100%; max-width: 1200px; border-radius: 15px; box-shadow: 0 6px 20px rgba(0,0,0,0.15);" alt="{title}">
-            </div>
-            """
+            image_html = f'<div class="featured-image" style="text-align: center; margin-bottom: 35px;"><img src="{img_url}" style="width: 100%; border-radius: 15px;" alt="{title}"></div>'
 
-        # 3. دمج العناصر: الصورة أولاً، ثم الفيديو، ثم نص المقال
+        # دمج كل شيء
         full_body_html = image_html + video_html + full_body_html
 
         log("   🚀 [Publishing] Initial Draft...")
         pub_result = publisher.publish_post(title, full_body_html, [category])
-        
-        # التعامل مع النتيجة (رابط المقال ومعرفه)
-        if isinstance(pub_result, tuple):
-            published_url, post_id = pub_result
-        else:
-            published_url, post_id = pub_result, None
-
-        if not published_url or not post_id:
-            log("   ❌ CRITICAL FAILURE: Could not publish the initial draft.")
-            return False
-        
-        # حلقة تحسين الجودة (Audit & Fix)
-        quality_score, attempts, MAX_RETRIES = 0, 0, 2
-        while quality_score < 9.0 and attempts < MAX_RETRIES:
-            attempts += 1
-            log(f"   🔄 [Quality Loop] Audit Round {attempts}...")
-            
-            audit_report = live_auditor.audit_live_article(published_url, config, iteration=attempts)
-            if not audit_report: 
-                break
-            
-            quality_score = float(audit_report.get('quality_score', 0))
-            if quality_score >= 9.0:
-                log(f"      🌟 Excellence Achieved! Score: {quality_score}/10.")
-                break
-            
-            log(f"      ⚠️ Score {quality_score}/10. Applying fixes...")
-            fixed_html = remedy.fix_article_content(full_body_html, audit_report, target_keyword, iteration=attempts)
-            
-            if fixed_html:
-                if publisher.update_existing_post(post_id, title, fixed_html):
-                    full_body_html = fixed_html
-                    time.sleep(5)
-                else: 
-                    break
-            else: 
-                break
+        published_url, post_id = (pub_result if isinstance(pub_result, tuple) else (pub_result, None))
         # ======================================================================
         # 8. FINALIZATION & DISTRIBUTION
         # ======================================================================
@@ -320,6 +292,5 @@ def main():
         else: log("\n❌ MISSION FAILED: No topics met the quality threshold today.")
             
     except Exception as e: log(f"❌ CRITICAL MAIN ERROR: {e}")
-
 if __name__ == "__main__":
     main()
