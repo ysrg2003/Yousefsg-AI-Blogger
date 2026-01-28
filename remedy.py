@@ -1,61 +1,36 @@
-# FILE: remedy.py
-# ROLE: The Surgical Fixer. 
-# ADAPTATION: Uses lower temperature in later rounds to ensure fixes are precise not creative.
-
 import json
 from api_manager import generate_step_strict
 from config import log
 
-def fix_article_content(current_html, audit_report, topic, iteration=1):
-    """
-    Re-writes the HTML content based on the strict critique.
-    """
+def fix_article_content(current_html, audit_report, topic, original_research, iteration=1):
     log(f"   🚑 [Remedy Agent] Surgery Round {iteration}...")
     
-    critique = audit_report.get('critical_issues', [])
-    correction_plan = audit_report.get('correction_plan', '')
-    
-    # Stricter model settings for later iterations
-    # We want CREATIVITY in round 1 (to write missing parts), but PRECISION in round 3 (to fix numbers).
-    strictness_instruction = ""
-    if iteration > 1:
-        strictness_instruction = "IMPORTANT: Do NOT rewrite the whole article. Only fix the specific reported errors. Keep the rest exact."
+    issues = audit_report.get('critical_issues', [])
+    suggestions = audit_report.get('improvement_suggestions', '')
+    missing_facts = audit_report.get('missing_facts', [])
 
-    model_name = "gemini-2.5-flash" 
-    
     prompt = f"""
-    ROLE: Elite Technical Editor & HTML Expert.
-    TASK: Apply surgical fixes to the HTML based on the critique.
+    ROLE: Elite SEO Editor.
+    TASK: Rewrite the article HTML to fix all issues and add missing facts.
     
-    ORIGINAL TOPIC: {topic}
-    CRITIQUE: {json.dumps(critique)}
-    INSTRUCTIONS: {correction_plan}
-    {strictness_instruction}
+    TOPIC: {topic}
+    ORIGINAL RESEARCH: {original_research[:8000]}
+    AUDITOR REPORT: {json.dumps(audit_report)}
     
-    INPUT HTML:
-    ```html
+    CURRENT HTML:
     {current_html}
-    ```
     
-    ACTIONS:
-    1. Fix factual errors exactly as requested.
-    2. Maintain Neutral POV.
-    3. Return the FULL CORRECTED HTML string.
+    RULES:
+    1. Fix all critical issues.
+    2. Add missing facts from the research.
+    3. Keep all <img> and <iframe> tags.
+    4. Return ONLY the corrected HTML in a JSON key "fixed_html".
     """
     
     try:
-        # We assume api_manager handles the call. 
-        # Note: generate_step_strict uses temp 0.3 by default. 
-        # For Remediation, that is generally okay, but the prompt constraints above will force strictness.
-        
-        json_prompt = prompt + "\n\nOUTPUT FORMAT JSON: {\"fixed_html\": \"...html...\"}"
-        result = generate_step_strict(model_name, json_prompt, "Remedy Surgery", required_keys=["fixed_html"])
-        
-        fixed_html = result.get('fixed_html')
-        if fixed_html and len(fixed_html) > 500:
-            return fixed_html
-        return None
-            
+        # نستخدم موديل قوي جداً للتصحيح (Gemini 2.0 Flash Exp)
+        result = generate_step_strict("gemini-2.0-flash-exp", prompt, "Remedy Surgery", required_keys=["fixed_html"])
+        return result.get('fixed_html')
     except Exception as e:
         log(f"      ❌ Remedy Agent Failed: {e}")
         return None
