@@ -11,7 +11,7 @@ from config import log
 
 TRIED_MODELS = set()
 CURRENT_MODEL_OVERRIDE = None
-API_HEAT = 5 
+API_HEAT = 30 
 
 class KeyManager:
     def __init__(self):
@@ -141,7 +141,7 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
                 raise RuntimeError("All keys exhausted.")
             raise e
         elif "503" in error_msg:
-            API_HEAT += 10
+            API_HEAT += 30
             raise e
         else:
             log(f"      ❌ Error in {step_name}: {str(e)[:100]}")
