@@ -1,3 +1,4 @@
+# FILE: live_auditor.py
 import json
 from google import genai
 from google.genai import types
@@ -10,55 +11,43 @@ def audit_live_article(url, target_keyword, iteration=1):
     key = key_manager.get_current_key()
     if not key: return None
     client = genai.Client(api_key=key)
-    
-    # تعريف أداة البحث
     google_tool = types.Tool(google_search=types.GoogleSearch())
 
     prompt = f"""
-    ROLE: Senior Google Search Quality Rater.
+    ROLE: Senior Google Search Quality Rater (Strict & Harsh).
     TASK: Visit and Audit this LIVE article: {url}
     TARGET KEYWORD: "{target_keyword}"
     
-    INSTRUCTIONS:
-    1. Use the Google Search tool to access and read the content of the URL provided.
-    2. Evaluate the article based on Google's E-E-A-T standards.
-    3. Identify any factual errors, broken formatting, or missing technical details.
-    4. Check if the video and images are integrated correctly.
+    CRITICAL INSTRUCTIONS:
+    1. Use Google Search tool to access the URL and read its full content.
+    2. Check for "Timeline Paradox": Is the info from 2024/2025 while we are in 2026?
+    3. Check for "Visual Proof": Are there real images/videos or just text?
+    4. Check for "AI Slop": Is the tone generic or expert-level?
 
-    OUTPUT FORMAT (Return ONLY a JSON object):
+    OUTPUT JSON ONLY:
     {{
         "quality_score": 0.0 to 10.0,
         "verdict": "Pass/Fail",
-        "critical_issues": ["issue 1", "issue 2"],
-        "improvement_suggestions": "detailed instructions",
-        "missing_facts": ["fact 1", "fact 2"]
+        "critical_flaws": ["List specific logic/factual errors"],
+        "remedy_instructions": "Detailed technical guide to fix this article",
+        "missing_evidence": ["Specific facts or data to add"]
     }}
     """
 
     try:
-        # تنفيذ الطلب مع وضع الـ tools داخل الـ config وبدون response_mime_type
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
-            config=types.GenerateContentConfig(
-                tools=[google_tool],
-                temperature=0.1
-            )
+            config=types.GenerateContentConfig(tools=[google_tool], temperature=0.1)
         )
         
-        if not response or not response.text:
-            log("      ⚠️ Auditor received an empty response.")
-            return None
+        if not response or not response.text: return None
 
-        # تنظيف النص وتحويله لـ JSON يدوياً باستخدام المفسر الذكي
         result = master_json_parser(response.text)
-        
         if result:
             log(f"      📝 Audit Score: {result.get('quality_score')}/10 | Verdict: {result.get('verdict')}")
             return result
-        
         return None
-
     except Exception as e:
         log(f"      ❌ Auditor Error: {e}")
         return None
