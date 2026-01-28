@@ -1,7 +1,7 @@
 # FILE: main.py
-# ROLE: Orchestrator V7.0 (The Empire Builder Edition)
-# FEATURES: AI Grounding Research, Instant Indexing, Topic Clusters, Content Gardening.
-# INTEGRITY: Full logic, no simplification.
+# ROLE: Orchestrator V7.1 (Final Production Integrity)
+# DESCRIPTION: The central nervous system of the blog empire. Integrates AI Research, 
+# Cluster Management, Content Gardening, and Instant Indexing into one seamless pipeline.
 
 import os
 import json
@@ -34,13 +34,14 @@ from prompts import *
 import cluster_manager
 import indexer
 import gardener
-import ai_researcher  # The New Smart Hunter
+import ai_researcher
 
 def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     """
-    The main autonomous pipeline.
-    Strategy -> Smart AI Research -> Synthesis -> Multimedia -> Publishing -> Indexing.
+    Executes the full content lifecycle:
+    Strategy -> Smart Research -> Synthesis -> Media Production -> Publishing -> Distribution.
     """
+    # Use the primary model from config (usually gemini-3-flash-preview) for Writing
     model_name = config['settings'].get('model_name', "gemini-3-flash-preview")
     
     try:
@@ -73,8 +74,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         # 2. SEMANTIC GUARD (Anti-Repetition)
         # ======================================================================
-        # If it's a Cluster Topic, we trust the plan and skip the check.
-        # If it's a Daily Hunt, we must check for duplicates to prevent cannibalization.
+        # Cluster topics are pre-planned, so we trust them. Daily hunts need checking.
         if not is_cluster_topic:
             log("   🧠 Checking memory to avoid repetition...")
             history_str = history_manager.get_recent_titles_string(limit=200)
@@ -100,25 +100,26 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             visual_strategy = "generate_comparison_table"
 
         # ======================================================================
-        # 4. OMNI-HUNT (Phase A: AI Smart Research)
+        # 4. OMNI-HUNT (The Robust Research Engine)
         # ======================================================================
-        log("   🕵️‍♂️ Starting Omni-Hunt Mission (Powered by AI Grounding)...")
+        log("   🕵️‍♂️ Starting Omni-Hunt Mission...")
         
         collected_sources = []
         media_from_news = []
         
-        # 1. AI Grounding Search (Priority #1)
+        # --- Phase A: AI Grounding Research (Priority #1) ---
         try:
+            # We use the config just for signature, ai_researcher manages its own lightweight model
             raw_ai_leads = ai_researcher.smart_hunt(target_keyword, config)
             
             if raw_ai_leads:
-                # Vet sources found by AI (Just to be double sure)
+                # Vet sources found by AI
                 vetted_items = news_fetcher.ai_vet_sources(raw_ai_leads, model_name)
                 
                 for item in vetted_items:
                     if len(collected_sources) >= 3: break
                     
-                    # Use Selenium to get full text
+                    # Scrape full text
                     f_url, f_title, text, f_image, media_in_source = scraper.resolve_and_scrape(item['link'])
                     
                     if text:
@@ -134,33 +135,32 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         except Exception as e:
             log(f"   ⚠️ AI Researcher module encountered an issue: {e}")
 
-        # ======================================================================
-        # 4. OMNI-HUNT (Phase B: Legacy Fallback)
-        # ======================================================================
-        # Only if AI Search returned nothing
-        if len(collected_sources) < 1:
+        # --- Phase B: Legacy/Keyword Fallback (Priority #2) ---
+        # Only triggered if AI Research didn't find enough sources
+        if len(collected_sources) < 2:
             log("   ⚠️ AI Research yielded low results. Switching to Keyword Extraction Strategies...")
             
-            # Smart Keyword Extraction (Fixing the 'Keyword Stuffing' issue)
-            # Remove "How to", "Guide", "News" to get the Core Entity
+            # Smart Keyword Extraction to prevent GNews 400 Errors
+            # We strip "How to", "Guide" to get the raw Core Entity
             stop_words = ["how to", "guide", "news", "update", "review", "analysis", "using", "build", "without", "writing", "code"]
-            core_topic = target_keyword.replace('"', '').replace(":", "").lower()
+            core_topic_clean = target_keyword.replace('"', '').replace(":", "").lower()
             for sw in stop_words:
-                core_topic = core_topic.replace(sw, "")
+                core_topic_clean = core_topic_clean.replace(sw, "")
             
-            core_topic = " ".join(core_topic.split()[:4]) # Limit to first 4 relevant words
+            # Take only first 3-4 significant words
+            core_topic = " ".join(core_topic_clean.split()[:4])
             log(f"      🔍 Optimized Fallback Keyword: '{core_topic}'")
 
             legacy_strategies = [
-                f'"{target_keyword}"',          # Exact match try
-                f'{core_topic} news',           # Broad news
-                f'{core_topic}'                 # Broadest fallback
+                f'"{target_keyword}"',          # Try exact match once
+                f'{core_topic} news',           # Broad news search
+                f'{core_topic}'                 # Broadest entity search
             ]
             
             for strategy in legacy_strategies:
                 if len(collected_sources) >= 2: break
                 
-                # Fetch raw links (GNews preferred here for robustness)
+                # Fetch raw links (Try GNews first as it's more robust than RSS for broad terms)
                 raw_items = news_fetcher.get_gnews_api_sources(strategy, category)
                 if not raw_items: raw_items = news_fetcher.get_real_news_rss(strategy, category)
                 
@@ -170,7 +170,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 vetted_items = news_fetcher.ai_vet_sources(raw_items, model_name)
 
                 for item in vetted_items:
-                    if len(collected_sources) >= 2: break # We are okay with 2 sources in fallback mode
+                    if len(collected_sources) >= 2: break
                     
                     if any(s['url'] == item['link'] for s in collected_sources): continue
 
@@ -190,19 +190,31 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 
                 time.sleep(1)
 
-        # ======================================================================
-        # 4. OMNI-HUNT (Phase C: Internal Knowledge Overdrive)
-        # ======================================================================
-        # Absolute Last Resort for Cluster Topics
+        # --- Phase C: Authority/Official Docs Fallback (Priority #3) ---
+        if len(collected_sources) == 0:
+            log("   ⚠️ News search failed. Switching to Authority Search (Docs/GitHub)...")
+            official_sources = ai_researcher.smart_hunt(target_keyword, config, mode="official")
+            if official_sources:
+                for src in official_sources:
+                    collected_sources.append({
+                        "title": src.get('title', 'Official Doc'),
+                        "url": src['url'],
+                        "text": f"OFFICIAL SOURCE: This is the official documentation for {target_keyword}. Use technical details from here: {src.get('snippet','')}",
+                        "source_image": None,
+                        "domain": "official-authority"
+                    })
+
+        # --- Phase D: Internal Knowledge Overdrive (Last Resort) ---
+        # Critical for Cluster Topics: Do not break the chain even if external net is dark.
         if len(collected_sources) == 0:
             if is_cluster_topic:
                 log("   ⚠️ Total Research Failure. Utilizing AI Internal Knowledge Base (Expert Mode)...")
                 collected_sources.append({
-                    "title": f"Expert Guide: {target_keyword}",
-                    "url": "https://www.latestai.me", 
-                    "text": f"SYSTEM INSTRUCTION: The researcher failed to find external links. You are now the primary expert source. Write a comprehensive, high-technical 2000-word guide about '{target_keyword}'. Focus on actionable steps, technical details, and solving the user problem deeply.",
+                    "title": f"Expert Technical Guide: {target_keyword}",
+                    "url": "", # Empty URL signals prompts.py NOT to list it as a source
+                    "text": f"SYSTEM OVERRIDE: The internet research yielded no direct results. You are now the primary subject matter expert. Write a comprehensive, high-technical 2000-word guide about '{target_keyword}' based on your internal training data. Focus on actionable steps, code examples, and technical depth.",
                     "source_image": None,
-                    "domain": "internal-knowledge"
+                    "domain": "internal"
                 })
             else:
                 log("   ❌ Failed to collect sources. Aborting.")
@@ -215,9 +227,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         reddit_media = []
         reddit_context = ""
 
-        # Sniper Hunt (Google Images/Video for specific visual directive)
+        # Sniper Hunt (Uses AI to find visual evidence like screenshots/videos)
         if visual_strategy.startswith("hunt_for_"):
-            log(f"   📸 Directive is 'Hunt'. Launching Dedicated Sniper...")
             official_media = scraper.smart_media_hunt(target_keyword, category, visual_strategy)
         
         # Reddit Hunt (Community Consensus)
@@ -255,8 +266,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 elif v_type in ["gif", "image"]:
                     visual_evidence_html = f'<div class="gif-container" style="text-align:center; margin-bottom:20px;"><img src="{v_url}" alt="Demo" style="width:100%; border-radius:10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">{caption}</div>'
 
+        # Graceful degradation if visual hunt fails
         if not visual_evidence_html and visual_strategy.startswith("hunt_for_"):
-            visual_strategy = "generate_comparison_table" # Graceful degradation
+            visual_strategy = "generate_comparison_table"
 
         # ======================================================================
         # 7. SYNTHESIS (Writer -> SEO -> Humanizer)
@@ -289,7 +301,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         kg_links = history_manager.get_relevant_kg_for_linking(json_b.get('headline', target_keyword), category)
         input_c = {
             "draft_content": json_b, 
-            "sources_data": [{"title": s['title'], "url": s['url']} for s in collected_sources if s['domain'] != 'internal-knowledge']
+            "sources_data": [{"title": s['title'], "url": s['url']} for s in collected_sources if s['domain'] != 'internal']
         }
         json_c = api_manager.generate_step_strict(
             model_name, 
@@ -403,7 +415,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         log(f"   🚀 [Publishing] Sending to Blogger...")
         
-        # Supports both single return (legacy) and tuple return (V6.0+)
+        # --- CRITICAL FIX: Safe unpacking of Publisher Return ---
         pub_result = publisher.publish_post(title, full_article_body, [category, "Tech Insights", "AI Evolution"])
         
         published_url = None
@@ -412,15 +424,15 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         if isinstance(pub_result, tuple):
             published_url, post_id = pub_result
         else:
-            published_url, post_id = pub_result, None
+            published_url = pub_result # Legacy fallback
 
         if published_url:
             log(f"   ✅ [SUCCESS] Article live at: {published_url}")
             
-            # 1. Update Knowledge Graph (With Post ID for Gardener)
+            # 1. Update Knowledge Graph (Now robustly handles post_id)
             history_manager.update_kg(title, published_url, category, post_id)
             
-            # 2. INSTANT INDEXING (Priority Feature)
+            # 2. INSTANT INDEXING
             try: indexer.submit_url(published_url)
             except: pass
             
@@ -429,7 +441,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 fb_hook_data = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=title), "FB Hook", required_keys=["FB_Hook"])
                 fb_caption = fb_hook_data.get('FB_Hook', title)
                 
-                # YouTube Update (Top of Description)
+                # YouTube Update
                 yt_update_text = f"👇 Read the full technical analysis here:\n{published_url}"
                 if vid_main: youtube_manager.update_video_description(vid_main, yt_update_text)
                 if vid_short: youtube_manager.update_video_description(vid_short, yt_update_text)
@@ -453,7 +465,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
 def main():
     """
-    EntryPoint V7.0:
+    EntryPoint V7.1:
     1. Gardener (Maintenance)
     2. Cluster Strategy (Priority #1)
     3. Manual Topics (Priority #2)
@@ -489,10 +501,9 @@ def main():
                 cluster_topic, is_cluster = None, False
 
             if cluster_topic:
-                # IMPORTANT: 'is_cluster_topic=True' activates the Knowledge Fallback
                 if run_pipeline(current_cat, cfg, forced_keyword=cluster_topic, is_cluster_topic=is_cluster):
                     published_successfully = True
-                    break # One article per run is standard
+                    break # One article per run
             
             # B. MANUAL FALLBACK (Priority #2)
             trending_topics = cfg['categories'][current_cat].get('trending_focus', '')
@@ -508,7 +519,6 @@ def main():
                 if published_successfully: break
 
             # C. AI DAILY HUNT (Priority #3 - Absolute Last Resort)
-            # Only if Cluster AND Manual failed
             if not published_successfully and not is_cluster:
                 log(f"   ⚠️ Manual List exhausted. Attempting AI Daily Hunt...")
                 if run_pipeline(current_cat, cfg, forced_keyword=None, is_cluster_topic=False):
