@@ -1,3 +1,7 @@
+# FILE: news_fetcher.py
+# ROLE: Fetches raw news links from Google RSS & GNews API with smart vetting.
+# UPDATED: Removed internal fallback to allow main.py to trigger GNews API correctly.
+
 import requests
 import urllib.parse
 import feedparser
@@ -14,12 +18,12 @@ from api_manager import generate_step_strict
 
 REPUTATION_FILE = "source_reputation.json"
 
-# قائمة طوارئ للمواقع السيئة جداً (لتعليم الـ AI ماذا يكره)
+# قائمة طوارئ للمواقع السيئة (لتعليم الـ AI ماذا يكره)
 SEED_BLACKLIST = [
     "vocal.media", "aol.com", "msn.com", "yahoo.com", "marketwatch.com", 
     "indiacsr.in", "officechai.com", "analyticsinsight.net", "prweb.com",
     "businesswire.com", "globenewswire.com", "medium.com", "linkedin.com",
-    "quora.com", "reddit.com", "youtube.com" # نستبعد يوتيوب من الأخبار النصية
+    "quora.com", "reddit.com", "youtube.com"
 ]
 
 def get_domain_reputation():
@@ -29,7 +33,6 @@ def get_domain_reputation():
         try:
             with open(REPUTATION_FILE, 'r') as f:
                 data = json.load(f)
-                # دمج القائمة الأولية مع المحفوظة لضمان الحماية
                 data['blacklist'] = list(set(data.get('blacklist', []) + SEED_BLACKLIST))
                 return data
         except: return default_rep
@@ -97,8 +100,7 @@ def ai_vet_sources(items, model_name):
             new_white = decision.get('whitelist', [])
             
             if new_black: log(f"      ⛔ AI Blocked: {new_black}")
-            if new_white: log(f"      ✅ AI Approved: {new_white}")
-
+            
             reputation['blacklist'].extend(new_black)
             reputation['whitelist'].extend(new_white)
             
@@ -122,27 +124,31 @@ def ai_vet_sources(items, model_name):
     return approved_items
 
 # ==============================================================================
-# 2. STANDARD FETCHERS (UPDATED TO USE NEGATIVE SEARCH)
+# 2. STANDARD FETCHERS (UPDATED TO ALLOW GNEWS TRIGGER)
 # ==============================================================================
 
 def get_gnews_api_sources(query, category):
     api_key = os.getenv('GNEWS_API_KEY')
-    if not api_key: return []
+    if not api_key:
+        log("   ⚠️ GNews API Key missing - Cannot switch to API mode.")
+        return []
     
-    # تنظيف الاستعلام
-    clean_query = query.replace(" when:2d", "").replace(" when:1d", "")
+    # تنظيف الاستعلام لإزالة عوامل تصفية RSS غير المدعومة في API
+    clean_query = query.replace('"', '').replace(" when:2d", "").replace(" when:1d", "").replace(" when:7d", "")
     
-    # إضافة فلتر سلبي للمواقع السيئة المعروفة لتقليل الضوضاء قبل وصولها للـ AI
-    # هذا يوفر الـ Quota
-    hard_filters = " ".join([f"-site:{site}" for site in SEED_BLACKLIST[:5]]) # نستخدم أهم 5 فقط هنا لطول الرابط
+    # إضافة فلتر سلبي للمواقع السيئة المعروفة لتقليل الضوضاء وتوفير الكوتا
+    hard_filters = " ".join([f"-site:{site}" for site in SEED_BLACKLIST[:5]])
     final_query = f"{clean_query} {hard_filters}"
 
     log(f"   📡 Querying GNews API for: '{clean_query}'...")
     url = f"https://gnews.io/api/v4/search?q={urllib.parse.quote(final_query)}&lang=en&country=us&max=5&apikey={api_key}"
+    
     try:
         r = requests.get(url, timeout=10)
         data = r.json()
-        if r.status_code != 200 or 'articles' not in data: return []
+        if r.status_code != 200 or 'articles' not in data: 
+            return []
+            
         formatted = []
         for art in data.get('articles', []):
             formatted.append({
@@ -151,18 +157,21 @@ def get_gnews_api_sources(query, category):
                 "date": art.get('publishedAt', str(datetime.date.today())),
                 "image": art.get('image')
             })
+        
+        log(f"      ✅ GNews found {len(formatted)} results.")
         return formatted
-    except: return []
+    except Exception as e:
+        log(f"      ❌ GNews API Error: {e}")
+        return []
 
 def get_real_news_rss(query_keywords, category=None):
     try:
-        # تنظيف الاستعلام من التعقيدات الزائدة لزيادة فرص العثور على نتائج
+        # 1. تنظيف الكلمة المفتاحية (RSS يكره علامات التنصيص المزدوجة المعقدة)
         base_query = query_keywords.replace('"', '').strip()
         
-        # إزالة when:2d إذا كانت تسبب مشاكل، أو تركها إذا كنت مصراً عليها
-        # سنقوم بترميزها بشكل آمن
+        # 2. توسيع النطاق الزمني لزيادة فرص العثور على مقالات (الشروحات ليست دائماً أخبار يوم)
         if "when:" not in base_query:
-            full_query = f"{base_query} when:7d" # وسعنا النطاق لـ 7 أيام لضمان النتائج
+            full_query = f"{base_query} when:7d"
         else:
             full_query = base_query
 
@@ -180,25 +189,12 @@ def get_real_news_rss(query_keywords, category=None):
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
             return items 
         
-        # --- التغيير الجذري هنا ---
-        # ألغينا البحث العام عن القسم (Category Fallback)
-        # لكي نسمح لـ GNews API بالعمل في main.py
-            log(f"   ⚠️ RSS Empty for '{base_query}'. Returning empty list to trigger GNews.")
-            return [] 
-            
-            except Exception as e:
-                log(f"❌ RSS Error: {e}")
-                return []
+        # --- FIXED LOGIC ---
+        # If RSS returns nothing for the SPECIFIC keyword, we return [] immediately.
+        # We DO NOT fall back to generic Category search here.
+        # This allows main.py to detect failure and call get_gnews_api_sources instead.
         
-        elif category:
-            log(f"   ⚠️ RSS Empty. Fallback to Category: {category}")
-            fb = f"{category} news when:1d"
-            url = f"https://news.google.com/rss/search?q={urllib.parse.quote(fb)}&hl=en-US&gl=US&ceid=US:en"
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:5]:
-                items.append({"title": entry.title, "link": entry.link, "date": "Today"})
-            return items
-            
+        log(f"   ⚠️ RSS Empty for '{base_query}'. Returning empty list to trigger GNews.")
         return []
             
     except Exception as e:
