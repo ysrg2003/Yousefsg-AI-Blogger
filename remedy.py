@@ -21,7 +21,7 @@ def fix_article_content(current_html, audit_report, topic, iteration=1):
     if iteration > 1:
         strictness_instruction = "IMPORTANT: Do NOT rewrite the whole article. Only fix the specific reported errors. Keep the rest exact."
 
-    model_name = "gemini-1.5-pro-latest" 
+    model_name = "gemini-2.5-flash" 
     
     prompt = f"""
     ROLE: Elite Technical Editor & HTML Expert.
