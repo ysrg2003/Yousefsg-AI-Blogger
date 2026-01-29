@@ -144,54 +144,61 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
 
         # ======================================================================
-        # 6. WRITING, ASSETS, and VIDEO PRODUCTION
+        # 6. WRITING, ASSETS, and VIDEO PRODUCTION (MODIFIED)
         # ======================================================================
-        log("   ✍️ Synthesizing Content & Preparing Visual Assets...")
+        log("   ✍️ Processing Visual Assets (3 Images + 2 Videos Strategy)...")
         
-        # --- SMART CONTEXTUAL INJECTION LOGIC ---
-        # 1. Collect and Filter Media
         all_media = []
         for s in collected_sources:
             if s.get('media'): all_media.extend(s['media'])
         if official_media: all_media.extend(official_media)
         if reddit_media: all_media.extend(reddit_media)
         
-        # Deduplicate
         unique_media = {m['url']: m for m in all_media}.values()
         
-        # Separate Videos and Images
-        videos = [m for m in unique_media if m['type'] in ['video', 'embed']]
-        images = [m for m in unique_media if m['type'] in ['image', 'gif']]
-        images = sorted(images, key=lambda x: x.get('score', 0), reverse=True)
-
-        # 2. Build Asset Map (Tag -> HTML)
+        # فصل الفيديوهات والصور
+        source_videos = [m for m in unique_media if m['type'] in ['video', 'embed']]
+        source_images = [m for m in unique_media if m['type'] in ['image', 'gif']]
+        
         asset_map = {}
         available_tags = []
 
-        # A) Process Main Video (Need at least one)
-        if videos:
-            main_vid = videos[0]
-            tag = "[[VIDEO_MAIN]]"
-            if main_vid['type'] == 'embed':
-                html = f'''<div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><iframe src="{main_vid['url']}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="Video Demo"></iframe></div>'''
-            else:
-                html = f'''<div class="video-wrapper" style="margin:30px 0;"><video controls style="width:100%;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><source src="{main_vid['url']}" type="video/mp4">Your browser does not support the video tag.</video></div>'''
+        # 1. معالجة الفيديوهات (فيديو النظام + فيديو من المصادر)
+        # فيديو النظام (الذي تم إنتاجه Ru-OHpDXzk0 مثلاً)
+        if vid_main_url:
+            tag = "[[VIDEO_SYSTEM]]"
+            asset_map[tag] = f'<div class="video-wrapper" style="margin:30px 0;"><iframe src="{vid_main_url}" width="100%" height="450" frameborder="0" allowfullscreen></iframe></div>'
+            available_tags.append(tag)
+
+        # فيديو إضافي من المصادر (إذا وجد)
+        if source_videos:
+            tag = "[[VIDEO_SOURCE]]"
+            v = source_videos[0]
+            asset_map[tag] = f'<div class="video-wrapper" style="margin:30px 0;"><iframe src="{v["url"]}" width="100%" height="450" frameborder="0" allowfullscreen></iframe></div>'
+            available_tags.append(tag)
+
+        # 2. معالجة الصور (تحميل ورفع 3 صور على الأقل)
+        processed_count = 0
+        for i, img_data in enumerate(source_images):
+            if processed_count >= 3: break
             
-            asset_map[tag] = html
-            available_tags.append(tag)
+            # تحميل الصورة ورفعها لـ GitHub الخاص بك لضمان عدم تعطلها
+            new_url = image_processor.download_and_upload_to_github(img_data['url'], f"article_img_{i}")
+            
+            if new_url:
+                tag = f"[[IMAGE_{processed_count+1}]]"
+                asset_map[tag] = f'<figure style="margin:30px 0;"><img src="{new_url}" style="width:100%; border-radius:10px;"><figcaption>{img_data["description"]}</figcaption></figure>'
+                available_tags.append(tag)
+                processed_count += 1
 
-        # B) Process Images (Up to 4)
-        for i, img in enumerate(images[:4]): 
-            tag = f"[[IMAGE_{i+1}]]"
-            html = f'''
-            <figure style="margin:30px 0; text-align:center;">
-                <img src="{img['url']}" alt="{img['description']}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
-                <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {img['description']}</figcaption>
-            </figure>
-            '''
-            asset_map[tag] = html
-            available_tags.append(tag)
-
+        # إذا لم نجد 3 صور، نستخدم الذكاء الاصطناعي كاحتياط أخير
+        while processed_count < 3:
+            ai_img = image_processor.generate_and_upload_image(target_keyword, "TECH UPDATE")
+            if ai_img:
+                tag = f"[[IMAGE_{processed_count+1}]]"
+                asset_map[tag] = f'<figure style="margin:30px 0;"><img src="{ai_img}" style="width:100%; border-radius:10px;"><figcaption>AI Visualization of {target_keyword}</figcaption></figure>'
+                available_tags.append(tag)
+            processed_count += 1
         # 3. Prepare Payload for Writer
         combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + reddit_context
         
@@ -283,7 +290,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         # 7.5 QUALITY IMPROVEMENT LOOP (AUDIT -> REMEDY -> UPDATE)
         # ======================================================================
-        quality_score, attempts, MAX_RETRIES = 0, 0, 3 
+        quality_score, attempts, MAX_RETRIES = 0, 0, 0
         
         while quality_score < 9.5 and attempts < MAX_RETRIES:
             attempts += 1
