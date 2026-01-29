@@ -180,7 +180,6 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             asset_map[tag] = html
             available_tags.append(tag)
 
-        
         # B) Process Images (Up to 4) WITH CONTEXT-AWARE FALLBACK
         for i, img in enumerate(images[:4]): 
             tag = f"[[IMAGE_{i+1}]]"
@@ -190,28 +189,26 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             target_url = img['url']
             is_fallback = False
             
-            # --- 🧠 SMART CONTEXT GENERATOR ---
-            # تحديد نوع الصورة المطلوبة بناءً على ترتيبها في المقال لضمان السياق
+            # --- 🧠 SMART CONTEXT GENERATOR (الكلمات المفتاحية القصيرة) ---
+            # تنظيف الكلمة المفتاحية من الرموز الزائدة لضمان بحث دقيق
+            clean_keyword = target_keyword.split(':')[0].split('?')[0].strip()
+            
             if i == 0:
-                context_query = f"{target_keyword} official user interface dashboard screenshot"
+                context_query = f"{clean_keyword} dashboard interface screenshot"
             elif i == 1:
-                context_query = f"{target_keyword} features workflow demo"
+                context_query = f"{clean_keyword} workflow demo"
             elif i == 2:
-                context_query = f"{target_keyword} example result output"
+                context_query = f"{clean_keyword} result example"
             else:
-                context_query = f"{target_keyword} comparison chart vs competitor"
+                context_query = f"{clean_keyword} comparison vs competitor"
 
             # 1. فحص الروابط المحمية أو المكسورة
-            # إذا كان الرابط من جوجل (محمي) أو لا يوجد رابط أصلاً
             if "vertexaisearch" in target_url or "googleusercontent" in target_url or not target_url:
                 log(f"      ⚠️ Protected/Missing URL. Activating Smart Context Hunter...")
                 
-                # نستخدم الوصف الأصلي إذا كان مفيداً وطويلاً، وإلا نستخدم "الاستعلام الذكي" الذي صممناه
-                original_desc = img.get('description', "")
-                if len(original_desc) > 15 and target_keyword in original_desc:
-                    search_query = original_desc # الوصف الأصلي ممتاز
-                else:
-                    search_query = context_query # نستخدم الاستعلام الذكي (واجهة، ميزات، نتائج...)
+                # --- التعديل هنا: إجبار استخدام الاستعلام الذكي القصير ---
+                # ألغينا استخدام img['description'] لأنه يسبب جملاً طويلة جداً
+                search_query = context_query 
                 
                 log(f"      🔍 Hunting Google Images for: '{search_query}'")
                 fallback_url = scraper.get_google_image_fallback(search_query)
@@ -220,31 +217,35 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                     target_url = fallback_url
                     is_fallback = True
                 else:
-                    log("      ❌ Fallback failed. Removing tag.")
-                    asset_map[tag] = ""
-                    continue
+                    # محاولة أخيرة: البحث باسم المنتج فقط
+                    log("      ⚠️ Specific context failed. Trying generic search...")
+                    fallback_url = scraper.get_google_image_fallback(f"{clean_keyword} software screenshot")
+                    if fallback_url:
+                        target_url = fallback_url
+                        is_fallback = True
+                    else:
+                        log("      ❌ Fallback failed. Removing tag.")
+                        asset_map[tag] = ""
+                        continue
 
             # 2. تجهيز البيانات للمعالجة
-            overlay_txt = target_keyword 
-            safe_filename = f"{target_keyword}_visual_{i+1}"
+            overlay_txt = clean_keyword # نستخدم الاسم القصير للكتابة على الصورة
+            safe_filename = f"{clean_keyword.replace(' ', '_')}_visual_{i+1}"
             
             # 3. المعالجة والرفع
             new_img_url = image_processor.process_source_image(target_url, overlay_txt, safe_filename)
             
-            # 4. شبكة الأمان الأخيرة (إذا فشلت الصورة الأصلية أثناء المعالجة)
+            # 4. شبكة الأمان الأخيرة
             if not new_img_url and not is_fallback:
                 log(f"      ⚠️ Original image failed processing. Trying Smart Fallback...")
-                # نستخدم الاستعلام الذكي هنا أيضاً
                 fallback_url = scraper.get_google_image_fallback(context_query)
                 if fallback_url:
                     new_img_url = image_processor.process_source_image(fallback_url, overlay_txt, safe_filename)
 
             # 5. النتيجة النهائية
             if new_img_url:
-                # تحسين النص البديل (Alt Text) ليكون متوافقاً مع الصورة الجديدة
                 if is_fallback:
-                    # إذا كانت صورة بديلة، نكتب وصفاً عاماً دقيقاً
-                    alt_text = f"{target_keyword} - {['Interface', 'Feature Demo', 'Result Example', 'Comparison'][min(i, 3)]}"
+                    alt_text = f"{clean_keyword} - {['Interface', 'Feature Demo', 'Result Example', 'Comparison'][min(i, 3)]}"
                 else:
                     alt_text = img.get('description', target_keyword).replace('"', '')
 
@@ -259,6 +260,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             else:
                 log(f"      ❌ All attempts failed. Removing tag {tag}.")
                 asset_map[tag] = ""
+        
         
         
 
