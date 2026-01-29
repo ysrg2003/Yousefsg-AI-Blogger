@@ -181,36 +181,85 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             available_tags.append(tag)
 
         
-        # B) Process Images (Up to 4)
-        # التعديل الجديد: معالجة الصور ورفعها لـ GitHub بدلاً من استخدام الروابط المباشرة
+        # B) Process Images (Up to 4) WITH CONTEXT-AWARE FALLBACK
         for i, img in enumerate(images[:4]): 
             tag = f"[[IMAGE_{i+1}]]"
             
-            log(f"   🎨 Processing Body Image {i+1}: {img['url'][:30]}...")
+            log(f"   🎨 Processing Body Image {i+1}...")
             
-            # نستخدم الكلمة المفتاحية كنص يكتب على الصورة
-            overlay_txt = target_keyword 
-            # اسم الملف ليكون فريداً ومحسناً للسيو
-            safe_filename = f"{target_keyword}_explanation_{i+1}"
+            target_url = img['url']
+            is_fallback = False
             
-            # استدعاء المعالج (تحميل + كتابة + رفع)
-            # ملاحظة: نستخدم process_source_image الموجودة في image_processor
-            new_img_url = image_processor.process_source_image(img['url'], overlay_txt, safe_filename)
-            
-            # إذا نجح الرفع نستخدم الرابط الجديد، وإلا نستخدم الأصلي كاحتياط (رغم أنه قد لا يعمل)
-            final_img_url = new_img_url if new_img_url else img['url']
-            
-            # وصف الصورة (Alt Text)
-            alt_text = img.get('description', target_keyword).replace('"', '')
+            # --- 🧠 SMART CONTEXT GENERATOR ---
+            # تحديد نوع الصورة المطلوبة بناءً على ترتيبها في المقال لضمان السياق
+            if i == 0:
+                context_query = f"{target_keyword} official user interface dashboard screenshot"
+            elif i == 1:
+                context_query = f"{target_keyword} features workflow demo"
+            elif i == 2:
+                context_query = f"{target_keyword} example result output"
+            else:
+                context_query = f"{target_keyword} comparison chart vs competitor"
 
-            html = f'''
-            <figure style="margin:30px 0; text-align:center;">
-                <img src="{final_img_url}" alt="{alt_text}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
-                <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {alt_text}</figcaption>
-            </figure>
-            '''
-            asset_map[tag] = html
-            available_tags.append(tag)
+            # 1. فحص الروابط المحمية أو المكسورة
+            # إذا كان الرابط من جوجل (محمي) أو لا يوجد رابط أصلاً
+            if "vertexaisearch" in target_url or "googleusercontent" in target_url or not target_url:
+                log(f"      ⚠️ Protected/Missing URL. Activating Smart Context Hunter...")
+                
+                # نستخدم الوصف الأصلي إذا كان مفيداً وطويلاً، وإلا نستخدم "الاستعلام الذكي" الذي صممناه
+                original_desc = img.get('description', "")
+                if len(original_desc) > 15 and target_keyword in original_desc:
+                    search_query = original_desc # الوصف الأصلي ممتاز
+                else:
+                    search_query = context_query # نستخدم الاستعلام الذكي (واجهة، ميزات، نتائج...)
+                
+                log(f"      🔍 Hunting Google Images for: '{search_query}'")
+                fallback_url = scraper.get_google_image_fallback(search_query)
+                
+                if fallback_url:
+                    target_url = fallback_url
+                    is_fallback = True
+                else:
+                    log("      ❌ Fallback failed. Removing tag.")
+                    asset_map[tag] = ""
+                    continue
+
+            # 2. تجهيز البيانات للمعالجة
+            overlay_txt = target_keyword 
+            safe_filename = f"{target_keyword}_visual_{i+1}"
+            
+            # 3. المعالجة والرفع
+            new_img_url = image_processor.process_source_image(target_url, overlay_txt, safe_filename)
+            
+            # 4. شبكة الأمان الأخيرة (إذا فشلت الصورة الأصلية أثناء المعالجة)
+            if not new_img_url and not is_fallback:
+                log(f"      ⚠️ Original image failed processing. Trying Smart Fallback...")
+                # نستخدم الاستعلام الذكي هنا أيضاً
+                fallback_url = scraper.get_google_image_fallback(context_query)
+                if fallback_url:
+                    new_img_url = image_processor.process_source_image(fallback_url, overlay_txt, safe_filename)
+
+            # 5. النتيجة النهائية
+            if new_img_url:
+                # تحسين النص البديل (Alt Text) ليكون متوافقاً مع الصورة الجديدة
+                if is_fallback:
+                    # إذا كانت صورة بديلة، نكتب وصفاً عاماً دقيقاً
+                    alt_text = f"{target_keyword} - {['Interface', 'Feature Demo', 'Result Example', 'Comparison'][min(i, 3)]}"
+                else:
+                    alt_text = img.get('description', target_keyword).replace('"', '')
+
+                html = f'''
+                <figure style="margin:30px 0; text-align:center;">
+                    <img src="{new_img_url}" alt="{alt_text}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+                    <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {alt_text}</figcaption>
+                </figure>
+                '''
+                asset_map[tag] = html
+                available_tags.append(tag)
+            else:
+                log(f"      ❌ All attempts failed. Removing tag {tag}.")
+                asset_map[tag] = ""
+        
         
 
         # 3. Prepare Payload for Writer
