@@ -58,8 +58,8 @@ def fix_article_content(current_html, audit_report, topic, original_research, it
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0.1, # تجميد الإبداع للحفاظ على الكود
-            top_p=0.8,
-            max_output_tokens=8192
+            top_p=0.95,
+            max_output_tokens=65536
         )
 
         response = client.models.generate_content(
