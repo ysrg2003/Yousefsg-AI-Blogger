@@ -160,37 +160,47 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         unique_media = {m['url']: m for m in all_media}.values()
         
         # Separate Videos and Images
-        videos = [m for m in unique_media if m['type'] in ['video', 'embed']]
-        images = [m for m in unique_media if m['type'] in ['image', 'gif']]
-        images = sorted(images, key=lambda x: x.get('score', 0), reverse=True)
+        # 🔥 FIX 1: Filter External Videos (Only allow YouTube/Vimeo Embeds to ensure they WORK)
+        # We reject raw .mp4 files from news sites because they usually break due to hotlink protection.
+        valid_external_videos = [
+            m for m in unique_media 
+            if m['type'] == 'embed' and ('youtube' in m['url'] or 'vimeo' in m['url'])
+        ]
+        
+        raw_images = [m for m in unique_media if m['type'] in ['image', 'gif']]
+        raw_images = sorted(raw_images, key=lambda x: x.get('score', 0), reverse=True)
+
+        # Process Images (Download & Re-upload to GitHub)
+        processed_images = []
+        log(f"   🖼️ Processing {len(raw_images)} source images...")
+        for img in raw_images[:5]:
+            safe_name = f"{target_keyword}_{random.randint(100,999)}"
+            new_url = image_processor.process_source_image(img['url'], img.get('description', ''), safe_name)
+            if new_url:
+                img['url'] = new_url
+                processed_images.append(img)
+        
+        images = processed_images
 
         # 2. Build Asset Map (Tag -> HTML)
         asset_map = {}
         available_tags = []
 
-        # A) Process Main Video (Need at least one)
-        if videos:
-            main_vid = videos[0]
-            tag = "[[VIDEO_MAIN]]"
-            if main_vid['type'] == 'embed':
-                html = f'''<div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><iframe src="{main_vid['url']}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="Video Demo"></iframe></div>'''
-            else:
-                html = f'''<div class="video-wrapper" style="margin:30px 0;"><video controls style="width:100%;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><source src="{main_vid['url']}" type="video/mp4">Your browser does not support the video tag.</video></div>'''
-            
-            asset_map[tag] = html
-            available_tags.append(tag)
-
-        # B) Process Images (Up to 4)
+        # We do NOT map videos here yet. We handle them in the Injection phase (Section 7).
+        # We only map images for the AI to place.
         for i, img in enumerate(images[:4]): 
             tag = f"[[IMAGE_{i+1}]]"
             html = f'''
             <figure style="margin:30px 0; text-align:center;">
-                <img src="{img['url']}" alt="{img['description']}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
-                <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {img['description']}</figcaption>
+                <img src="{img['url']}" alt="{img.get('description', 'Image')}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+                <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {img.get('description', '')}</figcaption>
             </figure>
             '''
             asset_map[tag] = html
             available_tags.append(tag)
+
+        # Tell AI about the Main Video slot
+        available_tags.append("[[VIDEO_MAIN]]")
 
         # 3. Prepare Payload for Writer
         combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + reddit_context
@@ -199,26 +209,22 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             "keyword": target_keyword, 
             "research_data": combined_text, 
             "visual_strategy_directive": visual_strategy,
-            "AVAILABLE_VISUAL_TAGS": available_tags, # Pass the tags to AI
-            "TODAY_DATE": str(datetime.date.today()) # Fix Timeline Paradox
+            "AVAILABLE_VISUAL_TAGS": available_tags,
+            "TODAY_DATE": str(datetime.date.today())
         }
         
         json_b = api_manager.generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=json.dumps(payload), forbidden_phrases="[]"), "Writer", ["headline", "article_body"])
         
-        # 4. Perform Contextual Replacement (Python Side)
+        # 4. Perform Contextual Replacement (Images Only)
         final_body_draft = json_b['article_body']
         
         for tag, html_code in asset_map.items():
             if tag in final_body_draft:
                 final_body_draft = final_body_draft.replace(tag, html_code)
-            else:
-                # Fallback: If AI forgot the video, force inject it at the end
-                if "VIDEO" in tag: 
-                    final_body_draft += f"\n<h3>Watch the Demo</h3>{html_code}"
         
         json_b['article_body'] = final_body_draft
 
-        # --- Continue Pipeline ---
+        # --- Continue Pipeline (SEO, Humanizer, etc.) ---
         sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
         kg_links = history_manager.get_relevant_kg_for_linking(json_b['headline'], category)
         
@@ -228,16 +234,21 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         title, full_body_html = final_article['finalTitle'], final_article['finalContent']
 
         log("   🎨 Generating Assets...")
-        img_url = image_processor.generate_and_upload_image(final_article.get('imageGenPrompt', title))
         
+        # Featured Image Logic
+        img_url = None
+        if images and len(images) > 0:
+            img_url = images[0]['url'] # Use real image if available
+        else:
+            img_url = image_processor.generate_and_upload_image(final_article.get('imageGenPrompt', title))
+
         log("   🎬 Video Production & Upload...")
         
-        # Initialize variables to avoid UnboundLocalError
         vid_main_id, vid_main_url = None, None
         vid_short_id, vid_short_url = None, None
         local_fb_video = None
         
-        # Generate Script
+        # Generate Script & Render
         summ = re.sub('<[^<]+?>', '', full_body_html)[:1000]
         vs = api_manager.generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script")
         script_json = vs.get('video_script', [])
@@ -245,12 +256,12 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         rr = video_renderer.VideoRenderer(output_dir="output")
         ts = int(time.time())
         
-        # Main Video (YouTube)
+        # Main Video
         pm = rr.render_video(script_json, title, f"main_{ts}.mp4")
         if pm:
             vid_main_id, vid_main_url = youtube_manager.upload_video_to_youtube(pm, title, "Technical Analysis", ["tech", category])
         
-        # Shorts Video (YouTube + Facebook)
+        # Shorts Video
         rs = video_renderer.VideoRenderer(output_dir="output", width=1080, height=1920)
         ps = rs.render_video(script_json, title, f"short_{ts}.mp4")
         if ps:
@@ -262,16 +273,60 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         log("   🔗 Injecting Assets into HTML...")
 
-        # Note: Videos and Research Images are already injected via Contextual Replacement.
-        # We only need to inject the "Featured Image" (Thumbnail) at the top.
+        # 🔥 FIX 2: DUAL VIDEO INJECTION (System + External)
+        
+        # A. Prepare System Video HTML
+        system_video_html = ""
+        if vid_main_url:
+            system_video_html = f'''
+            <div class="video-wrapper system-video" style="margin: 40px 0; border: 2px solid #008069; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                <div style="background: #008069; color: white; padding: 10px 15px; font-weight: bold; font-family: sans-serif;">
+                    📱 Quick Summary (Watch First)
+                </div>
+                <div style="position:relative;padding-bottom:56.25%;height:0;">
+                    <iframe src="{vid_main_url}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{title}"></iframe>
+                </div>
+            </div>
+            '''
 
+        # B. Prepare External Video HTML (Only if we found a valid YouTube/Vimeo embed)
+        external_video_html = ""
+        if valid_external_videos:
+            ext_vid = valid_external_videos[0] # Take the best one
+            external_video_html = f'''
+            <div class="video-wrapper external-video" style="margin: 40px 0; border: 1px solid #ddd; border-radius: 12px; overflow: hidden;">
+                <div style="background: #f1f1f1; color: #333; padding: 8px 15px; font-weight: bold; font-size: 14px; font-family: sans-serif;">
+                    🎥 Official Source / Demo
+                </div>
+                <div style="position:relative;padding-bottom:56.25%;height:0;">
+                    <iframe src="{ext_vid['url']}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen></iframe>
+                </div>
+            </div>
+            '''
+
+        # C. Combine Them
+        # We stack them: System Video first, then External Video
+        combined_video_block = system_video_html + external_video_html
+
+        # D. Inject into Article
+        if "[[VIDEO_MAIN]]" in full_body_html:
+            if combined_video_block:
+                full_body_html = full_body_html.replace("[[VIDEO_MAIN]]", combined_video_block)
+            else:
+                full_body_html = full_body_html.replace("[[VIDEO_MAIN]]", "")
+        else:
+            # If AI forgot the tag, prepend to body
+            if combined_video_block:
+                full_body_html = combined_video_block + full_body_html
+
+        # E. Add Featured Image
         image_html = ""
         if img_url:
-            image_html = f'<div class="featured-image" style="text-align: center; margin-bottom: 35px;"><img src="{img_url}" style="width: 100%; border-radius: 15px;" alt="{title}"></div>'
+            image_html = f'<div class="featured-image" style="text-align: center; margin-bottom: 35px;"><img src="{img_url}" style="width: 100%; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1);" alt="{title}"></div>'
 
-        # Combine Featured Image + Body (Video is inside Body)
         full_body_html = image_html + full_body_html
 
+        
         log("   🚀 [Publishing] Initial Draft...")
         pub_result = publisher.publish_post(title, full_body_html, [category])
         published_url, post_id = (pub_result if isinstance(pub_result, tuple) else (pub_result, None))
