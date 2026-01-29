@@ -180,11 +180,12 @@ The input JSON also contains `TODAY_DATE`.
 ---
 ### 📸 VISUAL PLACEMENT RULES (MANDATORY)
 ---
+You MUST insert the provided tags into the `article_body` HTML where they fit best contextually.
 
-You MUST insert these tags exactly:
-- [[VIDEO_SYSTEM]] (Place near the top after the first H2)
-- [[VIDEO_SOURCE]] (Place near the middle)
-- [[IMAGE_1]], [[IMAGE_2]], [[IMAGE_3]] (Distribute them evenly between sections)
+1. **[[VIDEO_MAIN]]:** Place this tag exactly where you introduce the product or say "See it in action". Ideally after the first or second H2 section.
+2. **[[IMAGE_1]], [[IMAGE_2]]:** Place these tags near the paragraphs that describe what is in the image (e.g., "As you can see in the interface... [[IMAGE_1]]").
+3. **DISTRIBUTION:** Do NOT clump all tags together. Spread them out to break up walls of text.
+4. **FORMAT:** Just write the tag exactly as is: `[[IMAGE_1]]`. Do not wrap it in extra <div> or <p> tags if possible, the system will handle the HTML.
 
 ---
 ### 📝 ARTICLE STRUCTURE & WRITING RULES
