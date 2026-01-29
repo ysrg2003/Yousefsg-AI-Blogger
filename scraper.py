@@ -232,6 +232,56 @@ def smart_media_hunt(target_keyword, category, directive):
     
     return all_media
 
+def get_google_image_fallback(query):
+    """
+    يبحث في صور جوجل عن بديل عند فشل المصدر الأصلي.
+    """
+    log(f"      🆘 Fallback Hunt: Searching Google Images for '{query}'...")
+    
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
+    
+    driver = None
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.set_page_load_timeout(30)
+        
+        # البحث في صور جوجل
+        search_url = f"https://www.google.com/search?tbm=isch&q={urllib.parse.quote(query)}"
+        driver.get(search_url)
+        time.sleep(2) # انتظار التحميل
+        
+        # محاولة العثور على صور حقيقية (نتجاهل الصور الصغيرة جداً أو الأيقونات)
+        images = driver.find_elements(By.CSS_SELECTOR, "img")
+        
+        for img in images:
+            src = img.get_attribute('src')
+            
+            # شروط قبول الصورة البديلة
+            if src and src.startswith('http') and not any(x in src for x in ['favicon', 'icon', 'logo']):
+                # غالباً صور جوجل في البحث تكون Base64 أو روابط مشفرة، لكننا سنقبل أول رابط http صالح
+                # لضمان الجودة، نحاول تخطي أول صورتين (غالباً إعلانات)
+                if "google" not in src and "gstatic" not in src: 
+                    log(f"      ✅ Found alternative image: {src[:30]}...")
+                    return src
+        
+        # إذا لم نجد سوى صور جوجل المشفرة، نأخذ أي واحدة (أفضل من لا شيء)
+        for img in images:
+            src = img.get_attribute('src')
+            if src and src.startswith('http'):
+                return src
+                
+        return None
+
+    except Exception as e:
+        log(f"      ❌ Fallback Hunt Failed: {e}")
+        return None
+    finally:
+        if driver: driver.quit()
+            
 def resolve_and_scrape(google_url):
     """
     Resolves redirects (e.g. Google News links) and scrapes text + media.
