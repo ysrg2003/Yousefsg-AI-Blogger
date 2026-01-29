@@ -15,26 +15,43 @@ import trafilatura
 from bs4 import BeautifulSoup
 from config import log, USER_AGENTS
 
-# --- CONFIGURATION ---
+# ==============================================================================
+# 1. CONFIGURATION & BLACKLISTS
+# ==============================================================================
+
+# Domains to avoid for visual hunting (Low quality or paywalled)
 NEWS_DOMAINS_BLACKLIST = [
     "techcrunch", "theverge", "engadget", "wired", "cnet", "forbes", 
     "businessinsider", "nytimes", "wsj", "bloomberg", "reuters", "cnn",
-    "bbc", "medium", "reddit", "wikipedia", "latestai", "techradar"
+    "bbc", "medium", "reddit", "wikipedia", "latestai", "techradar",
+    "vocal.media", "aol.com", "msn.com", "yahoo.com", "marketwatch.com", 
+    "indiacsr.in", "officechai.com"
 ]
 
+# Technical links that should never be considered media
 MEDIA_LINK_BLACKLIST = [
     "googletagmanager", "google-analytics", "doubleclick", "pixel", 
     "adsystem", "adnxs", "script", "tracker", "analytics", "fb.com/tr",
     "1x1", "spacer", "blank", "tracking", "blob:", "data:", "advertisement"
 ]
 
+# ==============================================================================
+# 2. HELPER FUNCTIONS (VALIDATION)
+# ==============================================================================
+
 def is_valid_image_url(url):
     """Checks if image URL is valid and accessible."""
-    if not url or any(x in url.lower() for x in MEDIA_LINK_BLACKLIST): return False
+    if not url: return False
+    url_lower = url.lower()
+    
+    # Must be http/https
     if not url.startswith('http'): return False
     
+    # Check Blacklist
+    if any(x in url_lower for x in MEDIA_LINK_BLACKLIST): return False
+    
     # Filter out tiny icons or tracking pixels based on keywords
-    if any(x in url.lower() for x in ['icon', 'logo', 'avatar', 'profile', 'button', 'svg']):
+    if any(x in url_lower for x in ['icon', 'logo', 'avatar', 'profile', 'button', 'svg', 'loader', 'spinner']):
         return False
         
     return True
@@ -50,12 +67,28 @@ def is_valid_video_url(url):
     
     # Allowed types
     if "youtube.com/embed" in url_lower: return True
+    if "youtube.com/watch" in url_lower: return True
+    if "youtu.be" in url_lower: return True
     if "player.vimeo.com" in url_lower: return True
     if url_lower.endswith(".mp4") or url_lower.endswith(".webm"): return True
     
     return False
 
+def extract_element_context(element):
+    """Extracts text context around an image/video to validate relevance."""
+    context = []
+    for attr in ['alt', 'title', 'aria-label']:
+        if element.get(attr): context.append(element[attr])
+    parent = element.parent
+    if parent:
+        text = parent.get_text(strip=True)[:150]
+        if text: context.append(text)
+    return " | ".join(context) if context else "Visual Evidence"
+
 def extract_media_from_soup(soup, base_url, directive):
+    """
+    Parses HTML to find high-value media (Videos, GIFs, Screenshots).
+    """
     candidates = []
     
     # 1. Search for Videos (Strict)
@@ -63,18 +96,29 @@ def extract_media_from_soup(soup, base_url, directive):
         src = video.get('src') or (video.find('source') and video.find('source').get('src'))
         if not src: continue
         
+        # Normalize URL
         if src.startswith('//'): src = 'https:' + src
         if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
         
         if is_valid_video_url(src):
+            # Convert YouTube watch links to embed
+            if "watch?v=" in src:
+                vid_id = src.split("v=")[1].split("&")[0]
+                src = f"https://www.youtube.com/embed/{vid_id}"
+            elif "youtu.be/" in src:
+                vid_id = src.split("youtu.be/")[1].split("?")[0]
+                src = f"https://www.youtube.com/embed/{vid_id}"
+
             m_type = "embed" if "youtube" in src or "vimeo" in src else "video"
-            candidates.append({"type": m_type, "url": src, "description": "Video Source", "score": 10})
+            context = extract_element_context(video)
+            candidates.append({"type": m_type, "url": src, "description": context, "score": 10})
 
     # 2. Search for Images
     for img in soup.find_all('img', src=True):
         src = img['src']
         if not src: continue
         
+        # Normalize
         if src.startswith('//'): src = 'https:' + src
         if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
         
@@ -82,9 +126,14 @@ def extract_media_from_soup(soup, base_url, directive):
             # Basic size check (skip small images based on URL hints)
             if "1x1" in src or "32x32" in src: continue
             
-            candidates.append({"type": "image", "url": src, "description": img.get('alt', 'Article Image'), "score": 5})
+            context = extract_element_context(img)
+            candidates.append({"type": "image", "url": src, "description": context, "score": 5})
 
     return candidates
+
+# ==============================================================================
+# 3. GOOGLE IMAGE FALLBACK
+# ==============================================================================
 
 def google_image_fallback(keyword):
     """Fallback: Hunts for images on Google Images if source images are broken."""
@@ -105,13 +154,18 @@ def google_image_fallback(keyword):
         driver.get(search_url)
         time.sleep(2)
         
-        # Click a few images to get real URLs
-        thumbnails = driver.find_elements(By.CSS_SELECTOR, "img.YQ4gaf")
-        for i, thumb in enumerate(thumbnails[:5]):
+        # Click a few images to get real URLs (Google thumbnails are base64 often)
+        # We try to grab the source from the result
+        thumbnails = driver.find_elements(By.CSS_SELECTOR, "img")
+        
+        count = 0
+        for thumb in thumbnails:
+            if count >= 4: break
             try:
                 src = thumb.get_attribute('src')
-                if src and src.startswith('http') and not "encrypted" in src:
+                if src and src.startswith('http') and "encrypted" not in src and "favicon" not in src:
                     images.append({"type": "image", "url": src, "description": f"Google Search: {keyword}", "score": 4})
+                    count += 1
             except: continue
             
     except Exception as e:
@@ -120,6 +174,10 @@ def google_image_fallback(keyword):
         if driver: driver.quit()
         
     return images
+
+# ==============================================================================
+# 4. THE SMART HUNTER
+# ==============================================================================
 
 def smart_media_hunt(target_keyword, category, directive):
     """
@@ -140,8 +198,9 @@ def smart_media_hunt(target_keyword, category, directive):
                 all_media.append({"type": "image", "url": url, "description": "AI Found Image", "score": 8})
     except: pass
 
-    # 2. If not enough, try Google Image Fallback
-    if len([m for m in all_media if m['type'] == 'image']) < 3:
+    # 2. If not enough images, try Google Image Fallback
+    current_images = [m for m in all_media if m['type'] == 'image']
+    if len(current_images) < 3:
         google_imgs = google_image_fallback(target_keyword)
         all_media.extend(google_imgs)
 
@@ -162,18 +221,29 @@ def resolve_and_scrape(google_url):
         driver.set_page_load_timeout(60)
         
         driver.get(google_url)
-        time.sleep(3) # Wait for JS
         
+        # Handle Redirects
+        start_wait = time.time()
+        while time.time() - start_wait < 10: 
+            current = driver.current_url
+            if "news.google.com" not in current and "google.com" not in current:
+                break
+            time.sleep(1)
+            
         final_url = driver.current_url
         page_source = driver.page_source
         soup = BeautifulSoup(page_source, 'html.parser')
 
+        # Hunt for media inside the page
         found_media = extract_media_from_soup(soup, final_url, "hunt_for_video")
         
-        # Get OG Image
+        # Get OG Image (High Quality usually)
         og_image = None
         meta_og = soup.find('meta', property='og:image')
-        if meta_og: og_image = meta_og.get('content')
+        if meta_og: 
+            og_image = meta_og.get('content')
+            if is_valid_image_url(og_image):
+                found_media.insert(0, {"type": "image", "url": og_image, "description": "Featured Image", "score": 9})
         
         extracted_text = trafilatura.extract(page_source, include_comments=False, favor_precision=True)
         
