@@ -58,7 +58,7 @@ def audit_live_article(url, target_keyword, iteration=1):
         "verdict": "Pass/Fail",
         "critical_flaws": ["List ONLY factual/logic/timeline errors. Be specific."],
         "remedy_instructions": "Step-by-step guide to fix the logic/timeline errors.",
-        "seo_opinion": "Your honest expert opinion on its ranking potential."
+        "seo_opinion": "Your honest expert opinion on its ranking potential and how to solve and improve."
     }}
     """
 
