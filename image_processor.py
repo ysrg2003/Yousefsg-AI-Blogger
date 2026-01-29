@@ -14,7 +14,8 @@ from config import log
 def upload_to_github_cdn(image_bytes, filename):
     try:
         gh_token = os.getenv('MY_GITHUB_TOKEN')
-        image_repo_name = os.getenv('GITHUB_IMAGE_REPO') or os.getenv('GITHUB_REPO_NAME')
+        image_repo_name = os.getenv('GITHUB_IMAGE_REPO') 
+        if not image_repo_name: image_repo_name = os.getenv('GITHUB_REPO_NAME')
         if not gh_token or not image_repo_name: return None
 
         g = Github(gh_token)
@@ -107,7 +108,9 @@ def generate_and_upload_image(prompt_text, overlay_text="", source_url=None, tit
     # 1. Try Source Image First (If provided)
     if source_url:
         result = process_source_image(source_url, overlay_text, title)
-        if result: return result
+        if result: 
+            log("      ✅ Used Source Image successfully.")
+            return result
     
     # 2. Fallback to AI Generation
     log(f"   🎨 Generating AI Thumbnail (Fallback) for: {prompt_text[:30]}...")
