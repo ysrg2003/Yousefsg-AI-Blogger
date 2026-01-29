@@ -1,8 +1,7 @@
 # FILE: main.py
-# ROLE: Orchestrator V10.0 (The Ultimate Engine)
-# DESCRIPTION: Integrates Cluster Strategy, Omni-Hunt, Visual Enforcement, 
-#              Reddit Intel, Source-First Thumbnails, System Video Injection, 
-#              and the Self-Healing Quality Loop.
+# ROLE: Orchestrator V10.0 (Safe Mode: No Auto-Correction)
+# DESCRIPTION: Full pipeline BUT skips the Live Auditor & Remedy steps 
+#              to prevent accidental deletion of assets.
 
 import os
 import json
@@ -31,11 +30,12 @@ import gardener
 import ai_researcher
 import live_auditor
 import remedy
-import reddit_manager  # Added back
+import reddit_manager
 
 def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     """
-    Executes the full content lifecycle with strict visual enforcement and quality loops.
+    Executes the full content lifecycle.
+    NOTE: Quality Loop (Auditor/Remedy) is DISABLED in this version.
     """
     model_name = config['settings'].get('model_name', "gemini-2.5-flash")
     
@@ -123,19 +123,17 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         all_media = []
         for s in collected_sources: all_media.extend(s.get('media', []))
         
-        # Filter valid ones (Using the new strict scraper logic)
+        # Filter valid ones
         valid_images = [m for m in all_media if m['type'] == 'image']
-        valid_videos = [m for m in all_media if m['type'] == 'embed'] # Only embeds are safe
+        valid_videos = [m for m in all_media if m['type'] == 'embed'] 
         
         # If missing, HUNT!
         if len(valid_images) < 3 or len(valid_videos) < 1:
             log("      ⚠️ Missing visuals. Launching Aggressive Hunt...")
-            # Force hunt for video if missing
             if len(valid_videos) < 1:
                 hunted_vids = scraper.smart_media_hunt(target_keyword, category, "hunt_for_video")
                 all_media.extend(hunted_vids)
             
-            # Force hunt for images if missing
             if len(valid_images) < 3:
                 hunted_imgs = scraper.smart_media_hunt(target_keyword, category, "hunt_for_screenshot")
                 all_media.extend(hunted_imgs)
@@ -151,11 +149,10 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         log(f"      ✅ Final Count: {len(unique_images)} Images, {len(unique_videos)} External Videos.")
 
         # ======================================================================
-        # 6. REDDIT INTEL (COMMUNITY VOICE)
+        # 6. REDDIT INTEL
         # ======================================================================
         reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
         if reddit_media:
-            # Add Reddit visuals if they are valid embeds
             for rm in reddit_media:
                 if rm['type'] == 'embed': unique_videos.append(rm)
                 elif rm['type'] == 'image': unique_images.append(rm)
@@ -166,7 +163,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         asset_map = {}
         available_tags = []
         
-        # A) External Video (Source Video) - Mandatory
+        # A) External Video (Source Video)
         if unique_videos:
             vid = unique_videos[0]
             tag = "[[VIDEO_SOURCE_1]]"
@@ -174,9 +171,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             asset_map[tag] = html
             available_tags.append(tag)
         else:
-            # Fallback if absolutely no video found (Rare with strict hunt)
             tag = "[[VIDEO_SOURCE_1]]"
-            asset_map[tag] = "" # Empty string to remove tag
+            asset_map[tag] = "" 
             
         # B) Images (Up to 3)
         for i, img in enumerate(unique_images[:3]):
@@ -212,7 +208,6 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             if tag in final_body_draft:
                 final_body_draft = final_body_draft.replace(tag, html_code)
             else:
-                # Force inject video if AI forgot it
                 if "VIDEO" in tag and html_code: 
                     final_body_draft += f"\n<h3>Watch the Demo</h3>{html_code}"
         
@@ -234,7 +229,6 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         log("   🎨 Processing Thumbnail (Source First)...")
         best_source_img = None
-        # Try to find a high-res source image from collected sources
         for s in collected_sources:
             if s.get('source_image'): 
                 best_source_img = s['source_image']
@@ -278,11 +272,11 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         log("   🔗 Injecting Final Assets...")
 
-        # A) Inject Thumbnail at the very top
+        # A) Inject Thumbnail
         if img_url:
             full_body_html = f'<div class="featured-image" style="text-align: center; margin-bottom: 35px;"><img src="{img_url}" style="width: 100%; border-radius: 15px;" alt="{title}"></div>' + full_body_html
 
-        # B) Inject System Video (Explicitly after the first H2 or paragraph)
+        # B) Inject System Video
         if vid_main_url:
             sys_vid_html = f'''
             <div class="video-wrapper system-video" style="margin: 30px 0; border: 2px solid #008069; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
@@ -292,11 +286,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 </div>
             </div>
             '''
-            # Try to insert after the first H2 to make it visible but not intrusive
             if "</h2>" in full_body_html:
                 full_body_html = full_body_html.replace("</h2>", "</h2>" + sys_vid_html, 1)
             else:
-                # Fallback: Insert at top if no H2
                 full_body_html = sys_vid_html + full_body_html
 
         # ======================================================================
@@ -311,44 +303,26 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         published_url, post_id = pub_result
 
         # ======================================================================
-        # 14. QUALITY IMPROVEMENT LOOP (AUDIT -> REMEDY -> UPDATE)
+        # 14. QUALITY IMPROVEMENT LOOP (DISABLED)
         # ======================================================================
-        quality_score, attempts, MAX_RETRIES = 0, 0, 3 
+        # تم تعطيل هذا الجزء بناءً على طلبك لتجنب مشاكل الحذف
+        log("   🛑 Skipping Quality Loop (Auditor/Remedy) as requested.")
         
-        while quality_score < 9.5 and attempts < MAX_RETRIES:
-            attempts += 1
-            log(f"   🔄 [Quality Loop] Audit Round {attempts}...")
-            
-            # 1. Auditor visits the LIVE URL
-            audit_report = live_auditor.audit_live_article(published_url, target_keyword, iteration=attempts)
-            
-            if not audit_report: break
-            
-            quality_score = float(audit_report.get('quality_score', 0))
-            
-            if quality_score >= 9.5:
-                log(f"      🌟 Excellence Achieved! Score: {quality_score}/10.")
-                break
-            
-            log(f"      ⚠️ Score {quality_score}/10. Starting surgery...")
-            
-            # 2. Remedy Agent fixes the content
-            fixed_html = remedy.fix_article_content(
-                full_body_html, 
-                audit_report, 
-                target_keyword, 
-                combined_text, 
-                iteration=attempts
-            )
-            
-            # 3. Update on Blogger
-            if fixed_html and len(fixed_html) > 1000:
-                if publisher.update_existing_post(post_id, title, fixed_html):
-                    full_body_html = fixed_html
-                    log(f"      ✅ Article updated on Blogger. Waiting for sync...")
-                    time.sleep(10) 
-                else: break
-            else: break
+        # quality_score, attempts, MAX_RETRIES = 0, 0, 3 
+        # while quality_score < 9.5 and attempts < MAX_RETRIES:
+        #     attempts += 1
+        #     log(f"   🔄 [Quality Loop] Audit Round {attempts}...")
+        #     audit_report = live_auditor.audit_live_article(published_url, target_keyword, iteration=attempts)
+        #     if not audit_report: break
+        #     quality_score = float(audit_report.get('quality_score', 0))
+        #     if quality_score >= 9.5: break
+        #     fixed_html = remedy.fix_article_content(full_body_html, audit_report, target_keyword, combined_text, iteration=attempts)
+        #     if fixed_html and len(fixed_html) > 1000:
+        #         if publisher.update_existing_post(post_id, title, fixed_html):
+        #             full_body_html = fixed_html
+        #             time.sleep(10) 
+        #         else: break
+        #     else: break
 
         # ======================================================================
         # 15. FINALIZATION & DISTRIBUTION
