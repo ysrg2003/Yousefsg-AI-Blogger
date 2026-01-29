@@ -1,28 +1,35 @@
 # FILE: live_auditor.py
 import json
-from google import genai
-from google.genai import types
 from config import log
-from api_manager import key_manager, master_json_parser
+from api_manager import generate_step_strict
+import scraper  # سنستخدم السكرابر القوي الموجود لدينا
 
 def audit_live_article(url, target_keyword, iteration=1):
     log(f"   ⚖️ [Live Auditor] Round {iteration} | Visiting: {url}...")
     
-    key = key_manager.get_current_key()
-    if not key: return None
-    client = genai.Client(api_key=key)
-    google_tool = types.Tool(google_search=types.GoogleSearch())
+    # 1. استخدام السكرابر لجلب المحتوى الحقيقي الذي يراه الزائر
+    # نستخدم scraper.resolve_and_scrape لأنه يتعامل مع الجافاسكريبت والتحويلات
+    _, _, page_text, _, _ = scraper.resolve_and_scrape(url)
+    
+    if not page_text or len(page_text) < 500:
+        log("      ⚠️ Auditor could not scrape the live page (Content too short or blocked).")
+        return None
 
+    # 2. التحليل باستخدام Gemini (بدون Google Tools لتقليل الأخطاء)
     prompt = f"""
     ROLE: Senior Google Search Quality Rater (Strict & Harsh).
-    TASK: Visit and Audit this LIVE article: {url}
+    TASK: Audit this LIVE article content.
     TARGET KEYWORD: "{target_keyword}"
+    CURRENT DATE: 2026-01-29
     
-    CRITICAL INSTRUCTIONS:
-    1. Use Google Search tool to access the URL and read its full content.
-    2. Check for "Timeline Paradox": Is the info from 2024/2025 while we are in 2026?
-    3. Check for "Visual Proof": Are there real images/videos or just text?
-    4. Check for "AI Slop": Is the tone generic or expert-level?
+    ARTICLE CONTENT:
+    {page_text[:15000]} 
+    
+    CRITICAL CHECKS:
+    1. **Timeline Paradox:** Does the article mention "Claude 3" as new, while implying it's 2026? Or does it hallucinate "Claude 5"? 
+       - Rule: The tech specs MUST match the actual text provided, do not invent versions.
+    2. **Visual Proof:** Does the text explicitly refer to images/videos that are MISSING in the content?
+    3. **Value:** Is this just fluff?
 
     OUTPUT JSON ONLY:
     {{
@@ -35,19 +42,11 @@ def audit_live_article(url, target_keyword, iteration=1):
     """
 
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(tools=[google_tool], temperature=0.1)
-        )
+        # نستخدم generate_step_strict الموثوقة بدلاً من استدعاء العميل مباشرة
+        result = generate_step_strict("gemini-2.5-flash", prompt, "Live Audit", required_keys=["quality_score", "critical_flaws"])
         
-        if not response or not response.text: return None
-
-        result = master_json_parser(response.text)
-        if result:
-            log(f"      📝 Audit Score: {result.get('quality_score')}/10 | Verdict: {result.get('verdict')}")
-            return result
-        return None
+        log(f"      📝 Audit Score: {result.get('quality_score')}/10 | Verdict: {result.get('verdict')}")
+        return result
     except Exception as e:
         log(f"      ❌ Auditor Error: {e}")
         return None
