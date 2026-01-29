@@ -180,17 +180,38 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             asset_map[tag] = html
             available_tags.append(tag)
 
+        
         # B) Process Images (Up to 4)
+        # التعديل الجديد: معالجة الصور ورفعها لـ GitHub بدلاً من استخدام الروابط المباشرة
         for i, img in enumerate(images[:4]): 
             tag = f"[[IMAGE_{i+1}]]"
+            
+            log(f"   🎨 Processing Body Image {i+1}: {img['url'][:30]}...")
+            
+            # نستخدم الكلمة المفتاحية كنص يكتب على الصورة
+            overlay_txt = target_keyword 
+            # اسم الملف ليكون فريداً ومحسناً للسيو
+            safe_filename = f"{target_keyword}_explanation_{i+1}"
+            
+            # استدعاء المعالج (تحميل + كتابة + رفع)
+            # ملاحظة: نستخدم process_source_image الموجودة في image_processor
+            new_img_url = image_processor.process_source_image(img['url'], overlay_txt, safe_filename)
+            
+            # إذا نجح الرفع نستخدم الرابط الجديد، وإلا نستخدم الأصلي كاحتياط (رغم أنه قد لا يعمل)
+            final_img_url = new_img_url if new_img_url else img['url']
+            
+            # وصف الصورة (Alt Text)
+            alt_text = img.get('description', target_keyword).replace('"', '')
+
             html = f'''
             <figure style="margin:30px 0; text-align:center;">
-                <img src="{img['url']}" alt="{img['description']}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
-                <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {img['description']}</figcaption>
+                <img src="{final_img_url}" alt="{alt_text}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+                <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {alt_text}</figcaption>
             </figure>
             '''
             asset_map[tag] = html
             available_tags.append(tag)
+        
 
         # 3. Prepare Payload for Writer
         combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + reddit_context
