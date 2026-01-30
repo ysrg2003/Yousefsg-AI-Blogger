@@ -1,237 +1,252 @@
-# FILE: reddit_manager.py (UPGRADED: Bulletproof Edition V2.4)
-# ROLE: Extracts authentic user experiences with a multi-layered, failure-resistant search and a corrected, safe parsing engine.
-# DESCRIPTION: This is the definitive, unabridged, and deeply tested version. No shortcuts, no simplifications.
-
 import requests
 import urllib.parse
 import logging
 import feedparser
 import time
 import re
-import html # <-- تم استيراد هذه المكتبة لمعالجة روابط الصور بشكل صحيح
+from bs4 import BeautifulSoup
 
-# --- CONFIGURATION & LOGGING ---
-# A dedicated logger to provide detailed, non-intrusive operational feedback.
+# ==============================================================================
+# CONFIGURATION & LOGGING
+# ==============================================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [REDDIT-INTEL] - %(message)s')
 logger = logging.getLogger("RedditIntel")
 
-# --- PRIVATE HELPER FUNCTIONS ---
+def search_reddit_threads(keyword):
+    """
+    يبحث عن نقاشات حقيقية باستخدام فلاتر جوجل الذكية.
+    تستخدم هذه الدالة استعلاماً محسناً أولاً، ثم تعود للاستعلام الأصلي كخطة بديلة (Fallback).
+    """
+    # 1. الاستعلام المحسن (يركز على المشاكل والأخطاء التقنية)
+    improved_query = f"site:reddit.com {keyword} (review OR 'problem with' OR 'my thoughts' OR bug OR crash OR slow OR issue) -giveaway"
+    
+    # 2. الاستعلام الأصلي (الذي كان يعمل بنجاح كخطة احتياطية)
+    original_query = f"site:reddit.com {keyword} (review OR 'after using' OR 'problem with' OR 'my thoughts' OR 'demo') -giveaway"
 
-def _get_core_keywords(keyword_phrase: str) -> str:
-    """
-    Analyzes a long keyword phrase to extract its core essence (2-3 key nouns/entities).
-    This is the foundation of the resilient fallback search.
-    Example: "AI video monetization fails" -> "AI video"
-    """
-    stop_words = [
-        'fails', 'monetization', 'problems', 'review', 'using', 'the', 'is', 'a', 'for', 
-        'and', 'of', 'how', 'to', 'my', 'thoughts', 'about', 'hands on'
-    ]
-    words = keyword_phrase.lower().replace('"', '').split()
-    core_words = [word for word in words if word not in stop_words]
-    return " ".join(core_words[:3])
-
-def _execute_search(query: str) -> list:
-    """
-    A modular and reusable component that executes a single search query against the Google News RSS endpoint.
-    """
-    encoded_query = urllib.parse.quote(query)
-    url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
+    threads = []
+    
     try:
-        feed = feedparser.parse(url)
-        return [{"title": entry.title, "link": entry.link} for entry in feed.entries] if feed.entries else []
+        # المحاولة الأولى: الاستعلام المحسن
+        logger.info(f"🔍 Primary Search: '{improved_query[:50]}...'")
+        encoded_improved = urllib.parse.quote(improved_query)
+        url_improved = f"https://news.google.com/rss/search?q={encoded_improved}&hl=en-US&gl=US&ceid=US:en"
+        feed = feedparser.parse(url_improved)
+
+        # التحقق من النتائج، إذا كانت فارغة ننتقل للاحتياطي
+        if not feed.entries:
+            logger.warning("⚠️ Primary search returned no results. Trying fallback original query...")
+            encoded_original = urllib.parse.quote(original_query)
+            url_original = f"https://news.google.com/rss/search?q={encoded_original}&hl=en-US&gl=US&ceid=US:en"
+            feed = feedparser.parse(url_original)
+
+        if feed.entries:
+            for entry in feed.entries[:4]: # نأخذ أفضل 4 روابط
+                threads.append({
+                    "title": entry.title,
+                    "link": entry.link
+                })
+            logger.info(f"✅ Found {len(threads)} threads to analyze.")
+        else:
+            logger.error("❌ Both search queries failed to find results.")
+
+        return threads
+
     except Exception as e:
-        logger.error(f"A single search execution failed for query '{query}': {e}")
+        logger.error(f"🚨 Critical Search Error: {e}")
         return []
 
-# --- CORE PUBLIC FUNCTIONS ---
-def search_reddit_threads(keyword: str) -> list:
+def extract_smart_opinions(reddit_url):
     """
-    Searches for discussion threads using a more flexible and resilient strategy.
-    It breaks down the keyword and uses broader search terms to find human-like discussions.
-    """
-    logger.info("Initiating FLEXIBLE multi-layered Reddit thread search...")
-    
-    # --- التغيير رقم 1: استخراج كلمات مفتاحية أفضل ---
-    # بدلاً من أخذ الكلمة كما هي، نقوم بتنظيفها وتقسيمها
-    clean_keyword = keyword.replace('"', '').strip()
-    core_words = clean_keyword.split()
-
-    # --- التغيير رقم 2: بناء استعلامات أكثر مرونة وذكاءً ---
-    # هذه الاستعلامات تبحث عن الكلمات الرئيسية بدلاً من العبارة الحرفية
-    queries = [
-        # الطبقة 1: بحث دقيق ولكن مرن في العنوان (يحتوي على كل الكلمات الرئيسية)
-        f'site:reddit.com intitle:("{clean_keyword}")',
-        
-        # الطبقة 2: بحث عن الكلمات الرئيسية مع مصطلحات نقاش شائعة في Reddit
-        f'site:reddit.com "{clean_keyword}" (discussion OR thoughts OR issues OR problem OR experience)',
-        
-        # الطبقة 3: بحث أوسع باستخدام الكلمات الأساسية فقط (على الأقل كلمتين)
-        f'site:reddit.com {" ".join(core_words[:2])} (review OR help OR bug OR feedback)',
-        
-        # الطبقة 4 (الشبكة الآمنة): بحث واسع جداً في حال فشل كل ما سبق
-        f'site:reddit.com "{core_words[0]}" issues'
-    ]
-
-    all_threads, found_links = [], set()
-    for i, query in enumerate(queries):
-        # نتوقف إذا وجدنا ما يكفي من النتائج
-        if len(all_threads) >= 4:
-            logger.info("Sufficient thread count reached. Concluding search.")
-            break
-            
-        logger.info(f"  -> Search Layer {i+1}/{len(queries)}: Executing query: {query}")
-        results = _execute_search(query)
-        
-        new_threads_found = 0
-        for thread in results:
-            # التأكد من أن الرابط هو رابط نقاش حقيقي وليس صفحة بحث أو مستخدم
-            if '/comments/' in thread['link'] and thread['link'] not in found_links:
-                found_links.add(thread['link'])
-                all_threads.append(thread)
-                new_threads_found += 1
-                
-        if new_threads_found > 0:
-            logger.info(f"  -> Success! Layer {i+1} found {new_threads_found} new threads.")
-            
-    if not all_threads:
-         logger.warning("All flexible search layers failed. No relevant Reddit threads found.")
-
-    return all_threads[:4]
-    
-def extract_evidence(reddit_url: str) -> tuple[list, list]:
-    """
-    Performs a deep, safe, and corrected extraction of a single Reddit thread.
-    This version uses the correct, robust JSON access pathing.
+    المستخرج العميق: يسحب التعليقات، الصور، الفيديوهات، المعارض، والأكواد البرمجية.
     """
     try:
-        # --- الإصلاح رقم 1: الطريقة الصحيحة والمضمونة 100% لبناء رابط JSON ---
-        # هذه الطريقة تزيل أي باراميترات وتضيف .json في النهاية، وتعمل مع كل أنواع الروابط
-        base_url = reddit_url.split("?")[0].rstrip('/')
-        json_url = f"{base_url}.json"
+        # تنظيف الرابط وتحويله إلى JSON
+        clean_url = reddit_url.split("?")[0]
+        json_url = f"{clean_url}.json" if not clean_url.endswith(".json") else clean_url
 
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
         
-        response = requests.get(json_url, headers=headers, timeout=15)
-        if response.status_code != 200:
-            # --- الإصلاح رقم 2: استخدام المتغير الصحيح في رسالة الخطأ ---
-            logger.warning(f"Failed to fetch Reddit JSON for {reddit_url}, Status: {response.status_code}")
+        r = requests.get(json_url, headers=headers, timeout=15)
+        if r.status_code != 200: 
+            logger.warning(f"⚠️ Failed to access: {json_url} (Status: {r.status_code})")
             return [], []
 
-        data = response.json()
+        data = r.json()
         
-        media_found, insights = [], []
-
-        # --- 1. Extract Evidence from the Main Post (Corrected & Safe Pathing) ---
-        # هذا هو الكود الخاص بك للوصول الآمن للبيانات، وهو ممتاز ولم يتم تغييره.
-        main_post = data[0].get('data', {}).get('children', [{}])[0].get('data', {})
-        if not main_post:
-            logger.warning(f"Main post data was empty for {reddit_url}")
-            return [], [] 
-
+        # 1. استخراج بيانات المنشور الرئيسي (Main Post)
+        main_post = data[0]['data']['children'][0]['data']
+        subreddit = main_post.get('subreddit_name_prefixed', "r/Reddit")
         post_title = main_post.get('title', 'Reddit Post')
-
-        # a) Direct image/gif/video links
-        if main_post.get('url_overridden_by_dest'):
-            url = main_post['url_overridden_by_dest']
-            if any(ext in url.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.mp4']):
-                media_type = "video" if url.endswith('.mp4') else "image"
-                media_found.append({"type": media_type, "url": url, "description": f"Evidence from Reddit post: {post_title[:50]}"})
-
-        # b) Reddit native video player
-        if main_post.get('is_video') and main_post.get('media', {}).get('reddit_video'):
-            vid_url = main_post.get('media', {}).get('reddit_video', {}).get('fallback_url')
-            if vid_url:
-                media_found.append({"type": "video", "url": vid_url, "description": f"Video evidence from user: {post_title[:50]}"})
-
-        # c) Reddit image galleries
-        if main_post.get('is_gallery') and main_post.get('gallery_data'):
-            for item in main_post.get('gallery_data', {}).get('items', []):
-                media_id = item.get('media_id')
-                if media_id and media_id in main_post.get('media_metadata', {}):
-                    img_data = main_post['media_metadata'][media_id]
-                    source_img = img_data.get('s', {})
-                    img_url_encoded = source_img.get('u', source_img.get('gif'))
-                    if img_url_encoded:
-                        # --- الإصلاح رقم 3: فك تشفير رابط الصورة لجعله صالحاً ---
-                        img_url_decoded = html.unescape(img_url_encoded)
-                        media_found.append({"type": "image", "url": img_url_decoded, "description": f"Image from gallery in post: {post_title[:40]}"})
-
-        # --- 2. Extract Text Insights & Code from Comments ---
-        comments_data = data[1].get('data', {}).get('children', [])
-        for comment_item in comments_data:
-            comment_data = comment_item.get('data', {})
-            body = comment_data.get('body', '')
-            score = comment_data.get('score', 0)
-            
-            if len(body) > 50 and body not in ["[deleted]", "[removed]"]:
-                # منطق استخراج الأكواد الخاص بك - لم يتم المساس به
-                code_blocks = re.findall(r'```(.*?)```', body, re.DOTALL)
-                for code in code_blocks:
-                    if len(code.strip()) > 10:
-                        media_found.append({"type": "code", "content": code.strip(), "description": "Code snippet shared by a user in comments"})
-                
-                # منطق فلترة التعليقات الخاص بك - لم يتم المساس به
-                if score > 5:
-                    clean_body = re.sub(r'```.*?```', '[Code Snippet Provided]', body, flags=re.DOTALL)
-                    clean_body = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', clean_body)
-                    insights.append({
-                        "source_name": main_post.get('subreddit_name_prefixed', 'Reddit'),
-                        "text": clean_body.replace("\n", " ").strip()[:500],
-                        "url": f"https://www.reddit.com{comment_data.get('permalink', '')}"
-                    })
         
-        # طريقة الترتيب الخاصة بك (حسب طول النص) - لم يتم تغييرها
-        insights.sort(key=lambda x: len(x['text']), reverse=True)
-        return insights[:5], media_found
+        media_found = []
+
+        # --- أ) استخراج معارض الصور (Galleries) بالكامل ---
+        if main_post.get('is_gallery') and 'media_metadata' in main_post:
+            for media_id, meta in main_post['media_metadata'].items():
+                if meta.get('status') == 'valid' and meta.get('e') == 'Image':
+                    # تحويل رابط المعاينة إلى رابط صورة مباشر
+                    img_url = meta['s'].get('u', '').replace('preview.redd.it', 'i.redd.it')
+                    if img_url:
+                        media_found.append({
+                            "type": "image",
+                            "url": img_url,
+                            "description": f"Gallery Evidence: {post_title[:60]}"
+                        })
+
+        # --- ب) استخراج فيديوهات Reddit المرفوعة مباشرة ---
+        if main_post.get('is_video') and main_post.get('media'):
+            try:
+                vid_url = main_post['media']['reddit_video']['fallback_url']
+                media_found.append({
+                    "type": "video",
+                    "url": vid_url,
+                    "description": f"User Video Evidence: {post_title[:60]}"
+                })
+            except: pass
+
+        # --- ج) استخراج الروابط المباشرة (URL Overridden) ---
+        if 'url_overridden_by_dest' in main_post:
+            dest_url = main_post['url_overridden_by_dest']
+            if any(ext in dest_url.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.mp4']):
+                m_type = "video" if '.mp4' in dest_url.lower() else "image"
+                media_found.append({
+                    "type": m_type,
+                    "url": dest_url,
+                    "description": f"Direct Media Evidence: {post_title[:60]}"
+                })
+
+        # --- د) تحليل نص المنشور (Selftext) للبحث عن روابط مضمنة (BeautifulSoup) ---
+        if 'selftext_html' in main_post and main_post['selftext_html']:
+            # فك ترميز HTML وتحليله
+            html_content = main_post['selftext_html']
+            # Reddit يرسل HTML مرمزاً، نحتاج لفك ترميزه أحياناً
+            soup = BeautifulSoup(html_content, 'html.parser')
+            # البحث عن الروابط التي تشير لصور أو فيديوهات أو يوتيوب
+            for a in soup.find_all('a', href=True):
+                link = a['href']
+                if re.search(r'\.(jpg|jpeg|png|gif|mp4)$', link.lower()):
+                    m_type = "video" if '.mp4' in link.lower() else "image"
+                    media_found.append({
+                        "type": m_type,
+                        "url": link,
+                        "description": "Embedded Media Evidence"
+                    })
+                elif 'youtube.com/watch' in link or 'youtu.be/' in link:
+                    media_found.append({
+                        "type": "video",
+                        "url": link,
+                        "description": "Embedded YouTube Evidence"
+                    })
+
+        # 2. استخراج التعليقات (Comments) والآراء والأكواد
+        comments_data = data[1]['data']['children']
+        insights = []
+        
+        for comm in comments_data:
+            c_data = comm.get('data', {})
+            body = c_data.get('body', '')
+            score = c_data.get('score', 0)
+            author = c_data.get('author', 'User')
+            
+            if not body or len(body) < 50 or body in ["[deleted]", "[removed]"]:
+                continue
+
+            # --- استخراج الأكواد البرمجية (Code Blocks) ---
+            # نبحث عن الكتل المحاطة بـ ```
+            code_blocks = re.findall(r'```(.*?)```', body, re.DOTALL)
+            for code in code_blocks:
+                clean_code = code.strip()
+                if len(clean_code) > 15:
+                    media_found.append({
+                        "type": "code",
+                        "content": clean_code,
+                        "description": f"Technical Evidence (Code) by {author}"
+                    })
+            
+            # --- تنظيف النص من الأكواد قبل إرساله للـ AI ---
+            # نقوم بحذف كتل الأكواد من النص ليبقى الرأي فقط
+            body_cleaned = re.sub(r'```.*?```', '[Technical Code Block]', body, flags=re.DOTALL)
+            body_cleaned = body_cleaned.replace("\n", " ").strip()
+
+            # فلاتر الجودة
+            markers = ["i noticed", "in my experience", "battery", "bug", "glitch", "crash", "actually", "worth it", "slow", "fast", "update", "the problem is"]
+            if any(m in body_cleaned.lower() for m in markers) or score > 5:
+                insights.append({
+                    "source_name": subreddit,
+                    "author": author,
+                    "text": body_cleaned[:500], # نأخذ أول 500 حرف فقط
+                    "url": f"https://www.reddit.com{c_data.get('permalink', '')}",
+                    "score": score
+                })
+        
+        # ترتيب الآراء حسب الأعلى تصويتاً
+        insights.sort(key=lambda x: x['score'], reverse=True)
+        return insights[:4], media_found
 
     except Exception as e:
-        logger.error(f"Deep extraction failed entirely for {reddit_url}: {e}", exc_info=True)
+        logger.error(f"❌ Extraction Error at {reddit_url}: {e}")
         return [], []
 
-def get_community_intel(keyword: str) -> tuple[str, list]:
+def get_community_intel(keyword):
     """
-    Main orchestrator for Reddit intelligence gathering.
-    Returns a structured text report AND a list of all unique visual evidence found.
+    المحرك الرئيسي: يعيد تقريراً نصياً مهيكلاً + قائمة وسائط فريدة.
     """
-    logger.info(f"🧠 Mining Reddit for insights & visual evidence on: '{keyword}'...")
+    logger.info(f"🧠 Starting Deep Intelligence Mining for: '{keyword}'...")
     threads = search_reddit_threads(keyword)
     
-    if not threads:
-        logger.warning("All search layers failed. No relevant Reddit threads found.")
+    if not threads: 
         return "", []
     
-    all_insights, all_media = [], []
+    all_insights = []
+    all_media = []
+    
     for thread in threads:
         if "reddit.com" in thread['link']:
-            insights, media = extract_evidence(thread['link'])
-            all_insights.extend(insights)
+            ops, media = extract_smart_opinions(thread['link'])
+            all_insights.extend(ops)
             all_media.extend(media)
-            time.sleep(0.5)
+            time.sleep(0.8) # تأخير بسيط لتجنب الحظر
             
-    # طريقة إزالة التكرار المتقدمة الخاصة بك - لم يتم المساس بها
-    unique_media = list({(v.get('url') or v.get('content')): v for v in all_media}.values())
+    # --- إزالة التكرار في الوسائط (بناءً على الرابط أو محتوى الكود) ---
+    unique_media_map = {}
+    for item in all_media:
+        # إذا كان كود، نستخدم المحتوى كمفتاح، وإذا كان ميديا نستخدم الرابط
+        key = item.get('url') if item['type'] != 'code' else item.get('content')
+        if key and key not in unique_evidence_map:
+            unique_media_map[key] = item
     
-    if not all_insights:
-        logger.warning("Found threads but could not extract any high-quality insights.")
-        return "", unique_media
+    unique_media = list(unique_media_map.values())
     
-    # تنسيق التقرير الدقيق الذي صممته - لم يتم المساس به
-    report = "\n=== 📢 INTEL REPORT: REAL COMMUNITY FEEDBACK ===\n"
-    media_summary = {}
-    for m in unique_media:
-        media_summary[m['type']] = media_summary.get(m['type'], 0) + 1
-    summary_line = f"SUMMARY: Found {len(all_insights)} textual insights and {len(unique_media)} pieces of visual evidence."
-    if media_summary:
-        summary_line += f" (Evidence breakdown: {media_summary})"
-    report += summary_line + "\n\n"
-    report += "INSTRUCTIONS: Use these real user quotes and evidence to build the 'First-Hand Experience' section. Highlight any conflicts with official news.\n\n"
+    if not all_insights and not unique_media:
+        return "", []
     
-    unique_insights = list({v['text']: v for v in all_insights}.values())[:4]
-    for i, item in enumerate(unique_insights):
+    # --- بناء التقرير النصي المهيكل للـ AI ---
+    report = "\n=== 📢 REAL COMMUNITY FEEDBACK (TEXTUAL INSIGHTS) ===\n"
+    report += "INSTRUCTIONS FOR AI WRITER: Use these real user quotes to add credibility, highlight bugs, or contrast marketing claims.\n"
+    report += "CRITICAL: You MUST hyperlink the Subreddit name or the phrase 'community discussion' to the provided URL.\n\n"
+    
+    # إزالة تكرار النصوص
+    seen_texts = set()
+    final_insights = []
+    for ins in all_insights:
+        if ins['text'] not in seen_texts:
+            final_insights.append(ins)
+            seen_texts.add(ins['text'])
+    
+    for i, item in enumerate(final_insights[:4]):
         report += f"--- INSIGHT {i+1} ---\n"
-        report += f"SOURCE: {item['source_name']} (Use this specific name)\n"
-        report += f"LINK: {item['url']} (Link to this for citation)\n"
-        report += f"USER SAID: \"{item['text']}\"\n\n"
-        
+        report += f"SOURCE: {item['source_name']}\n"
+        report += f"LINK: {item['url']}\n"
+        report += f"USER EXPERIENCE: \"{item['text']}\"\n"
+        report += f"COMMUNITY SCORE: {item['score']} upvotes\n\n"
+
+    # إضافة ملخص الأدلة البصرية للتقرير ليعرف الـ AI بوجودها
+    if unique_media:
+        report += "=== 🖼️ AVAILABLE VISUAL/TECHNICAL EVIDENCE ===\n"
+        report += "INSTRUCTIONS: I have extracted the following evidence. Use the placeholders [[EVIDENCE_TYPE_ID]] in your draft where appropriate.\n"
+        for i, m in enumerate(unique_media):
+            report += f"- Evidence {i+1}: Type={m['type']}, Description={m['description']}\n"
+
     return report, unique_media
