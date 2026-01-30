@@ -484,11 +484,52 @@ def run_pipeline(category, config):
         except Exception as e:
             log(f"      ❌ AI Search Error: {e}")
 
+
+
+    
+    
+    # ... (الكود السابق)
     # Final Check
     if not collected_sources:
         log("❌ FATAL: All search methods failed. Aborting pipeline.")
         return
 
+    # --- STEP 1.25: TOPIC REALIGNMENT ---
+    # يضمن أننا نبحث في Reddit عن الموضوع الذي وجدنا له مصادر فعلاً
+    try:
+        headlines = [f"- {s['title']}" for s in collected_sources]
+        headlines_str = "\n".join(headlines)
+        
+        # إذا كان الموضوع الرئيسي مختلفاً عن الكلمة المفتاحية الأصلية، نطلب إعادة توجيه
+        first_headline = headlines[0] if headlines else ""
+        if target_keyword.lower() not in first_headline.lower():
+            log(f"   🎯 [Step 1.25] Realigning topic from '{target_keyword}' based on found articles...")
+            
+            realign_prompt = PROMPT_REALIGN_TOPIC.format(
+                original_keyword=target_keyword,
+                headlines_list=headlines_str
+            )
+            
+            realign_result = generate_step_strict(
+                "gemini-2.5-flash",  # نستخدم موديل سريع لهذه المهمة
+                realign_prompt,
+                "Topic Realignment",
+                ["realigned_keyword"]
+            )
+            
+            new_keyword = realign_result.get('realigned_keyword')
+            
+            if new_keyword:
+                log(f"      ✅ New Aligned Keyword: '{new_keyword}'")
+                target_keyword = new_keyword # <-- أهم سطر: نقوم بتحديث المتغير
+            else:
+                 log(f"      ⚠️ Realignment failed. Sticking with original keyword.")
+    except Exception as e:
+        log(f"      ⚠️ Topic Realignment failed: {e}. Using original keyword for subsequent steps.")
+
+
+    # --- STEP 1.5: REDDIT INTEL (Injecting Human Experience) ---
+    # ... (باقي الكود)
     # --- STEP 1.5: REDDIT INTEL (Injecting Human Experience) ---
     log(f"   🧠 [Step 1.5] Gathering Human Intelligence from Reddit...")
     reddit_intel_report, reddit_media = "", []
