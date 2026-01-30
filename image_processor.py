@@ -136,43 +136,17 @@ def apply_smart_privacy_blur(pil_image):
         log(f"      ⚠️ Smart Blur Error: {e}. Returning original.")
         return pil_image
 
-def select_best_image_with_gemini(model_name, article_title, images_list):
-    if not images_list: return None
-    valid_images = []
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    for img_data in images_list[:4]: 
-        try:
-            r = requests.get(img_data['url'], headers=headers, timeout=10)
-            if r.status_code == 200:
-                valid_images.append({"mime_type": "image/jpeg", "data": r.content, "original_url": img_data['url']})
-        except: pass
 
-    if not valid_images: return None
-
-    if len(valid_images) == 1:
-        log("      ✅ Only one source image found. Using it directly.")
-        return valid_images[0]['original_url']
-
-    prompt = f"""
-    TASK: Select best image index (0-{len(valid_images)-1}) for '{article_title}'.
-    CRITERIA: Relevance.
-    OUTPUT: Integer only.
-    """
-    try:
-        key = key_manager.get_current_key()
-        client = genai.Client(api_key=key)
-        inputs = [prompt]
-        for img in valid_images: inputs.append(types.Part.from_bytes(data=img['data'], mime_type="image/jpeg"))
-        
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=inputs)
-        match = re.search(r'\d+', response.text)
-        if match:
-            idx = int(match.group())
-            if 0 <= idx < len(valid_images): return valid_images[idx]['original_url']
-    except: pass
+prompt = f"""
+    TASK: You are a Photo Editor.
+    CONTEXT: I need an image that best represents: {context_description}.
     
-    return valid_images[0]['original_url']
-
+    INSTRUCTIONS:
+    - Look at the provided images.
+    - Select the one that is clearest, most relevant, and high quality.
+    - Avoid images that are just text, logos, or blurry.
+    - Return ONLY the index number (0, 1, 2, etc.) of the best image.
+    """
 def process_source_image(source_url, overlay_text, filename_title):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
