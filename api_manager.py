@@ -159,46 +159,71 @@ def try_puter_generation(prompt, system_prompt):
         return None
 
 # ==============================================================================
-# ENGINE 2: GOOGLE GEMINI (BACKUP / TIERS 2-5)
+# ENGINE 2: GOOGLE GEMINI (BACKUP / TIERS 2-5) - UPDATED WITH INTERNET ACCESS
 # ==============================================================================
-def try_gemini_generation(model_name, prompt, system_prompt):
+def try_gemini_generation(model_name, prompt, system_prompt, use_google_search=False):
     """
     Attempts to generate using a specific Gemini model.
     Handles Key Rotation, Self-Repair, and API Errors.
+    INTEGRATED: Google Search Grounding (Internet Access) - Follows ai_researcher.py logic.
     """
     model_slug = model_name.replace("models/", "")
     
+    # 1. Acquire Key and Client
     key = key_manager.get_current_key()
-    if not key: raise RuntimeError("FATAL: No Gemini API Keys.")
+    if not key: 
+        raise RuntimeError("FATAL: No Gemini API Keys available in KeyManager.")
     
     client = genai.Client(api_key=key)
     
     try:
+        # 2. Dynamic Tool & Config Selection
+        # NOTE: When tools are enabled, response_mime_type must be None to avoid API conflict
+        google_tools = None
+        current_mime_type = "application/json"
+        
+        if use_google_search:
+            # Activate the 'Radar' - Real-time Google Search access
+            google_tools = [types.Tool(google_search=types.GoogleSearch())]
+            current_mime_type = None # Disable strict JSON mode at API level to allow Tools
+            # log(f"      📡 [Internet Access] Enabled for {model_slug}")
+
         generation_config = types.GenerateContentConfig(
-            response_mime_type="application/json", 
+            response_mime_type=current_mime_type, 
             system_instruction=system_prompt, 
-            temperature=0.3
+            temperature=0.3,
+            tools=google_tools
         )
         
+        # 3. API Execution
         response = client.models.generate_content(
             model=model_slug, 
             contents=prompt, 
             config=generation_config
         )
         
-        if not response.text:
+        if not response or not response.text:
             return None
 
+        # 4. JSON Extraction Logic (Essential when response_mime_type is None)
         parsed_data = master_json_parser(response.text)
         
         # --- SELF-CORRECTION MECHANISM ---
-        # If Gemini returns invalid JSON, ask a fast model to fix it.
+        # If parsing fails (common when Internet Search adds citations/text), ask for repair
         if not parsed_data:
-            log(f"      🔧 Repairing broken JSON from {model_slug}...")
+            # log(f"      🔧 [Self-Repair] Attempting to fix non-JSON output from {model_slug}...")
+            repair_prompt = f"Extract ONLY the valid JSON from the following text. Remove citations and conversational filler:\n\n{response.text[:8000]}"
+            
+            # Simple repair config (No tools, strict JSON)
+            repair_config = types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.1
+            )
+            
             repair_resp = client.models.generate_content(
-                model="gemini-2.5-flash", # Use fast model for repair
-                contents=f"Fix this broken JSON to be valid (Return ONLY JSON):\n{response.text[:5000]}", 
-                config=generation_config
+                model="gemini-2.5-flash", # Use the fastest/cheapest model for repair
+                contents=repair_prompt, 
+                config=repair_config
             )
             parsed_data = master_json_parser(repair_resp.text)
             
@@ -208,25 +233,26 @@ def try_gemini_generation(model_name, prompt, system_prompt):
         error_msg = str(e).lower()
         
         # Handle Rate Limits (429) / Quota Exhaustion
-        if "429" in error_msg or "quota" in error_msg:
-            log(f"      ⚠️ Quota hit on {model_slug}. Rotating key...")
+        if "429" in error_msg or "quota" in error_msg or "limit" in error_msg:
+            log(f"      ⚠️ Quota hit on {model_slug} (Key #{key_manager.current_index + 1}). Rotating...")
             if key_manager.switch_key():
-                # Recursive retry with new key
-                return try_gemini_generation(model_name, prompt, system_prompt)
+                # Recursive retry with the new key
+                return try_gemini_generation(model_name, prompt, system_prompt, use_google_search)
             else:
-                return None # All keys died
+                log("      ❌ FATAL: All keys exhausted for this model.")
+                return None
                 
         # Handle Model Not Found (404)
         elif "404" in error_msg or "not found" in error_msg:
-             log(f"      ⚠️ Model {model_slug} not found/supported by this key.")
+             log(f"      ⚠️ Model {model_slug} not found or unsupported by this API key.")
              return None
              
         else:
-            log(f"      ❌ Error on {model_slug}: {str(e)[:50]}")
+            log(f"      ❌ API Error on {model_slug}: {str(e)[:100]}")
             return None
 
 # ==============================================================================
-# MASTER GENERATOR (ORCHESTRATOR)
+# MASTER GENERATOR (ORCHESTRATOR) - UPDATED FOR MULTI-MODE EXECUTION
 # ==============================================================================
 @retry(
     stop=stop_after_attempt(5), 
@@ -234,54 +260,59 @@ def try_gemini_generation(model_name, prompt, system_prompt):
     retry=retry_if_exception_type(Exception), 
     before_sleep=before_sleep_log(logger, logging.DEBUG)
 )
-def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]):
+def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[], use_google_search=False):
     """
     The Intelligence Hub.
-    Flow: Puter (Tier 1) -> Gemini Chain (Tiers 2-5).
+    Flow: Puter (Tier 1 - Only for Non-Search) -> Gemini Chain (Tiers 2-5).
     """
     global API_HEAT
-    if API_HEAT > 0: time.sleep(1) # Micro-pause to ease rate limits
+    if API_HEAT > 0: time.sleep(1) # Micro-pause to prevent flooding
     
-    log(f"   🔄 Executing: {step_name}")
+    log(f"   🔄 Executing: {step_name} {'(with Web Search 🌐)' if use_google_search else ''}")
 
     # --- TIER 1: PUTER.JS (CLAUDE/GPT) ---
-    # We prioritize this for high-quality writing steps.
-    # If it fails, we seamlessly drop to Gemini.
-    result = try_puter_generation(prompt, STRICT_SYSTEM_PROMPT)
-    if result:
-        try:
-            if required_keys: validate_structure(result, required_keys)
-            log(f"      ✅ Success (Source: Puter/Claude).")
-            return result
-        except JSONValidationError:
-            log("      ⚠️ Puter JSON structure invalid. Falling back to Gemini.")
+    # Puter.js currently does NOT support Google Search Tools via this SDK.
+    # Therefore, we skip Tier 1 if web search is requested.
+    if not use_google_search:
+        result = try_puter_generation(prompt, STRICT_SYSTEM_PROMPT)
+        if result:
+            try:
+                if required_keys: validate_structure(result, required_keys)
+                log(f"      ✅ Success (Source: Puter/Claude).")
+                return result
+            except JSONValidationError:
+                log("      ⚠️ Puter JSON structure invalid. Falling back to Gemini.")
+    else:
+        # log(f"      ℹ️ Skipping Puter.js (Tier 1) because Web Search is required.")
+        pass
 
     # --- TIER 2-5: GEMINI WATERFALL ---
-    # Build the list of models to try
+    # Construct the prioritized list of models
     models_to_try = []
     clean_initial = initial_model_name.replace("models/", "")
     
-    # If the requested model is valid, try it first
     if clean_initial in GEMINI_FALLBACK_CHAIN:
         models_to_try.append(clean_initial)
+        # Add the rest of the chain, avoiding duplicates
         models_to_try.extend([m for m in GEMINI_FALLBACK_CHAIN if m != clean_initial])
     else:
         models_to_try = GEMINI_FALLBACK_CHAIN
 
-    # Iterate through the chain until one succeeds
+    # Iterate through the chain until one succeeds or all fail
     for model in models_to_try:
-        gemini_result = try_gemini_generation(model, prompt, STRICT_SYSTEM_PROMPT)
+        gemini_result = try_gemini_generation(model, prompt, STRICT_SYSTEM_PROMPT, use_google_search)
         
         if gemini_result:
             try:
+                # Validation Gate
                 if required_keys: validate_structure(gemini_result, required_keys)
                 log(f"      ✅ Success (Source: {model}).")
                 return gemini_result
             except JSONValidationError as ve:
-                log(f"      ⚠️ {model} returned invalid structure. Trying next model...")
-                continue # Try next model in chain
+                log(f"      ⚠️ {model} returned invalid structure: {ve}. Trying next model...")
+                continue # Try next model in the waterfall
         
-        # If None returned (Network/Auth error), loop continues to next model.
+        # If None (API/Auth failure), the loop continues to the next model automatically.
 
-    # If all tiers fail
-    raise RuntimeError(f"❌ ALL AI MODELS (Puter + Gemini Chain) FAILED for step: {step_name}")
+    # If the loop finishes without a return
+    raise RuntimeError(f"❌ CRITICAL FAILURE: All AI Models (Puter + Gemini Chain) failed for step: {step_name}")
