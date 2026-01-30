@@ -223,8 +223,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         official_media, reddit_media = [], []
         if visual_strategy.startswith("hunt"):
-            official_media = scraper.smart_media_hunt(target_keyword, category, visual_strategy)
-        reddit_context, reddit_media = reddit_manager.get_community_intel(target_keyword)
+            official_media = scraper.smart_media_hunt(smart_query, category, visual_strategy)
+        reddit_context, reddit_media = reddit_manager.get_community_intel(smart_query)
 
         # ======================================================================
         # 6. WRITING, ASSETS, and VIDEO PRODUCTION
