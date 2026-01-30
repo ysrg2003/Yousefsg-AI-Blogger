@@ -489,36 +489,54 @@ def run_pipeline(category, config):
         return
 
     # =====================================================
-    # STEP 1.5: THE EXPERIENCE HUNTER (REAL USER DATA)
+    # STEP 1.5: THE EXPERIENCE & EVIDENCE HUNTER
     # =====================================================
-    log(f"   🗣️ [Step 1.5] Hunting for Real User Experiences (Reddit & Reviews)...")
+    log(f"   🗣️ [Step 1.5] Hunting for Real User Experiences & Visual Evidence...")
     
     real_user_feedback = ""
-    
-    # 1. Reddit Intel (استخراج مشاكل وآراء حقيقية)
+    visual_evidence_tags = []
+    visual_asset_map = {}
+
+    # 1. Reddit Intel (Text + Visuals)
     try:
         import reddit_manager
-        # نبحث عن الكلمة المفتاحية + كلمات تدل على التجربة
         reddit_text, reddit_media = reddit_manager.get_community_intel(target_keyword)
         if reddit_text:
             real_user_feedback += f"\n*** REAL REDDIT DISCUSSIONS ***\n{reddit_text}\n"
-            log("      ✅ Found Reddit discussions.")
+            log(f"      ✅ Found Reddit discussions. Processing {len(reddit_media)} visual assets...")
+
+            # Process Reddit Media into usable tags and HTML
+            for i, media in enumerate(reddit_media[:3]): # Limit to 3 pieces of evidence
+                # Create a safe, descriptive tag
+                media_type = media['type'].upper()
+                safe_desc = re.sub(r'[^a-zA-Z0-9]+', '_', media['description'])[:25]
+                tag = f"[[EVIDENCE_{media_type}_{i+1}_{safe_desc}]]"
+                
+                html_code = ""
+                if media['type'] == 'image':
+                    html_code = f'<figure style="margin:20px 0; border:1px solid #ddd; padding:5px; border-radius:8px;"><img src="{media["url"]}" alt="{media["description"]}" style="max-width:100%; height:auto; border-radius:4px;"><figcaption style="font-size:13px; color:#555; text-align:center; margin-top:5px;">{media["description"]}</figcaption></figure>'
+                elif media['type'] == 'video':
+                    html_code = f'<div style="margin:20px 0;"><video controls style="width:100%; border-radius:8px;" src="{media["url"]}" title="{media["description"]}"></video></div>'
+                elif media['type'] == 'code':
+                    # Simple pre-formatted code block
+                    html_code = f'<pre style="background:#2d2d2d; color:#f8f8f2; padding:15px; border-radius:8px; overflow-x:auto;"><code>{media["content"]}</code></pre>'
+
+                if html_code:
+                    visual_evidence_tags.append(tag)
+                    visual_asset_map[tag] = html_code
     except Exception as e:
         log(f"      ⚠️ Reddit Hunt Error: {e}")
 
-    # 2. Review Specific Search (إذا لم نجد ما يكفي في ريديت)
-    # نبحث عن مقالات تحتوي على كلمات "Review" أو "Hands-on" لضمان وجود تجربة
-    if len(real_user_feedback) < 500:
+    # 2. Review Specific Search (Text only fallback)
+    if len(real_user_feedback) < 300:
         log("      🕵️‍♂️ Reddit data low. Running targeted 'Review' search...")
         try:
             review_query = f"{target_keyword} review problems hands-on"
             review_items = news_fetcher.get_real_news_rss(review_query, category)
-            
-            for item in review_items[:2]: # نأخذ مقالين فقط لتوفير الوقت
+            for item in review_items[:2]:
                 url, _, text = resolve_and_scrape(item['link'])
                 if text:
                     real_user_feedback += f"\n*** EXTERNAL REVIEW ({item['title']}) ***\n{text[:3000]}\n"
-                    log(f"      ✅ Added External Review: {item['title'][:30]}")
         except: pass
 
     # =====================================================
@@ -527,10 +545,7 @@ def run_pipeline(category, config):
     log(f"   ✍️ [Step 2] Drafting Content from {len(collected_sources)} sources + User Data...")
     
     combined_text = "\n".join([f"SOURCE {i+1}: {s['domain']}\nTitle: {s['title']}\nTEXT:\n{s['text'][:8000]}" for i, s in enumerate(collected_sources)])
-    
-    # دمج بيانات المستخدمين مع البحث الأساسي
     full_research_data = f"{combined_text}\n\n{real_user_feedback}"
-
     sources_list = [{"title": s['title'], "url": s['url']} for s in collected_sources]
     
     json_ctx = {
@@ -538,33 +553,55 @@ def run_pipeline(category, config):
         "keyword_focus": target_keyword,
         "date": str(datetime.date.today()),
         "style_guide": "Critical, First-Person, Beginner-Focused",
-        "has_real_experience_data": len(real_user_feedback) > 200 # مؤشر للكاتب
+        "has_real_experience_data": len(real_user_feedback) > 200
     }
     
-    # تعليمات الصدق + بروتوكول حل النزاع (Conflict Resolution)
-    experience_prompt = """
-    *** MANDATORY SECTION: FIRST-HAND EXPERIENCE ***
-    You MUST write a section titled 'My Experience' (or 'Hands-On Impressions').
+    # The Ultimate Honesty & Evidence Protocol
+    experience_prompt = f"""
+    *** MANDATORY SECTION: FIRST-HAND EXPERIENCE & EVIDENCE ***
+    You MUST write a dedicated H2 section titled 'My Experience: The Good, The Bad, and The Bugs'.
     
-    RULES FOR AUTHENTICITY & CONSISTENCY:
-    1. **SOURCE OF TRUTH:** Use the 'REAL REDDIT DISCUSSIONS' and 'EXTERNAL REVIEW' data provided below.
-    2. **CONFLICT RESOLUTION (CRITICAL):** 
-       - If the Official News says "X" (e.g., Fast Speed), but Reddit users say "Y" (e.g., Laggy), **DO NOT HIDE THE CONFLICT.**
-       - Instead, HIGHLIGHT it. Write: "While the official announcement promises [X], in real-world testing, I found that [Y]..."
-       - This discrepancy creates HIGH TRUST with the reader.
-    3. **UNIFIED NARRATIVE:** Ensure the "Verdict" and "Pros/Cons" sections reflect this reality. Do not praise a feature in the intro if you criticize it in the experience section.
-    4. **SYNTHESIS:**
-       - If data says "users complain about battery", write: "In practical use, the battery drain is noticeable..."
-       - If absolutely NO user feedback is found, write a 'Technical Analysis' based on specs and clearly state: "Hands-on data is currently limited."
+    RULES FOR AUTHENTICITY, CONSISTENCY & EVIDENCE INTEGRATION:
+    
+    1.  **EVIDENCE IS KING (CRITICAL):**
+        - I have provided a list of visual evidence tags: {visual_evidence_tags}.
+        - Your primary task is to build a narrative AROUND this evidence.
+        - When you discuss a point (e.g., a bug, a feature), you MUST embed the corresponding tag immediately after the sentence that describes it.
+        - **Example:** "The installation process threw an unexpected error, which required a manual fix. [[EVIDENCE_IMAGE_1_INSTALL_ERROR]]"
+        - Do NOT just list the tags at the end. They must be contextually placed.
+
+    2.  **CONFLICT RESOLUTION PROTOCOL (THE CORE OF TRUST):**
+        - Scour the research for discrepancies between official claims and real user feedback.
+        - If Official News says "20-hour battery life", but Reddit users say "dies in 2 hours", this conflict IS THE STORY.
+        - You MUST highlight it explicitly. Write: "While the marketing materials boast a 20-hour battery life, my findings, corroborated by community feedback, paint a very different picture. In real-world usage, the device struggled to last beyond a few hours of active use."
+
+    3.  **UNIFIED NARRATIVE (NO CONTRADICTIONS):**
+        - The conclusions you draw in this "Experience" section MUST directly influence the "Pros/Cons" list and the final "Verdict".
+        - If you discover a major bug here, it MUST be listed as a "Con" later.
+        - The entire article must read as a single, consistent investigation.
+
+    4.  **THE HONESTY FALLBACK:**
+        - If the list of evidence tags is empty AND no user feedback is found in the research data, you are FORBIDDEN from inventing a fake experience.
+        - In this specific case, you must change the section title to 'Technical Analysis & Expectations' and write from an expert's analytical perspective based on the available specifications, clearly stating: "While extensive hands-on data is not yet available, a close look at the specifications suggests..."
     """
     
+
     payload = f"METADATA: {json.dumps(json_ctx)}\n{experience_prompt}\n\n*** RESEARCH DATA ***\n{full_research_data}"
 
-    
     try:
         # Step B: Writer
         json_b = generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Writer", ["headline", "article_body"])
         
+        # --- NEW: Evidence Tag Replacement ---
+        # The AI has placed the tags, now we replace them with the actual HTML
+        final_body_draft = json_b['article_body']
+        for tag, html_code in visual_asset_map.items():
+            final_body_draft = final_body_draft.replace(tag, html_code)
+        json_b['article_body'] = final_body_draft
+        # ------------------------------------
+
+        
+            
         # Step C: SEO
         kg_links = get_relevant_kg_for_linking(category)
         input_c = {"draft_content": json_b, "sources_data": sources_list}
