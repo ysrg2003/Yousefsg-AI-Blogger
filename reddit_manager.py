@@ -45,39 +45,60 @@ def _execute_search(query: str) -> list:
         return []
 
 # --- CORE PUBLIC FUNCTIONS ---
-
 def search_reddit_threads(keyword: str) -> list:
     """
-    Searches for discussion threads using a multi-layered, resilient strategy.
-    It cascades from precise to broad queries to ensure results are always found.
+    Searches for discussion threads using a more flexible and resilient strategy.
+    It breaks down the keyword and uses broader search terms to find human-like discussions.
     """
-    logger.info("Initiating multi-layered Reddit thread search...")
-    core_keyword = _get_core_keywords(keyword)
+    logger.info("Initiating FLEXIBLE multi-layered Reddit thread search...")
+    
+    # --- التغيير رقم 1: استخراج كلمات مفتاحية أفضل ---
+    # بدلاً من أخذ الكلمة كما هي، نقوم بتنظيفها وتقسيمها
+    clean_keyword = keyword.replace('"', '').strip()
+    core_words = clean_keyword.split()
 
+    # --- التغيير رقم 2: بناء استعلامات أكثر مرونة وذكاءً ---
+    # هذه الاستعلامات تبحث عن الكلمات الرئيسية بدلاً من العبارة الحرفية
     queries = [
-        f'site:reddit.com intitle:("{keyword}") (review OR problem OR bug OR "hands on")',
-        f'site:reddit.com "{keyword}" (review OR problem OR bug OR "hands on")',
-        f'site:reddit.com intitle:("{core_keyword}") (review OR problem OR bug OR experience)'
+        # الطبقة 1: بحث دقيق ولكن مرن في العنوان (يحتوي على كل الكلمات الرئيسية)
+        f'site:reddit.com intitle:("{clean_keyword}")',
+        
+        # الطبقة 2: بحث عن الكلمات الرئيسية مع مصطلحات نقاش شائعة في Reddit
+        f'site:reddit.com "{clean_keyword}" (discussion OR thoughts OR issues OR problem OR experience)',
+        
+        # الطبقة 3: بحث أوسع باستخدام الكلمات الأساسية فقط (على الأقل كلمتين)
+        f'site:reddit.com {" ".join(core_words[:2])} (review OR help OR bug OR feedback)',
+        
+        # الطبقة 4 (الشبكة الآمنة): بحث واسع جداً في حال فشل كل ما سبق
+        f'site:reddit.com "{core_words[0]}" issues'
     ]
 
     all_threads, found_links = [], set()
     for i, query in enumerate(queries):
-        logger.info(f"  -> Search Layer {i+1}/{len(queries)}: Executing query...")
-        results = _execute_search(query)
-        new_threads_found = 0
-        for thread in results:
-            if thread['link'] not in found_links:
-                found_links.add(thread['link'])
-                all_threads.append(thread)
-                new_threads_found += 1
-        if new_threads_found > 0:
-            logger.info(f"  -> Success! Layer {i+1} found {new_threads_found} new threads.")
+        # نتوقف إذا وجدنا ما يكفي من النتائج
         if len(all_threads) >= 4:
             logger.info("Sufficient thread count reached. Concluding search.")
             break
             
-    return all_threads[:4]
+        logger.info(f"  -> Search Layer {i+1}/{len(queries)}: Executing query: {query}")
+        results = _execute_search(query)
+        
+        new_threads_found = 0
+        for thread in results:
+            # التأكد من أن الرابط هو رابط نقاش حقيقي وليس صفحة بحث أو مستخدم
+            if '/comments/' in thread['link'] and thread['link'] not in found_links:
+                found_links.add(thread['link'])
+                all_threads.append(thread)
+                new_threads_found += 1
+                
+        if new_threads_found > 0:
+            logger.info(f"  -> Success! Layer {i+1} found {new_threads_found} new threads.")
+            
+    if not all_threads:
+         logger.warning("All flexible search layers failed. No relevant Reddit threads found.")
 
+    return all_threads[:4]
+    
 def extract_evidence(reddit_url: str) -> tuple[list, list]:
     """
     Performs a deep, safe, and corrected extraction of a single Reddit thread.
