@@ -1,7 +1,7 @@
 # FILE: reddit_manager.py
-# ROLE: Advanced Reddit Intelligence & Visual Evidence Gatherer.
-# DESCRIPTION: Mines Reddit for genuine user opinions, discussions, visual proofs (images/videos), and code snippets
-#              to inject authentic human experience (E-E-A-T) into the articles.
+# ROLE: Advanced Reddit Intelligence & Visual Evidence Gatherer (V3 - Selenium Powered)
+# DESCRIPTION: Uses a primary Selenium-based Google search to aggressively find relevant discussions,
+#              mimicking human search patterns for maximum accuracy.
 
 import requests
 import urllib.parse
@@ -9,7 +9,14 @@ import feedparser
 import time
 import re
 from bs4 import BeautifulSoup
-from config import log  # استخدام دالة اللوجر الموحدة من المشروع
+from config import log
+
+# استيراد مكتبات Selenium الضرورية
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
 
 class RedditManager:
     def __init__(self):
@@ -19,17 +26,69 @@ class RedditManager:
         self.session = requests.Session()
         self.session.headers.update(self.headers)
 
+    def _search_with_selenium(self, keyword, limit=5):
+        """
+        Primary search method: Uses Selenium to perform a smart Google search for Reddit threads.
+        This is far more reliable for finding conversational topics.
+        """
+        log(f"      - [Selenium Search] Actively hunting Google for Reddit threads...")
+        threads = []
+        
+        # استعلام بحث ذكي جداً مصمم للنقاشات وليس فقط للمراجعات
+        search_query = f'site:reddit.com "{keyword}" ("my experience" OR "is it worth it" OR "how I" OR "a warning" OR "the truth about" OR "guide")'
+        
+        chrome_options = Options()
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        
+        driver = None
+        try:
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            driver.set_page_load_timeout(30)
+            
+            driver.get(f"https://www.google.com/search?q={urllib.parse.quote(search_query)}")
+            time.sleep(2) # انتظار تحميل النتائج
+            
+            # استهداف روابط نتائج البحث في جوجل
+            links = driver.find_elements(By.CSS_SELECTOR, 'div.g a')
+            for link in links:
+                href = link.get_attribute('href')
+                if href and "reddit.com/r/" in href:
+                    title_element = link.find_element(By.CSS_SELECTOR, 'h3')
+                    title = title_element.text if title_element else "Reddit Thread"
+                    if not any(t['link'] == href for t in threads):
+                         threads.append({"title": title, "link": href})
+                if len(threads) >= limit:
+                    break
+            
+            return threads
+        except Exception as e:
+            log(f"      ⚠️ Selenium search for Reddit failed: {str(e)[:100]}")
+            return []
+        finally:
+            if driver:
+                driver.quit()
+
     def search_reddit_threads(self, keyword, limit=4):
         """
-        Searches for real discussions on Reddit using DuckDuckGo HTML as a primary gateway,
-        with Google News RSS as a fallback.
+        Orchestrates the search for Reddit threads using a waterfall strategy:
+        1. Selenium-Google (Primary, most powerful)
+        2. DuckDuckGo HTML (Fallback, lightweight)
         """
+        # --- المرحلة الأولى: البحث بقوة Selenium (الأفضل) ---
+        selenium_threads = self._search_with_selenium(keyword, limit)
+        if selenium_threads:
+            log(f"      ✅ Selenium found {len(selenium_threads)} relevant threads.")
+            return selenium_threads
+
+        # --- المرحلة الثانية: الخطة البديلة (DuckDuckGo) ---
+        log("      - Selenium search yielded no results. Falling back to DuckDuckGo.")
         threads = []
-        # تحسين كلمات البحث لتشمل مشاكل وحلول
-        search_query = f"site:reddit.com {keyword} (review OR experience OR opinion OR problem OR bug OR solution)"
-        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
-        
         try:
+            search_query = f"site:reddit.com {keyword} (review OR experience OR opinion OR problem)"
+            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(search_query)}"
             resp = self.session.get(url, timeout=12)
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, 'html.parser')
@@ -39,31 +98,20 @@ class RedditManager:
                     if "reddit.com/r/" in link:
                         if "uddg=" in link:
                             link = urllib.parse.unquote(link.split("uddg=")[1].split("&")[0])
-                        # التأكد من عدم وجود روابط مكررة
                         if not any(t['link'] == link for t in threads):
                             threads.append({"title": a.text.strip() or "Reddit Post", "link": link})
                     if len(threads) >= limit: break
         except Exception as e:
-            log(f"      ⚠️ DuckDuckGo search failed: {e}. Trying fallback.")
-        
-        # Fallback to Google RSS if DuckDuckGo fails or returns no results
-        if not threads:
-            try:
-                rss_url = f"https://news.google.com/rss/search?q=site%3Areddit.com+{urllib.parse.quote(keyword)}&hl=en-US&gl=US&ceid=US:en"
-                feed = feedparser.parse(rss_url)
-                for entry in feed.entries[:limit]:
-                    threads.append({"title": entry.title, "link": entry.link})
-            except Exception as e:
-                log(f"      ❌ Google RSS fallback also failed: {e}")
+            log(f"      ❌ DuckDuckGo search also failed: {e}")
             
-        return threads[:limit]
+        return threads
 
+    # باقي دوال الكلاس (extract_post_data, _extract_media, _extract_codes) تبقى كما هي بدون تغيير
     def extract_post_data(self, reddit_url):
         """
         Extracts deep data from a Reddit post: top comments, codes, and media.
         """
         try:
-            # Handle Google News redirect links
             if "news.google.com" in reddit_url:
                 r = self.session.head(reddit_url, allow_redirects=True, timeout=10)
                 reddit_url = r.url
@@ -101,9 +149,8 @@ class RedditManager:
                 
                 self._extract_codes(body, result["codes"])
 
-                # فلترة التعليقات القيمة فقط
                 if len(body) > 60 and c_data.get('score', 0) > 2:
-                    clean_body = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', body) # إزالة روابط الماركدوان
+                    clean_body = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', body)
                     result["insights"].append({
                         "author": c_data.get('author', 'user'),
                         "text": clean_body.strip(),
@@ -112,25 +159,21 @@ class RedditManager:
                     })
 
             result["insights"].sort(key=lambda x: x['score'], reverse=True)
-            result["insights"] = result["insights"][:5] # أخذ أفضل 5 تعليقات
+            result["insights"] = result["insights"][:5]
             
             return result
         except Exception:
-            # log(f"      ❌ Failed to parse Reddit URL: {reddit_url} - {e}")
             return None
 
     def _extract_media(self, post_data, media_list):
-        # Direct image/gif link
         if post_data.get('post_hint') == 'image' or post_data.get('url', '').endswith(('.jpg', '.png', '.jpeg', '.gif')):
             media_list.append({"type": "image", "url": post_data.get('url'), "caption": post_data.get('title')})
         
-        # Hosted video
         if post_data.get('is_video') and post_data.get('media', {}).get('reddit_video'):
             vid_url = post_data['media']['reddit_video'].get('fallback_url')
             if vid_url:
                 media_list.append({"type": "video", "url": vid_url, "caption": post_data.get('title')})
         
-        # Gallery
         if post_data.get('is_gallery') and 'media_metadata' in post_data:
             for item_data in post_data['media_metadata'].values():
                 if item_data.get('status') == 'valid':
@@ -140,13 +183,11 @@ class RedditManager:
 
     def _extract_codes(self, text, code_list):
         if not text: return
-        # Regex for markdown code blocks (```...```)
         matches = re.findall(r'```(?:[a-z]*\n)?(.*?)```', text, re.DOTALL)
         for m in matches:
             code = m.strip()
             if code and code not in code_list: code_list.append(code)
         
-        # Fallback for indented code blocks (4 spaces)
         lines = text.split('\n')
         current_block = []
         in_block = False
@@ -165,6 +206,7 @@ class RedditManager:
              if code and code not in code_list: code_list.append(code)
 
 
+# دالة get_community_intel تبقى كما هي
 def get_community_intel(keyword):
     """
     Main function to be called from the pipeline.
@@ -200,12 +242,11 @@ def get_community_intel(keyword):
                 report += f"- User u/{comment['author']} (Score: {comment['score']}): \"{comment['text'][:400]}\"\n"
         if post['codes']:
             report += "CODE SNIPPETS FOUND:\n"
-            for code in post['codes'][:1]: # أخذ أول كود فقط لتقليل الحجم
+            for code in post['codes'][:1]:
                 report += f"```\n{code[:500]}\n```\n"
         report += "\n"
         all_media.extend(post['media'])
 
-    # إزالة الوسائط المكررة
     unique_media = list({m['url']: m for m in all_media}.values())
 
     log(f"   ✅ Gathered intel from {len(all_data)} Reddit threads. Found {len(unique_media)} unique media items.")
