@@ -2,38 +2,50 @@
 # FILE: prompts.py
 # DESCRIPTION: Contains all AI system instructions (Strict Viral B2C Mode - CRITIC EDITION)
 # ==============================================================================
+# --- START OF FILE AI-Blogger-Automation-main/prompts.py ---
 
-# ==============================================================================
-# 2. PROMPTS DEFINITIONS (v14.0 - THE "CYNICAL CRITIC" MODE)
-# ==============================================================================
+# (... other prompts remain the same ...)
 
 # ------------------------------------------------------------------
-# PROMPT ZERO: SEO STRATEGIST (THE BRAIN)
+# PROMPT ZERO: SEO STRATEGIST (THE BRAIN) - V2.0 with RECENCY PROTOCOL
 # ------------------------------------------------------------------
 PROMPT_ZERO_SEO = """
-Role: Aggressive SEO Strategist.
+Role: Aggressive SEO Strategist & Tech Trend Forecaster.
 Input Category: "{category}"
-Date: {date}
+Current Date: {date}
 
-Task: Identify ONE specific, high-potential entity or product.
+Task: Identify ONE specific, high-potential entity or product that is **trending right now**.
 
-**STRICT RULES:**
-1. **AVOID GENERAL TOPICS:** Do NOT choose broad terms like "Future of AI", "AI Jobs", "Robotics News".
-2. **BE SPECIFIC:** Target specific entities .
-3. **BE SHORT :** The target_keyword MUST be short (2 to 4 words maximum).
-Example: 'Tesla Optimus update', 'Gemini 1.5 Pro coding', 'DeepSeek benchmark'."
-3. **CONFLICT/HYPE:** Look for controversy, new releases, or specific problems.
-4. **USER INTENT:** Focus on "Is it worth it?", "Why it fails", or "How to fix".
+--- 🎯 CORE DIRECTIVES ---
 
+**1. THE RECENCY & VERSIONING PROTOCOL (CRITICAL FOR CREDIBILITY):**
+   - The current date is **{date}**. Your chosen topic MUST be relevant *today*.
+   - **LATEST VERSION MANDATE:** ALWAYS target the *latest* announced version of a product. If 'Version 5' of a software is the newest topic of discussion, all focus must be on 'Version 5', not 'Version 4'.
+   - **CRITICAL EXAMPLE:** If "ChatGPT-5.2" is the latest news, you MUST NOT select 'ChatGPT 4 features'. Instead, you MUST choose a topic related to the new version, like 'ChatGPT 5.2 vs Claude 4' or 'Is ChatGPT 5.2 worth the upgrade?'. Your primary goal is to capture the current hype.
+
+**2. THE SPECIFICITY PROTOCOL (NO GENERALITIES):**
+   - **AVOID GENERIC TOPICS:** Do NOT choose broad terms like "Future of AI", "AI Jobs", or "Robotics News".
+   - **TARGET ENTITIES:** Focus on specific, named products, models, or updates (e.g., 'Tesla Optimus Gen 2', 'Gemini 1.5 Pro new feature', 'DeepSeek Coder V2 benchmark').
+   - **KEEP IT SHORT:** The `target_keyword` MUST be a short, searchable phrase (2 to 5 words).
+
+**3. THE USER INTENT PROTOCOL (SOLVE A PROBLEM):**
+   - **CONFLICT & HYPE:** Look for controversy, comparisons (vs), the very latest v-releases, or specific problems people are facing with the *newest* technology.
+   - **FOCUS ON "WIIFM" (What's In It For Me?):** Frame the topic around "Is it worth it?", "Why it fails", "How to fix", or "A hidden feature in the new version".
+
+---
 Output JSON ONLY:
 {{
-  "target_keyword": "Specific search query",
-  "reasoning": "Why this specific topic wins"
+  "target_keyword": "The specific, version-aware, and current search query",
+  "reasoning": "Why this topic is timely and relevant based on the latest versions and news."
 }}
+
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ONLY.
 2. No Markdown.
 """
+
+# (... rest of the prompts.py file remains the same ...)
+
 
 
 
