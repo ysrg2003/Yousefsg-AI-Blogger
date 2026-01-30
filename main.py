@@ -299,7 +299,7 @@ def resolve_and_scrape(target_url):
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(30)
+        driver.set_page_load_timeout(120)
         
         driver.get(target_url)
         
@@ -591,6 +591,7 @@ def run_pipeline(category, config):
     try:
         # Step B: Writer
         json_b = generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Writer", ["headline", "article_body"])
+        time.sleep(5)
         
         # --- NEW: Evidence Tag Replacement ---
         # The AI has placed the tags, now we replace them with the actual HTML
@@ -606,10 +607,10 @@ def run_pipeline(category, config):
         kg_links = get_relevant_kg_for_linking(category)
         input_c = {"draft_content": json_b, "sources_data": sources_list}
         json_c = generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(input_c), knowledge_graph=kg_links), "SEO", ["finalTitle", "finalContent", "imageGenPrompt"])
-        
+        time.sleep(5)
         # Step D: Humanizer
         json_d = generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), "Humanizer", ["finalTitle", "finalContent"])
-        
+        time.sleep(5)
         # Step E: Polish
         final = generate_step_strict(model_name, PROMPT_E_TEMPLATE.format(json_input=json.dumps(json_d)), "Final Polish", ["finalTitle", "finalContent", "imageGenPrompt", "seo"])
         
