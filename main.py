@@ -482,26 +482,84 @@ def run_pipeline(category, config):
                     if not main_headline: main_headline, main_link = title, url
         except Exception as e:
             log(f"      ❌ AI Search Error: {e}")
-
-    # Final Check
+    
+    # ... (الكود السابق: التحقق من المصادر) ...
     if not collected_sources:
         log("❌ FATAL: All search methods failed. Aborting pipeline.")
         return
 
-    # --- STEP 2: DRAFTING (The Strict Chain) ---
-    log(f"   ✍️ [Step 2] Drafting Content from {len(collected_sources)} sources...")
+    # =====================================================
+    # STEP 1.5: THE EXPERIENCE HUNTER (REAL USER DATA)
+    # =====================================================
+    log(f"   🗣️ [Step 1.5] Hunting for Real User Experiences (Reddit & Reviews)...")
+    
+    real_user_feedback = ""
+    
+    # 1. Reddit Intel (استخراج مشاكل وآراء حقيقية)
+    try:
+        import reddit_manager
+        # نبحث عن الكلمة المفتاحية + كلمات تدل على التجربة
+        reddit_text, reddit_media = reddit_manager.get_community_intel(target_keyword)
+        if reddit_text:
+            real_user_feedback += f"\n*** REAL REDDIT DISCUSSIONS ***\n{reddit_text}\n"
+            log("      ✅ Found Reddit discussions.")
+    except Exception as e:
+        log(f"      ⚠️ Reddit Hunt Error: {e}")
+
+    # 2. Review Specific Search (إذا لم نجد ما يكفي في ريديت)
+    # نبحث عن مقالات تحتوي على كلمات "Review" أو "Hands-on" لضمان وجود تجربة
+    if len(real_user_feedback) < 500:
+        log("      🕵️‍♂️ Reddit data low. Running targeted 'Review' search...")
+        try:
+            review_query = f"{target_keyword} review problems hands-on"
+            review_items = news_fetcher.get_real_news_rss(review_query, category)
+            
+            for item in review_items[:2]: # نأخذ مقالين فقط لتوفير الوقت
+                url, _, text = resolve_and_scrape(item['link'])
+                if text:
+                    real_user_feedback += f"\n*** EXTERNAL REVIEW ({item['title']}) ***\n{text[:3000]}\n"
+                    log(f"      ✅ Added External Review: {item['title'][:30]}")
+        except: pass
+
+    # =====================================================
+    # STEP 2: DRAFTING (THE STRICT CHAIN)
+    # =====================================================
+    log(f"   ✍️ [Step 2] Drafting Content from {len(collected_sources)} sources + User Data...")
     
     combined_text = "\n".join([f"SOURCE {i+1}: {s['domain']}\nTitle: {s['title']}\nTEXT:\n{s['text'][:8000]}" for i, s in enumerate(collected_sources)])
+    
+    # دمج بيانات المستخدمين مع البحث الأساسي
+    full_research_data = f"{combined_text}\n\n{real_user_feedback}"
+
     sources_list = [{"title": s['title'], "url": s['url']} for s in collected_sources]
     
     json_ctx = {
         "rss_headline": main_headline,
         "keyword_focus": target_keyword,
         "date": str(datetime.date.today()),
-        "style_guide": "Critical, First-Person, Beginner-Focused"
+        "style_guide": "Critical, First-Person, Beginner-Focused",
+        "has_real_experience_data": len(real_user_feedback) > 200 # مؤشر للكاتب
     }
-    payload = f"METADATA: {json.dumps(json_ctx)}\n\n*** RESEARCH DATA ***\n{combined_text}"
+    
+    # تعليمات الصدق الصارمة (The Honesty Protocol)
+    experience_prompt = """
+    *** MANDATORY SECTION: FIRST-HAND EXPERIENCED the tttttttttttt***
+    You MUST write a section titled 'My Experience' (or 'Hands-On Impressions').
+    
+    RULES FOR AUTHENTICITY:
+    1. **SOURCE OF TRUTH:** You MUST use the 'REAL REDDIT DISCUSSIONS' and 'EXTERNAL REVIEW' data provided below to write this section.
+    2. **SYNTHESIS OVER INVENTION:**5
+       - If the data says "users complain about battery life", you write: "In practical use, the battery drain is noticeable..."
+       - If the data says "setup is confusing", you write: "Setting this up was trickier than expected..."
+    3. **HONESTY PROTOCOL:**
+       - If you find specific bugs mentioned in the text, cite them as things you "encountered".
+       - **CRITICAL:** If absolutely NO user feedback/review data is found in the input, DO NOT invent a fake story. Instead, write a 'Technical Analysis' section based on the specs and clearly state: "While hands-on data is limited, the specs suggest..."
+    4. **TONE:** Personal, critical, and observant.
+    """
 
+    payload = f"METADATA: {json.dumps(json_ctx)}\n{experience_prompt}\n\n*** RESEARCH DATA ***\n{full_research_data}"
+
+    
     try:
         # Step B: Writer
         json_b = generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=payload, forbidden_phrases=str(FORBIDDEN_PHRASES)), "Writer", ["headline", "article_body"])
