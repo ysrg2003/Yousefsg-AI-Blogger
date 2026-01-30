@@ -232,6 +232,58 @@ def smart_media_hunt(target_keyword, category, directive):
     
     return all_media
 
+def get_google_image_candidates(query, limit=5):
+    """
+    يبحث في صور جوجل ويعيد قائمة بأفضل 5 صور مرشحة ليختار الذكاء الاصطناعي منها.
+    """
+    log(f"      👀 Scraper: Collecting candidates for '{query}'...")
+    
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
+    
+    driver = None
+    candidates = []
+    
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.set_page_load_timeout(30)
+        
+        # بحث عام في الصور (شامل يوتيوب وغيره)
+        search_url = f"https://www.google.com/search?tbm=isch&q={urllib.parse.quote(query)}"
+        driver.get(search_url)
+        time.sleep(3)
+        
+        images = driver.find_elements(By.CSS_SELECTOR, "img")
+        
+        for img in images:
+            if len(candidates) >= limit: break
+            
+            src = img.get_attribute('src')
+            if not src or not src.startswith('http'): continue
+            
+            # استبعاد الأيقونات والشعارات
+            if any(x in src for x in ['favicon', 'icon', 'logo', 'branding', 'nav', 'avatar']): continue
+            
+            # قبول الصور (خاصة gstatic لأنها سريعة التحميل للذكاء الاصطناعي)
+            if "encrypted-tbn" in src or "images?" in src or len(src) > 50:
+                candidates.append(src)
+        
+        log(f"      ✅ Collected {len(candidates)} candidates for AI analysis.")
+        return candidates
+
+    except Exception as e:
+        log(f"      ❌ Candidate Collection Failed: {e}")
+        return []
+    finally:
+        if driver: 
+            try: driver.quit()
+            except: pass
+
+            
 def resolve_and_scrape(google_url):
     """
     Resolves redirects (e.g. Google News links) and scrapes text + media.

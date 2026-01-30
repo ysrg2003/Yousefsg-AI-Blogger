@@ -1,6 +1,6 @@
 [
   {
-    "title": "OpenAI’s New Plan: Why the World’s Smartest AI Company Wants to Do Your Laundry",
+    "title": "OpenAI\u2019s New Plan: Why the World\u2019s Smartest AI Company Wants to Do Your Laundry",
     "url": "https://www.latestai.me/2026/01/openais-new-plan-why-worlds-smartest-ai.html",
     "section": "Future & Robotics",
     "date": "2026-01-25"
@@ -42,7 +42,7 @@
     "date": "2026-01-27"
   },
   {
-    "title": "Sora 2: OpenAI's Amazing Movie AI — Still Too Pricey & Slow for Pros?",
+    "title": "Sora 2: OpenAI's Amazing Movie AI \u2014 Still Too Pricey & Slow for Pros?",
     "url": "https://www.latestai.me/2026/01/sora-2-openais-amazing-movie-ai-still.html",
     "section": "AI Tools & Apps",
     "date": "2026-01-27"
@@ -90,7 +90,7 @@
     "date": "2026-01-27"
   },
   {
-    "title": "DeepSeek-R1: The Free AI That Challenges OpenAI’s Biggest Secret",
+    "title": "DeepSeek-R1: The Free AI That Challenges OpenAI\u2019s Biggest Secret",
     "url": "https://www.latestai.me/2026/01/deepseek-r1-free-ai-that-challenges.html",
     "section": "AI Tools & Apps",
     "date": "2026-01-28",
@@ -179,5 +179,42 @@
     "section": "Future & Robotics",
     "date": "2026-01-29",
     "post_id": "3240374785648917902"
+  },
+  {
+    "title": "ChatGPT-4o: Can You Really Make Money with AI? (Beginner's Guide)",
+    "url": "https://www.latestai.me/2026/01/chatgpt-4o-can-you-really-make-money.html",
+    "section": "AI Income & Hustles",
+    "date": "2026-01-29",
+    "post_id": "8873994259761797282"
+  },
+  {
+    "title": "Luma AI Dream Machine: Viral Short Generator or Just Hype? A Deep Dive",
+    "url": "https://www.latestai.me/2026/01/luma-ai-dream-machine-viral-short.html",
+    "section": "AI Video & Media",
+    "date": "2026-01-29",
+    "post_id": "726643471460844300"
+  },
+  {
+    "title": "Agility Robotics Digit: Warehouse Revolution or Overhyped Humanoid?",
+    "url": "https://www.latestai.me/2026/01/agility-robotics-digit-warehouse.html",
+    "section": "Future & Robotics",
+    "date": "2026-01-29",
+    "post_id": "3471731094755450880"
+  },
+  {
+    "title": "Pika Labs AI Video: Cinematic Dreams or Creative Compromise?",
+    "url": "https://www.latestai.me/2026/01/pika-labs-ai-video-cinematic-dreams-or.html",
+    "section": "AI Video & Media",
+    "date": "2026-01-30",
+    "post_id": "7640836594436233238"
+  },
+  {
+    "title": "ChatGPT for Side Hustles: Unmasking the 'Easy Money' Myth",
+    "url": [
+      "https://www.latestai.me/2026/01/chatgpt-for-side-hustles-unmasking-easy.html",
+      "4854557348464390194"
+    ],
+    "section": "AI Income & Hustles",
+    "date": "2026-01-30"
   }
 ]
