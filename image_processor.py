@@ -210,6 +210,72 @@ def process_source_image(source_url, overlay_text, filename_title):
         safe_name = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50] + ".jpg"
         return upload_to_github_cdn(img_byte_arr, safe_name)
     except: return None
+
+def select_best_image_with_gemini(model_name, context_description, images_urls):
+    """
+    ينزل الصور مؤقتاً ويرسلها لـ Gemini ليختار الأفضل بناءً على السياق.
+    """
+    if not images_urls: return None
+    
+    log(f"      🧠 AI Vision: Analyzing {len(images_urls)} images for context: '{context_description}'...")
+    
+    valid_images = []
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    # 1. تحميل الصور (في الذاكرة فقط)
+    for url in images_urls:
+        try:
+            r = requests.get(url, headers=headers, timeout=5)
+            if r.status_code == 200:
+                # نتأكد أنها صورة صالحة
+                Image.open(BytesIO(r.content)) 
+                valid_images.append({
+                    "mime_type": "image/jpeg", 
+                    "data": r.content, 
+                    "url": url
+                })
+        except: pass
+        
+    if not valid_images: return None
+    if len(valid_images) == 1: return valid_images[0]['url']
+
+    # 2. سؤال Gemini
+    prompt = f"""
+    TASK: You are a Photo Editor.
+    CONTEXT: I need an image that best represents: "{context_description}".
+    
+    INSTRUCTIONS:
+    - Look at the provided images.
+    - Select the one that is clearest, most relevant, and high quality.
+    - Avoid images that are just text, logos, or blurry.
+    - Return ONLY the index number (0, 1, 2, etc.) of the best image.
+    """
+    
+    try:
+        key = key_manager.get_current_key()
+        client = genai.Client(api_key=key)
+        
+        inputs = [prompt]
+        # إرفاق الصور بالطلب
+        for img in valid_images: 
+            inputs.append(types.Part.from_bytes(data=img['data'], mime_type="image/jpeg"))
+        
+        # نستخدم موديل قوي للرؤية
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=inputs)
+        
+        # استخراج الرقم
+        match = re.search(r'\d+', response.text)
+        if match:
+            idx = int(match.group())
+            if 0 <= idx < len(valid_images):
+                log(f"      🌟 AI Selected Image #{idx}")
+                return valid_images[idx]['url']
+    except Exception as e:
+        log(f"      ⚠️ AI Selection Failed: {e}. Defaulting to first image.")
+    
+    # في حال الفشل، نعود للأولى
+    return valid_images[0]['url']
+    
 def select_best_images_batch(model_name, batch_data):
     """
     يعالج دفعة كاملة من الصور لعدة فقرات في طلب واحد للذكاء الاصطناعي.
