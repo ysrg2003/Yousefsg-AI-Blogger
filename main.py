@@ -72,6 +72,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             except Exception as e: return False
         if not target_keyword: return False
 
+        smart_query = ai_strategy.generate_smart_query(target_keyword)
+
+
         # ======================================================================
         # 2. SEMANTIC GUARD (ANTI-DUPLICATION)
         # ======================================================================
