@@ -290,12 +290,22 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # --- Continue Pipeline ---
         sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
         kg_links = history_manager.get_relevant_kg_for_linking(json_b['headline'], category)
+
+        json_c = api_manager.generate_step_strict(
+        model_name, 
+        PROMPT_C_TEMPLATE.format(json_input=json.dumps({"draft_content": json_b, "sources_data": sources_data}), knowledge_graph=kg_links), "SEO", ["finalTitle", "finalContent", "imageGenPrompt", "imageOverlayText", "seo", "schemaMarkup"]) 
         
-        json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps({"draft_content": json_b, "sources_data": sources_data}), knowledge_graph=kg_links), "SEO", ["finalTitle", "finalContent"])
-        final_article = api_manager.generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(json_input=json.dumps(json_c)), "Humanizer", ["finalTitle", "finalContent"])
-        
+                
+        # --- Humanizer Stage (THE FIX IS HERE) ---
+        # 1. استخلص فقط المحتوى النصي من المرحلة السابقة.
+        content_to_humanize = json_c['finalContent']
+
+        # 2. قم بتمرير المحتوى النظيف فقط إلى Humanizer.
+        final_article_content_only = api_manager.generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(content_input=content_to_humanize),"Humanizer", ["finalContent"])
+        final_article = {"finalTitle": json_c['finalTitle'], "finalContent": final_article_content_only['finalContent'], "imageGenPrompt": json_c['imageGenPrompt'], "imageOverlayText": json_c['imageOverlayText'], "seo": json_c['seo'], "schemaMarkup": json_c['schemaMarkup']}
         title, full_body_html = final_article['finalTitle'], final_article['finalContent']
 
+            
         log("   🎨 Generating Assets...")
         img_url = image_processor.generate_and_upload_image(final_article.get('imageGenPrompt', title))
         
