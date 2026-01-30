@@ -1,8 +1,7 @@
 # FILE: main.py
-# ROLE: Orchestrator V15.0 (The Absolute Unit)
-# DESCRIPTION: Full integration of Selenium-First Search, Tenacity AI Engine, 
+# ROLE: Orchestrator V16.0 (GitHub Models Edition)
+# DESCRIPTION: Full integration of Selenium-First Search, OpenAI/GitHub Models, 
 #              Multimedia Production, and Multi-Platform Publishing.
-#              NO SHORTCUTS. NO SIMPLIFICATIONS.
 
 import os
 import json
@@ -15,32 +14,19 @@ import datetime
 import urllib.parse
 import logging
 import traceback
-import ast
 
 # --- External Libraries ---
 import feedparser
 from bs4 import BeautifulSoup
 import trafilatura
-import json_repair
-import regex
-from tenacity import (
-    retry, 
-    stop_after_attempt, 
-    wait_exponential, 
-    retry_if_exception_type, 
-    before_sleep_log
-)
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
-from google import genai
-from google.genai import types
 
 # --- Selenium & Webdriver ---
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
 
 # --- Project Modules ---
 import config
@@ -52,15 +38,13 @@ import publisher
 import news_fetcher
 import ai_researcher
 import reddit_manager
+# Import the generator from the new api_manager
+from api_manager import generate_step_strict, key_manager 
 from prompts import *
 
 # ==============================================================================
 # 0. CONFIGURATION & CONSTANTS
 # ==============================================================================
-
-# Logger for Tenacity
-logger = logging.getLogger("RetryEngine")
-logger.setLevel(logging.INFO)
 
 FORBIDDEN_PHRASES = [
     "In today's digital age", "The world of AI is ever-evolving", "unveils", "unveiled",
@@ -76,7 +60,7 @@ BORING_KEYWORDS = [
     "Executive", "Knorex", "Partner", "Agreement", "B2B", "Enterprise"
 ]
 
-# Full CSS Style (Unabridged)
+# Full CSS Style
 ARTICLE_STYLE = """
 <style>
     .post-body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.8; color: #333; font-size: 18px; max-width: 100%; overflow-x: hidden; }
@@ -105,143 +89,7 @@ ARTICLE_STYLE = """
 """
 
 # ==============================================================================
-# 1. KEY MANAGER (ROTATION SYSTEM)
-# ==============================================================================
-
-class KeyManager:
-    def __init__(self):
-        self.keys = []
-        # Load keys from Environment Variables (1 to 10)
-        for i in range(1, 11):
-            k = os.getenv(f'GEMINI_API_KEY_{i}')
-            if k: self.keys.append(k)
-        # Fallback to single key
-        if not self.keys:
-            k = os.getenv('GEMINI_API_KEY')
-            if k: self.keys.append(k)
-        self.current_index = 0
-        log(f"🔑 Loaded {len(self.keys)} Gemini API Keys.")
-
-    def get_current_key(self):
-        if not self.keys: return None
-        return self.keys[self.current_index]
-
-    def switch_key(self):
-        if self.current_index < len(self.keys) - 1:
-            self.current_index += 1
-            log(f"   🔄 Switching to Gemini Key #{self.current_index + 1}...")
-            return True
-        log("   ❌ ALL GEMINI KEYS EXHAUSTED.")
-        return False
-
-key_manager = KeyManager()
-
-# ==============================================================================
-# 2. ROBUST AI ENGINE (TENACITY + JSON REPAIR)
-# ==============================================================================
-
-class JSONValidationError(Exception): pass
-class JSONParsingError(Exception): pass
-
-STRICT_SYSTEM_PROMPT = """
-You are an assistant that MUST return ONLY the exact output requested. 
-No explanations, no headings, no extra text, no apologies. 
-Output exactly and only what the user asked for. 
-If the user requests JSON, return PURE JSON. 
-Obey safety policy.
-"""
-
-def master_json_parser(text):
-    """Robust JSON extraction using Regex and json_repair."""
-    if not text: return None
-    
-    # 1. Regex Extraction
-    match = regex.search(r'\{(?:[^{}]|(?R))*\}|\[(?:[^\[\]]|(?R))*\]', text, regex.DOTALL)
-    candidate = match.group(0) if match else text
-    
-    # 2. json_repair (Primary)
-    try:
-        decoded = json_repair.repair_json(candidate, return_objects=True)
-        if isinstance(decoded, (dict, list)): return decoded
-    except: pass
-
-    # 3. Standard Load (Fallback)
-    try:
-        clean = candidate.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean)
-    except: return None
-
-def validate_structure(data, required_keys):
-    if not isinstance(data, dict):
-        raise JSONValidationError(f"Expected Dictionary, got {type(data)}")
-    missing = [k for k in required_keys if k not in data]
-    if missing:
-        raise JSONValidationError(f"Missing keys: {missing}")
-    return True
-
-@retry(
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=1, min=4, max=15),
-    retry=retry_if_exception_type((JSONParsingError, JSONValidationError, Exception)),
-    before_sleep=before_sleep_log(logger, logging.WARNING)
-)
-def generate_step_strict(model_name, prompt, step_name, required_keys=[]):
-    """
-    The Unstoppable Generator: Handles Retries, Key Rotation, and Self-Repair.
-    """
-    log(f"   🧠 [AI Engine] Executing: {step_name}...")
-    
-    key = key_manager.get_current_key()
-    if not key: raise RuntimeError("FATAL: All API Keys exhausted.")
-    
-    client = genai.Client(api_key=key)
-    
-    try:
-        config_gen = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            system_instruction=STRICT_SYSTEM_PROMPT,
-            temperature=0.3,
-            top_p=0.8
-        )
-
-        response = client.models.generate_content(
-            model=model_name, 
-            contents=prompt, 
-            config=config_gen
-        )
-        
-        parsed_data = master_json_parser(response.text)
-        
-        # AI Self-Repair Logic
-        if not parsed_data:
-            log(f"      🔧 Repairing broken JSON for {step_name}...")
-            repair_prompt = f"Fix this broken JSON (Return ONLY valid JSON):\n{response.text[:10000]}"
-            repair_resp = client.models.generate_content(
-                model="gemini-2.5-flash", 
-                contents=repair_prompt,
-                config=config_gen
-            )
-            parsed_data = master_json_parser(repair_resp.text)
-            
-            if not parsed_data:
-                raise JSONParsingError(f"Failed to parse JSON for {step_name}")
-
-        if required_keys:
-            validate_structure(parsed_data, required_keys)
-            
-        return parsed_data
-
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "429" in error_msg or "quota" in error_msg:
-            log("      ⚠️ Quota Hit. Rotating Key...")
-            if key_manager.switch_key(): raise e 
-            else: raise RuntimeError("FATAL: Keys exhausted.")
-        log(f"      ❌ Error in {step_name}: {str(e)[:100]}")
-        raise e
-
-# ==============================================================================
-# 3. KNOWLEDGE GRAPH & MEMORY
+# 1. KNOWLEDGE GRAPH & MEMORY
 # ==============================================================================
 
 def load_kg():
@@ -280,7 +128,7 @@ def perform_maintenance_cleanup():
     except: pass
 
 # ==============================================================================
-# 4. ADVANCED SCRAPING (SELENIUM + TRAFILATURA)
+# 2. ADVANCED SCRAPING (SELENIUM + TRAFILATURA)
 # ==============================================================================
 
 def resolve_and_scrape(target_url):
@@ -343,7 +191,7 @@ def resolve_and_scrape(target_url):
         if driver: driver.quit()
 
 # ==============================================================================
-# 5. IMAGE GENERATION
+# 3. IMAGE GENERATION
 # ==============================================================================
 
 def generate_and_upload_image(prompt_text, overlay_text=""):
@@ -393,7 +241,7 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
     return None
 
 # ==============================================================================
-# 6. MASTER PIPELINE (THE ORCHESTRATOR)
+# 4. MASTER PIPELINE (THE ORCHESTRATOR)
 # ==============================================================================
 
 def run_pipeline(category, config):
@@ -401,7 +249,7 @@ def run_pipeline(category, config):
     Executes the full content lifecycle:
     Strategy -> Search (Selenium > GNews > AI) -> Draft -> Multimedia -> Publish -> Distribute.
     """
-    model_name = config['settings'].get('model_name')
+    model_name = config['settings'].get('model_name', 'gpt-4o')
     cat_conf = config['categories'][category]
     
     log(f"\n🚀 STARTING PIPELINE: {category}")
@@ -427,10 +275,8 @@ def run_pipeline(category, config):
     # 1.1: RSS Discovery
     rss_items = []
     try:
-        # Try specific query first
         rss_items = news_fetcher.get_real_news_rss(f"{target_keyword} when:3d", category)
         if not rss_items:
-            # Fallback to broad category
             rss_items = news_fetcher.get_real_news_rss(f"{category} news when:1d", category)
     except: pass
 
@@ -456,7 +302,6 @@ def run_pipeline(category, config):
             gnews_items = news_fetcher.get_gnews_api_sources(target_keyword, category)
             for item in gnews_items:
                 if len(collected_sources) >= 3: break
-                # Check duplication
                 if any(s['url'] == item['link'] for s in collected_sources): continue
                 
                 url, title, text = resolve_and_scrape(item['link'])
@@ -467,9 +312,9 @@ def run_pipeline(category, config):
         except Exception as e:
             log(f"      ❌ GNews Error: {e}")
 
-    # 1.4: AI Researcher / Google Search Fallback (Tertiary)
+    # 1.4: AI Researcher (Tertiary)
     if len(collected_sources) < 3:
-        log("      ⚠️ GNews yielded low results. Activating AI Deep Search (Google Grounding)...")
+        log("      ⚠️ GNews yielded low results. Activating AI Deep Search...")
         try:
             ai_results = ai_researcher.smart_hunt(target_keyword, config, mode="general")
             for item in ai_results:
@@ -484,73 +329,43 @@ def run_pipeline(category, config):
         except Exception as e:
             log(f"      ❌ AI Search Error: {e}")
 
-
-
-    
-    
-    # ... (الكود السابق)
     # Final Check
     if not collected_sources:
         log("❌ FATAL: All search methods failed. Aborting pipeline.")
         return
 
     # --- STEP 1.25: TOPIC REALIGNMENT ---
-    # يضمن أننا نبحث في Reddit عن الموضوع الذي وجدنا له مصادر فعلاً
     try:
         headlines = [f"- {s['title']}" for s in collected_sources]
         headlines_str = "\n".join(headlines)
         
-        # إذا كان الموضوع الرئيسي مختلفاً عن الكلمة المفتاحية الأصلية، نطلب إعادة توجيه
-        first_headline = headlines[0] if headlines else ""
-        if target_keyword.lower() not in first_headline.lower():
-            log(f"   🎯 [Step 1.25] Realigning topic from '{target_keyword}' based on found articles...")
-            
-            realign_prompt = PROMPT_REALIGN_TOPIC.format(
-                original_keyword=target_keyword,
-                headlines_list=headlines_str
-            )
-            
-            realign_result = generate_step_strict(
-                "gemini-2.5-flash",  # نستخدم موديل سريع لهذه المهمة
-                realign_prompt,
-                "Topic Realignment",
-                ["realigned_keyword"]
-            )
-            
+        if target_keyword.lower() not in headlines[0].lower():
+            log(f"   🎯 [Step 1.25] Realigning topic from '{target_keyword}'...")
+            realign_prompt = PROMPT_REALIGN_TOPIC.format(original_keyword=target_keyword, headlines_list=headlines_str)
+            realign_result = generate_step_strict(model_name, realign_prompt, "Topic Realignment", ["realigned_keyword"])
             new_keyword = realign_result.get('realigned_keyword')
-            
             if new_keyword:
                 log(f"      ✅ New Aligned Keyword: '{new_keyword}'")
-                target_keyword = new_keyword # <-- أهم سطر: نقوم بتحديث المتغير
-            else:
-                 log(f"      ⚠️ Realignment failed. Sticking with original keyword.")
+                target_keyword = new_keyword
     except Exception as e:
-        log(f"      ⚠️ Topic Realignment failed: {e}. Using original keyword for subsequent steps.")
+        log(f"      ⚠️ Topic Realignment failed: {e}")
 
-
-    # --- STEP 1.5: REDDIT INTEL (Injecting Human Experience) ---
-    # ... (باقي الكود)
-    # --- STEP 1.5: REDDIT INTEL (Injecting Human Experience) ---
+    # --- STEP 1.5: REDDIT INTEL ---
     log(f"   🧠 [Step 1.5] Gathering Human Intelligence from Reddit...")
     reddit_intel_report, reddit_media = "", []
     try:
-        # نستدعي الوحدة الجديدة باستخدام الكلمة المفتاحية المستهدفة
         reddit_intel_report, reddit_media = reddit_manager.get_community_intel(target_keyword)
         if not reddit_intel_report:
-            log("      - No significant Reddit intel found. Proceeding with news sources only.")
+            log("      - No significant Reddit intel found.")
     except Exception as e:
         log(f"      ⚠️ Reddit Intel module failed: {e}")
 
-
-    # --- STEP 2: DRAFTING (The Strict Chain) ---
+    # --- STEP 2: DRAFTING ---
     log(f"   ✍️ [Step 2] Drafting Content from {len(collected_sources)} sources...")
 
-    # تعديل: ندمج تقرير Reddit مع البيانات التي ستُرسل للكاتب
     source_texts = "\n".join([f"SOURCE {i+1}: {s['domain']}\nTitle: {s['title']}\nTEXT:\n{s['text'][:8000]}" for i, s in enumerate(collected_sources)])
     combined_text = f"{reddit_intel_report}\n\n*** OFFICIAL NEWS SOURCES ***\n{source_texts}"
-
     sources_list = [{"title": s['title'], "url": s['url']} for s in collected_sources]
-
     
     json_ctx = {
         "rss_headline": main_headline,
@@ -588,11 +403,6 @@ def run_pipeline(category, config):
 
     # --- STEP 3: MULTIMEDIA ---
     log("   🎬 [Step 3] Generating Multimedia Assets...")
-    
-    # Inject Reddit Media into available visuals if needed
-    if reddit_media:
-        log(f"      📸 Found {len(reddit_media)} Reddit visual assets to consider.")
-        # We could potentially use these URLs in the article or for video generation
     
     yt_meta = {}
     vid_main, vid_short = None, None
@@ -646,7 +456,6 @@ def run_pipeline(category, config):
     # --- STEP 4: PUBLISHING ---
     log("   🚀 [Step 4] Publishing to Blogger...")
     
-    # Author Box
     author_box = """
     <div style="margin-top:40px; padding:25px; background:#f4f6f8; border-radius:12px; display:flex; align-items:center; border:1px solid #e1e4e8;">
         <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791" 
@@ -661,12 +470,10 @@ def run_pipeline(category, config):
     </div>
     """
     
-    # Sanitize Links
     content_html = content_html.replace('href=\\"', 'href="').replace('\\">', '">')
     content_html = content_html.replace('href=""', 'href="').replace('"" target', '" target')
     content_html = re.sub(r'href=["\']\\?["\']?(http[^"\']+)\\?["\']?["\']', r'href="\1"', content_html)
 
-    # Assemble Body
     full_body = ARTICLE_STYLE
     if img_url:
         alt = seo_data.get("imageAltText", title)
@@ -679,19 +486,17 @@ def run_pipeline(category, config):
         try: full_body += f'\n<script type="application/ld+json">\n{json.dumps(final["schemaMarkup"])}\n</script>'
         except: pass
 
-    published_url = publisher.publish_post(title, full_body, [category, "Tech News", "Explainers"])
+    published_url, post_id = publisher.publish_post(title, full_body, [category, "Tech News", "Explainers"])
 
     # --- STEP 5: DISTRIBUTION ---
     if published_url:
         log(f"✅ PUBLISHED: {published_url}")
         update_kg(title, published_url, category)
         
-        # Update YouTube Desc
         new_desc = f"{yt_meta.get('description','')}\n\n👇 READ THE FULL ARTICLE HERE:\n{published_url}\n\n#AI #TechNews"
         if vid_main: youtube_manager.update_video_description(vid_main, new_desc)
         if vid_short: youtube_manager.update_video_description(vid_short, new_desc)
         
-        # Facebook
         try:
             log("   📢 Distributing to Facebook...")
             if fb_path and os.path.exists(fb_path):
@@ -714,13 +519,8 @@ def main():
         log("❌ No Config Found.")
         return
     
-    # Pick a random category
     cat = random.choice(list(cfg['categories'].keys()))
-    
-    # Run
     run_pipeline(cat, cfg)
-    
-    # Cleanup
     perform_maintenance_cleanup()
     log("✅ Mission Complete.")
 
