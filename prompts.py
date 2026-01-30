@@ -340,9 +340,9 @@ Output JSON ONLY (Must contain these specific keys):
 # ------------------------------------------------------------------
 PROMPT_D_TEMPLATE = """
 PROMPT D — The "Beginner-Friendly" Filter
-Input JSON: {json_input}
+Input Article Content (HTML): {content_input}
 
-**MISSION:** Translate "Tech Speak" into "Human Speak".
+**MISSION:** Your ONLY job is to rewrite the provided HTML content to be more human-friendly and easier for beginners to read. Translate "Tech Speak" into "Human Speak".
 
 **RULES:**
 1. **The "Grandma Test":** If a sentence is too complex for a non-techie, rewrite it. 
@@ -367,25 +367,25 @@ Input JSON: {json_input}
    - We need to maintain the article length. Only delete if it is strictly a boring stock market prediction table.
    - Ensure the tone feels like a conversation, not a lecture.
 5. **Formatting:** Ensure the `takeaways-box`, `toc-box` and `Sources` classes are preserved.
-6**THE "WHO CARES?" TEST:**
-Scan every paragraph. If a paragraph talks about "Knorex" or a specific company's internal strategy, DELETE IT or REWRITE IT to answer: "How does this affect a student or a freelancer?".
-- Change "Knorex CFO argues that..." to -> "Experts are warning that..." (Remove the obscure company name).
+6. **Preserve Structure:** You MUST keep all existing HTML tags, divs, and class names (like `takeaways-box`, `toc-box`, `Sources`, etc.) intact. Do NOT change the HTML structure, only the text within the tags.
+7. **THE "WHO CARES?" TEST:**
+   - Scan every paragraph. If a paragraph talks about "Knorex" or a specific company's internal strategy, DELETE IT or REWRITE IT to answer: "How does this affect a student or a freelancer?".
+   - Change "Knorex CFO argues that..." to -> "Experts are warning that..." (Remove the obscure company name).
 
-**OUTPUT JSON STRUCTURE (Do not change keys):**
+**CRITICAL TASK:**
+- Focus ONLY on improving the text.
+- Do NOT add new sections.
+- Do NOT change the title or any other metadata.
+
+**OUTPUT JSON STRUCTURE (Must contain ONLY this key):**
 {{
-  "finalTitle": "...", 
-  "finalContent": "...", 
-  "imageGenPrompt": "...", 
-  "imageOverlayText": "...", 
-  "seo": {{...}}, 
-  "schemaMarkup":{{...}}
+  "finalContent": "The rewritten, humanized, and easy-to-read full HTML content."
 }}
 
 **CRITICAL OUTPUT RULES:**
 1. Return PURE VALID JSON ONLY.
 2. Maintain valid HTML escaping.
 3. No Markdown.
-4. Ensure that all HTML attributes utilize escaped double quotes (e.g. class=\"classname\") and avoid unescaped newlines inside JSON values.
 """
 
 # ------------------------------------------------------------------
