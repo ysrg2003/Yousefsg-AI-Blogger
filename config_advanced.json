@@ -15,9 +15,9 @@
   },
   "settings": {
     "date_range_query": "when:2d",
-    "model_name": "gpt-4o",          // للمقال الرئيسي
-    "fast_model": "gpt-4o-mini",     // للمهام السريعة (تحتاج تعديل الكود لاستخدامه)
-    "reasoning_model": "gpt-4o"      // للمنطق المعقد
+    "model_name": "gpt-4o",          
+    "fast_model": "gpt-4o-mini",     
+    "reasoning_model": "gpt-4o"      
     "adsense_optimization": true
   }
 }
