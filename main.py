@@ -46,8 +46,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     # ### NEW: CENTRALIZED SMART QUERY GENERATION ###
     # ======================================================================
 
-    smart_query = ai_strategy.generate_smart_query(target_keyword)
-        
+            
 
     
     """
