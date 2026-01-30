@@ -54,6 +54,7 @@ jobs:
           YOUTUBE_CREDENTIALS_JSON: ${{ secrets.YOUTUBE_CREDENTIALS_JSON }}
           GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }} 
           GOOGLE_INDEXING_JSON: ${{ secrets.GOOGLE_INDEXING_JSON }}
+          GH_MODELS_TOKEN: ${{ secrets.GH_MODELS_TOKEN }}
         run: python -u main.py
 
       # 2. تغيير التوقيت عشوائياً للغد
