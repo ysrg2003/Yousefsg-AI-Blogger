@@ -232,55 +232,57 @@ def smart_media_hunt(target_keyword, category, directive):
     
     return all_media
 
-def get_google_image_fallback(query):
+def get_google_image_candidates(query, limit=5):
     """
-    يبحث في صور جوجل عن بديل عند فشل المصدر الأصلي.
+    يبحث في صور جوجل ويعيد قائمة بأفضل 5 صور مرشحة ليختار الذكاء الاصطناعي منها.
     """
-    log(f"      🆘 Fallback Hunt: Searching Google Images for '{query}'...")
+    log(f"      👀 Scraper: Collecting candidates for '{query}'...")
     
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
     
     driver = None
+    candidates = []
+    
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.set_page_load_timeout(30)
         
-        # البحث في صور جوجل
+        # بحث عام في الصور (شامل يوتيوب وغيره)
         search_url = f"https://www.google.com/search?tbm=isch&q={urllib.parse.quote(query)}"
         driver.get(search_url)
-        time.sleep(2) # انتظار التحميل
+        time.sleep(3)
         
-        # محاولة العثور على صور حقيقية (نتجاهل الصور الصغيرة جداً أو الأيقونات)
         images = driver.find_elements(By.CSS_SELECTOR, "img")
         
         for img in images:
-            src = img.get_attribute('src')
+            if len(candidates) >= limit: break
             
-            # شروط قبول الصورة البديلة
-            if src and src.startswith('http') and not any(x in src for x in ['favicon', 'icon', 'logo']):
-                # غالباً صور جوجل في البحث تكون Base64 أو روابط مشفرة، لكننا سنقبل أول رابط http صالح
-                # لضمان الجودة، نحاول تخطي أول صورتين (غالباً إعلانات)
-                if "google" not in src and "gstatic" not in src: 
-                    log(f"      ✅ Found alternative image: {src[:30]}...")
-                    return src
-        
-        # إذا لم نجد سوى صور جوجل المشفرة، نأخذ أي واحدة (أفضل من لا شيء)
-        for img in images:
             src = img.get_attribute('src')
-            if src and src.startswith('http'):
-                return src
-                
-        return None
+            if not src or not src.startswith('http'): continue
+            
+            # استبعاد الأيقونات والشعارات
+            if any(x in src for x in ['favicon', 'icon', 'logo', 'branding', 'nav', 'avatar']): continue
+            
+            # قبول الصور (خاصة gstatic لأنها سريعة التحميل للذكاء الاصطناعي)
+            if "encrypted-tbn" in src or "images?" in src or len(src) > 50:
+                candidates.append(src)
+        
+        log(f"      ✅ Collected {len(candidates)} candidates for AI analysis.")
+        return candidates
 
     except Exception as e:
-        log(f"      ❌ Fallback Hunt Failed: {e}")
-        return None
+        log(f"      ❌ Candidate Collection Failed: {e}")
+        return []
     finally:
-        if driver: driver.quit()
+        if driver: 
+            try: driver.quit()
+            except: pass
+
             
 def resolve_and_scrape(google_url):
     """
