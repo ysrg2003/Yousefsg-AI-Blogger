@@ -485,26 +485,31 @@ def run_pipeline(category, config):
             log(f"      ❌ AI Search Error: {e}")
 
     # Final Check
-    if not collected_sources:
-        log("❌ FATAL: All search methods failed. Aborting pipeline.")
-        return
+if not collected_sources:
+    log("❌ FATAL: All search methods failed. Aborting pipeline.")
+    return
 
-    # --- STEP 1.5: REDDIT COMMUNITY INTEL ---
-    log(f"   🕵️‍♂️ [Step 1.5] Mining Reddit Community Intel for: '{target_keyword}'")
-    reddit_report, reddit_media = "", []
-    try:
-        reddit_report, reddit_media = reddit_manager.get_community_intel(target_keyword)
-    except Exception as e:
-        log(f"      ⚠️ Reddit Intel failed: {e}")
+# --- STEP 1.5: REDDIT INTEL (Injecting Human Experience) ---
+log(f"   🧠 [Step 1.5] Gathering Human Intelligence from Reddit...")
+reddit_intel_report, reddit_media = "", []
+try:
+    # نستدعي الوحدة الجديدة باستخدام الكلمة المفتاحية المستهدفة
+    reddit_intel_report, reddit_media = reddit_manager.get_community_intel(target_keyword)
+    if not reddit_intel_report:
+        log("      - No significant Reddit intel found. Proceeding with news sources only.")
+except Exception as e:
+    log(f"      ⚠️ Reddit Intel module failed: {e}")
 
-    # --- STEP 2: DRAFTING (The Strict Chain) ---
-    log(f"   ✍️ [Step 2] Drafting Content from {len(collected_sources)} sources...")
-    
-    combined_text = "\n".join([f"SOURCE {i+1}: {s['domain']}\nTitle: {s['title']}\nTEXT:\n{s['text'][:8000]}" for i, s in enumerate(collected_sources)])
-    if reddit_report:
-        combined_text += f"\n\n{reddit_report}"
-        
-    sources_list = [{"title": s['title'], "url": s['url']} for s in collected_sources]
+
+# --- STEP 2: DRAFTING (The Strict Chain) ---
+log(f"   ✍️ [Step 2] Drafting Content from {len(collected_sources)} sources...")
+
+# تعديل: ندمج تقرير Reddit مع البيانات التي ستُرسل للكاتب
+source_texts = "\n".join([f"SOURCE {i+1}: {s['domain']}\nTitle: {s['title']}\nTEXT:\n{s['text'][:8000]}" for i, s in enumerate(collected_sources)])
+combined_text = f"{reddit_intel_report}\n\n*** OFFICIAL NEWS SOURCES ***\n{source_texts}"
+
+sources_list = [{"title": s['title'], "url": s['url']} for s in collected_sources]
+
     
     json_ctx = {
         "rss_headline": main_headline,
