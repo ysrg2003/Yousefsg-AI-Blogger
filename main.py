@@ -13,6 +13,8 @@ import sys
 import datetime
 import urllib.parse
 import traceback
+import trafilatura
+from bs4 import BeautifulSoup
 import re
 
 # --- Core Configurations & Modules ---
@@ -28,6 +30,7 @@ import reddit_manager
 import social_manager
 import video_renderer
 import youtube_manager
+import url_resolver
 from prompts import *
 import cluster_manager
 import indexer
@@ -40,7 +43,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     """
     Executes the full content lifecycle using a robust, multi-layered Gemini-powered strategy.
     """
-    model_name = config['settings'].get('model_name', "gemini-1.5-pro-latest") # Use a powerful model for writing
+    model_name = config['settings'].get('model_name', "gemini-2.5-flash") # Use a powerful model for writing
     
     try:
         # ======================================================================
@@ -77,64 +80,130 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             visual_strategy = strategy_decision.get("visual_strategy", "generate_comparison_table")
         except: visual_strategy = "generate_comparison_table"
 
+        
+        
         # ======================================================================
-        # 4. OMNI-HUNT (V9.2 - MULTI-LAYERED & FAIL-PROOF)
+        # 4. OMNI-HUNT (HYBRID: STRICT PRIMARY -> LEGACY FALLBACK)
         # ======================================================================
-        log("   🕵️‍♂️ Starting Omni-Hunt (Strict: 3+ Sources)...")
+        log("   🕵️‍♂️ Starting Omni-Hunt (Strict Primary -> Legacy Fallback)...")
         collected_sources = []
         
-        # --- Layer 1: AI Smart Search (General News & Reviews) ---
+        # --- [A] PRIMARY MECHANISM: STRICT GOOGLE NEWS RESOLVER ---
         try:
-            ai_results = ai_researcher.smart_hunt(target_keyword, config, mode="general")
-            if ai_results:
-                vetted = news_fetcher.ai_vet_sources(ai_results, model_name)
-                for item in vetted:
-                    if len(collected_sources) >= 3: break
-                    f_url, f_title, text, f_image, media = scraper.resolve_and_scrape(item['link'])
-                    if text: collected_sources.append({"title": f_title or item['title'], "url": f_url, "text": text, "source_image": f_image, "domain": urllib.parse.urlparse(f_url).netloc, "media": media})
-        except Exception as e: log(f"   ⚠️ AI Search (General) Error: {e}")
+            log("   🚀 Executing Primary Mechanism (Strict RSS + Selenium Resolver)...")
+            
+            # استدعاء دالة البحث الصارمة الجديدة من news_fetcher
+            rss_items = news_fetcher.get_strict_rss(target_keyword, category)
+            
+            if rss_items:
+                # قائمة الكلمات المملة (كما وردت في الكود الصارم)
+                BORING_KEYWORDS_STRICT = [
+                    "CFO", "CEO", "Quarterly", "Earnings", "Report", "Market Cap", 
+                    "Dividend", "Shareholders", "Acquisition", "Merger", "Appointment", 
+                    "Executive", "Knorex", "Partner", "Agreement", "B2B", "Enterprise"
+                ]
+                
+                recent_titles = history_manager.get_recent_titles_string() # لتجنب التكرار
 
-        # --- Layer 2: AI Authority Search (Official Docs/GitHub) ---
+                for item in rss_items[:6]: # المرحلة 5: التكرار
+                    if len(collected_sources) >= 3: break
+                    
+                    if item['title'][:20] in recent_titles: continue
+                    
+                    # الفلتر الصارم
+                    if any(b_word.lower() in item['title'].lower() for b_word in BORING_KEYWORDS_STRICT):
+                        log(f"         ⛔ Skipped Boring Corporate Topic: {item['title']}")
+                        continue
+                    
+                    if any(src.get('url') == item['link'] for src in collected_sources): continue
+
+                    log(f"      📌 Checking Source: {item['title'][:40]}...")
+                    
+                    # المرحلة 6: فك الرابط باستخدام url_resolver
+                    data = url_resolver.get_page_html(item['link'])
+                    
+                    if data and data.get('html'):
+                        r_url = data['url']
+                        html_content = data['html']
+                        
+                        # استخراج النص
+                        text = trafilatura.extract(html_content, include_comments=False, include_tables=True)
+                        
+                        # Fallback للاستخراج
+                        if not text:
+                            soup = BeautifulSoup(html_content, 'html.parser')
+                            for script in soup(["script", "style", "nav", "footer"]): script.extract()
+                            text = soup.get_text(" ", strip=True)
+
+                        if text and len(text) >= 800:
+                            log(f"         ✅ Accepted Source! ({len(text)} chars).")
+                            domain = urllib.parse.urlparse(r_url).netloc
+                            
+                            # محاولة استخراج صورة من الميتا (إضافة لتحسين التجربة)
+                            og_image = None
+                            try:
+                                soup_meta = BeautifulSoup(html_content, 'html.parser')
+                                og_image = (soup_meta.find('meta', property='og:image') or {}).get('content')
+                            except: pass
+
+                            collected_sources.append({
+                                "title": item['title'],
+                                "url": r_url,
+                                "text": text,
+                                "source_image": og_image,
+                                "domain": domain,
+                                "media": [] # سيتم ملؤها لاحقاً إذا احتجنا
+                            })
+                        else:
+                            log("         ⚠️ Content too short or extraction failed.")
+                    else:
+                        log("         ⚠️ Selenium failed to resolve URL.")
+                    
+                    time.sleep(2) # راحة
+
+        except Exception as e:
+            log(f"   ⚠️ Primary Mechanism Error: {e}")
+
+        # --- [B] FALLBACK MECHANISM: LEGACY OMNI-HUNT ---
+        # يعمل فقط إذا فشل النظام الأساسي في جمع 3 مصادر
         if len(collected_sources) < 3:
-            log("   🔎 Not enough sources. Hunting for Official Authority...")
+            log(f"   ⚠️ Primary yielded {len(collected_sources)}/3 sources. Activating Legacy Fallback...")
+            
+            # Layer 1: AI Smart Search (Legacy)
             try:
-                official_results = ai_researcher.smart_hunt(target_keyword, config, mode="official")
-                for item in official_results:
-                    if len(collected_sources) >= 3: break
-                    if any(s['url'] == item['link'] for s in collected_sources): continue
-                    f_url, f_title, text, _, media = scraper.resolve_and_scrape(item['link'])
-                    if text: collected_sources.append({"title": f_title or item['title'], "url": f_url, "text": text, "source_image": None, "domain": "official", "media": media})
-            except Exception as e: log(f"   ⚠️ AI Search (Official) Error: {e}")
+                ai_results = ai_researcher.smart_hunt(target_keyword, config, mode="general")
+                if ai_results:
+                    vetted = news_fetcher.ai_vet_sources(ai_results, model_name)
+                    for item in vetted:
+                        if len(collected_sources) >= 3: break
+                        # تخطي ما تم جمعه بالفعل
+                        if any(s['url'] == item['link'] for s in collected_sources): continue
+                        
+                        f_url, f_title, text, f_image, media = scraper.resolve_and_scrape(item['link'])
+                        if text: collected_sources.append({"title": f_title or item['title'], "url": f_url, "text": text, "source_image": f_image, "domain": urllib.parse.urlparse(f_url).netloc, "media": media})
+            except Exception as e: log(f"      ⚠️ Legacy AI Search Error: {e}")
 
-        # --- Layer 3: AI-Powered Legacy Fallback (The Unstoppable Emergency Plan) ---
+            # Layer 2: Legacy RSS (Original get_real_news_rss)
+            if len(collected_sources) < 3:
+                try:
+                    # نستخدم الدالة القديمة (تأكد من وجودها في news_fetcher)
+                    legacy_items = news_fetcher.get_real_news_rss(target_keyword, category) 
+                    for item in legacy_items:
+                        if len(collected_sources) >= 3: break
+                        if any(s['url'] == item['link'] for s in collected_sources): continue
+                        
+                        f_url, f_title, text, f_image, media = scraper.resolve_and_scrape(item['link'])
+                        if text: collected_sources.append({"title": f_title or item['title'], "url": f_url, "text": text, "source_image": f_image, "domain": urllib.parse.urlparse(f_url).netloc, "media": media})
+                except Exception as e: log(f"      ⚠️ Legacy RSS Error: {e}")
+
+        # --- FINAL CHECK ---
         if len(collected_sources) < 3:
-            log("   ⚠️ AI Research failed. Activating Intelligent Legacy Fallback...")
-            core_entity = target_keyword
-            try:
-                extraction_prompt = f"Extract the full official name of the product or technology from this title: '{target_keyword}'. Return ONLY the name (e.g., 'Luma AI Dream Machine'), no extra text."
-                entity_response = api_manager.generate_step_strict("gemini-2.5-flash", extraction_prompt, "Core Entity Extraction")
-                core_entity = str(next(iter(entity_response.values())) if isinstance(entity_response, dict) else entity_response).strip('"{}\n:key_value ')
-                log(f"      🔍 Extracted Core Entity for search: '{core_entity}'")
-            except:
-                core_entity = " ".join(target_keyword.split()[:3])
-
-            legacy_strategies = [f'"{core_entity}"', f'{core_entity} news', core_entity]
-            for strategy in legacy_strategies:
-                if len(collected_sources) >= 3: break
-                raw_items = news_fetcher.get_gnews_api_sources(strategy, category) or news_fetcher.get_real_news_rss(strategy, category)
-                vetted_items = news_fetcher.ai_vet_sources(raw_items, model_name)
-                for item in vetted_items:
-                    if len(collected_sources) >= 3: break
-                    f_url, f_title, text, _, media = scraper.resolve_and_scrape(item['link'])
-                    if text: collected_sources.append({"title": f_title or item['title'], "url": f_url, "text": text, "source_image": None, "domain": "legacy-rss", "media": media})
-
-        # --- FINAL QUALITY GATE ---
-        if len(collected_sources) < 3:
-            log(f"   ❌ CRITICAL FAILURE: Found only {len(collected_sources)}/3 required sources. Aborting for quality control.")
+            log(f"   ❌ CRITICAL FAILURE: Found only {len(collected_sources)}/3 required sources. Aborting.")
             return False
         
-        log(f"   ✅ Research Complete. Found {len(collected_sources)} high-quality sources.")
+        log(f"   ✅ Research Complete. Found {len(collected_sources)} sources.")
 
+        
         # ======================================================================
         # 5. VISUAL HUNT & REDDIT INTEL
         # ======================================================================
