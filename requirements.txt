@@ -24,5 +24,4 @@ opencv-python-headless
 numpy
 openai
 oauth2client
-praw
-duckduckgo-search
+puter

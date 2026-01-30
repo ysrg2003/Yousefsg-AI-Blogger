@@ -15,9 +15,7 @@
   },
   "settings": {
     "date_range_query": "when:2d",
-    "model_name": "gpt-4o",          
-    "fast_model": "gpt-4o-mini",     
-    "reasoning_model": "gpt-4o",      
+    "model_name": "gemini-2.5-flash",
     "adsense_optimization": true
   }
 }

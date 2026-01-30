@@ -69,30 +69,6 @@ INPUT CATEGORY: "{category}"
 """
 
 # ------------------------------------------------------------------
-# PROMPT 1.25: TOPIC REALIGNMENT (THE ADAPTIVE BRAIN)
-# ------------------------------------------------------------------
-PROMPT_REALIGN_TOPIC = """
-ROLE: SEO Analyst & Topic Synthesizer.
-TASK: Analyze the provided news headlines and the original target keyword. Determine the most accurate, searchable keyword that represents the CORE THEME of the articles found.
-
-**CONTEXT:**
-- The initial target was: "{original_keyword}"
-- But the articles we actually found are:
-{headlines_list}
-
-**STRICT RULES:**
-1. **BE CONCISE:** The new keyword should be short and specific (2-4 words).
-2. **SYNTHESIZE, DON'T COPY:** Do not just copy a headline. Find the common thread. For example, if headlines are about Apple AI, Google AI, and Microsoft AI, a good new keyword is "Big Tech AI race".
-3. **PRIORITIZE ENTITIES:** If a specific company or product name is repeated, it MUST be in the new keyword.
-4. **IF NO COMMON THREAD:** If the topics are too random, fall back to a more refined version of the original keyword or the main category theme.
-
-OUTPUT JSON ONLY:
-{{
-  "realigned_keyword": "The new, more accurate search keyword"
-}}
-"""
-
-# ------------------------------------------------------------------
 # PROMPT A: TOPIC SELECTION (Filter: "Is this clickable content?")
 # ------------------------------------------------------------------
 PROMPT_A_TRENDING = """
@@ -216,8 +192,8 @@ You MUST insert the provided tags into the `article_body` HTML where they fit be
 ---
 
 **MANDATORY "COMMUNITY FIRST" STRUCTURE:**
-1.  **THE HOOK (Reddit Pulse):** Your input now contains a section called "REAL HUMAN EXPERIENCES & REDDIT DISCUSSIONS". You MUST start the article by referencing these real user opinions. Quote a specific user comment or a subreddit discussion to show that you understand the community's real-world experience with this tech, before diving into the official news. Use phrases like "Over on Reddit, users are reporting..." or "The sentiment in the r/XYZ subreddit seems to be...".
-2.  **THE REALITY CHECK:** After explaining the news, immediately compare it to a major competitor, using insights from the Reddit discussions if available.
+1.  **THE HOOK (Reddit Pulse):** Start by acknowledging what real people are saying. Use the "REAL COMMUNITY FEEDBACK" section from the input. Quote a subreddit (e.g., r/Technology).
+2.  **THE REALITY CHECK:** After explaining the news, immediately compare it to a major competitor.
 
 **WRITING STRATEGY (MAXIMUM VALUE):**
 1.  **EXPAND, DON'T SUMMARIZE:** Explain the *implications* of the facts. If a robot walks faster, explain *why* that matters for factory owners.

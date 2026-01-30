@@ -1,194 +1,145 @@
-# FILE: reddit_manager.py
-# ROLE: Reddit Intelligence Gatherer (No-API / JSON Trick Edition)
-# DESCRIPTION: Finds threads via DuckDuckGo and fetches data using Reddit's public JSON endpoints.
-#              Bypasses the need for API Keys and Selenium bloat.
-
 import requests
-import re
+import urllib.parse
+import logging
+import feedparser
 import time
-import random
-from duckduckgo_search import DDGS
-from config import log
+import re
 
-class RedditManager:
-    def __init__(self):
-        # نستخدم User-Agent يبدو كمتصفح حقيقي جداً لتجنب الحظر
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-        }
-        self.session = requests.Session()
-        self.session.headers.update(self.headers)
+# إعداد اللوجر
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - [REDDIT-INTEL] - %(message)s')
+logger = logging.getLogger("RedditIntel")
 
-    def search_threads(self, keyword, limit=5):
-        """
-        يبحث عن روابط Reddit باستخدام DuckDuckGo (لأنه لا يحظر سيرفرات GitHub).
-        """
-        log(f"      🦆 DuckDuckGo: Hunting Reddit threads for '{keyword}'...")
+def search_reddit_threads(keyword):
+    """
+    يبحث عن نقاشات حقيقية (ليست أخباراً) باستخدام فلاتر جوجل الذكية.
+    """
+    search_query = f"site:reddit.com {keyword} (review OR 'after using' OR 'problem with' OR 'my thoughts' OR 'demo') -giveaway"
+    encoded = urllib.parse.quote(search_query)
+    
+    url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+    
+    try:
+        feed = feedparser.parse(url)
         threads = []
+        if feed.entries:
+            for entry in feed.entries[:4]: 
+                threads.append({
+                    "title": entry.title,
+                    "link": entry.link
+                })
+        return threads
+    except Exception as e:
+        logger.error(f"Search failed: {e}")
+        return []
+
+def extract_smart_opinions(reddit_url):
+    """
+    يسحب التعليقات + الوسائط البصرية (فيديو/GIF) من المنشور.
+    """
+    try:
+        clean_url = reddit_url.split("?")[0]
+        json_url = f"{clean_url}.json" if not clean_url.endswith(".json") else clean_url
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0'
+        }
         
-        try:
-            # استعلام بحث يركز على النقاشات والتجارب
-            query = f'site:reddit.com "{keyword}" (review OR "is it worth" OR "my experience" OR guide)'
-            
-            with DDGS() as ddgs:
-                # DuckDuckGo سريع جداً ولا يطلب Captcha عادةً
-                results = list(ddgs.text(query, max_results=8))
-                
-                for r in results:
-                    link = r.get('href')
-                    title = r.get('title')
-                    
-                    # تأكد أنه رابط لمنشور وليس صفحة عامة
-                    if "/comments/" in link:
-                        threads.append({"title": title, "link": link})
-                        if len(threads) >= limit: break
-            
-            return threads
-        except Exception as e:
-            log(f"      ❌ Search Error: {e}")
-            return []
+        r = requests.get(json_url, headers=headers, timeout=10)
+        if r.status_code != 200: return [], []
 
-    def extract_thread_data(self, thread_url):
-        """
-        السحر هنا: نضيف .json لنهاية الرابط لنحصل على البيانات نظيفة تماماً
-        بدون الحاجة لتحليل HTML أو استخدام Selenium.
-        """
-        try:
-            # تنظيف الرابط وإضافة .json
-            clean_url = thread_url.split('?')[0].rstrip('/')
-            json_url = f"{clean_url}.json"
-            
-            # تأخير بسيط عشوائي لتجنب الشك
-            time.sleep(random.uniform(1, 2))
-            
-            resp = self.session.get(json_url, timeout=10)
-            
-            if resp.status_code == 429:
-                log("      ⚠️ Reddit Rate Limit (429). Skipping this thread.")
-                return None
-                
-            if resp.status_code != 200:
-                return None
-            
-            data = resp.json()
-            # Reddit JSON returns a list: [PostData, CommentsData]
-            if not isinstance(data, list) or len(data) < 2: return None
-
-            post_info = data[0]['data']['children'][0]['data']
-            comments_info = data[1]['data']['children']
-
-            result = {
-                "title": post_info.get('title'),
-                "subreddit": post_info.get('subreddit'),
-                "url": clean_url,
-                "media": [],
-                "codes": [],
-                "insights": []
-            }
-
-            # 1. استخراج الميديا
-            self._extract_media(post_info, result["media"])
-            
-            # 2. استخراج الأكواد من المنشور الرئيسي
-            self._extract_codes(post_info.get('selftext', ''), result["codes"])
-
-            # 3. استخراج التعليقات
-            for comment in comments_info[:10]:
-                c_data = comment.get('data', {})
-                body = c_data.get('body')
-                
-                if not body or body in ["[deleted]", "[removed]"]: continue
-                
-                # استخراج أكواد من التعليقات
-                self._extract_codes(body, result["codes"])
-
-                # حفظ التعليقات المفيدة
-                if len(body) > 50 and c_data.get('score', 0) > 2:
-                    clean_body = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', body) # تنظيف الروابط
-                    result["insights"].append({
-                        "author": c_data.get('author', 'user'),
-                        "text": clean_body.strip(),
-                        "score": c_data.get('score', 0)
-                    })
-
-            # ترتيب التعليقات حسب الأهمية
-            result["insights"].sort(key=lambda x: x['score'], reverse=True)
-            result["insights"] = result["insights"][:5]
-
-            return result
-
-        except Exception as e:
-            log(f"      ⚠️ Failed to parse thread JSON: {e}")
-            return None
-
-    def _extract_media(self, post_data, media_list):
-        # صور
-        if post_data.get('url', '').endswith(('.jpg', '.png', '.jpeg', '.gif')):
-            media_list.append({"type": "image", "url": post_data.get('url'), "caption": post_data.get('title')})
+        data = r.json()
         
-        # فيديو
-        if post_data.get('is_video') and post_data.get('media'):
+        # 1. استخراج بيانات المنشور الرئيسي (للبحث عن الوسائط)
+        main_post = data[0]['data']['children'][0]['data']
+        subreddit = main_post.get('subreddit_name_prefixed', "Reddit")
+        post_title = main_post.get('title', 'Reddit Post')
+        
+        media_found = []
+
+        # أ) البحث عن روابط مباشرة (صور/GIFs)
+        if 'url_overridden_by_dest' in main_post:
+            url = main_post['url_overridden_by_dest']
+            if any(ext in url.lower() for ext in ['.jpg', '.png', '.gif', '.mp4']):
+                m_type = "video" if url.endswith('.mp4') else "gif" if url.endswith('.gif') else "image"
+                media_found.append({
+                    "type": m_type,
+                    "url": url,
+                    "description": f"Community Demo: {post_title[:60]}"
+                })
+
+        # ب) البحث عن فيديوهات Reddit المرفوعة مباشرة
+        if main_post.get('is_video') and main_post.get('media'):
             try:
-                vid = post_data['media']['reddit_video']['fallback_url']
-                media_list.append({"type": "video", "url": vid, "caption": post_data.get('title')})
+                vid_url = main_post['media']['reddit_video']['fallback_url']
+                media_found.append({
+                    "type": "video",
+                    "url": vid_url,
+                    "description": f"User Video Review: {post_title[:60]}"
+                })
             except: pass
+
+        # 2. استخراج التعليقات (النصوص)
+        comments_data = data[1]['data']['children']
+        insights = []
+        
+        for comm in comments_data:
+            c_data = comm.get('data', {})
+            body = c_data.get('body', '')
+            score = c_data.get('score', 0)
             
-        # معرض صور
-        if post_data.get('is_gallery') and post_data.get('media_metadata'):
-            for k, v in post_data['media_metadata'].items():
-                if v['status'] == 'valid':
-                    try:
-                        u = v['s']['u'].replace('&amp;', '&')
-                        media_list.append({"type": "image", "url": u, "caption": "Gallery"})
-                    except: pass
+            if len(body) > 60 and body not in ["[deleted]", "[removed]"]:
+                markers = ["i noticed", "in my experience", "battery", "bug", "glitch", "crash", "actually", "worth it", "slow", "fast", "update"]
+                if any(m in body.lower() for m in markers) or score > 5:
+                    insights.append({
+                        "source_name": subreddit,
+                        "author": c_data.get('author', 'User'),
+                        "text": body[:500].replace("\n", " "),
+                        "url": f"https://www.reddit.com{c_data.get('permalink', '')}",
+                        "score": score
+                    })
+        
+        insights.sort(key=lambda x: x['score'], reverse=True)
+        return insights[:3], media_found # نعيد (التعليقات، الوسائط)
 
-    def _extract_codes(self, text, code_list):
-        if not text: return
-        matches = re.findall(r'```(?:[a-z]*\n)?(.*?)```', text, re.DOTALL)
-        for m in matches:
-            c = m.strip()
-            if c and c not in code_list: code_list.append(c)
+    except Exception as e:
+        return [], []
 
-# --- Main Entry Point ---
 def get_community_intel(keyword):
-    log(f"🧠 [Reddit JSON] Mining discussions for: '{keyword}'...")
-    manager = RedditManager()
+    """
+    المحرك الرئيسي: يعيد تقريراً نصياً + قائمة بالوسائط البصرية.
+    """
+    logger.info(f"🧠 Mining Reddit intelligence & visuals for: '{keyword}'...")
+    threads = search_reddit_threads(keyword)
     
-    threads = manager.search_threads(keyword, limit=4)
-    if not threads:
-        log("   - No threads found via DuckDuckGo.")
-        return "", []
-
-    all_data = []
-    for t in threads:
-        d = manager.extract_thread_data(t['link'])
-        if d: all_data.append(d)
-
-    if not all_data: return "", []
-
-    report = "\n\n=== 📢 REAL HUMAN EXPERIENCES (REDDIT) ===\n"
-    all_media = []
+    if not threads: return "", []
     
-    for post in all_data:
-        report += f"--- r/{post['subreddit']}: {post['title']} ---\n"
-        report += f"URL: {post['url']}\n"
-        if post['insights']:
-            report += "TOP COMMENTS:\n"
-            for c in post['insights']:
-                report += f"- u/{c['author']}: \"{c['text'][:300]}...\"\n"
-        if post['codes']:
-            report += "CODE SNIPPETS FOUND.\n"
-        report += "\n"
-        all_media.extend(post['media'])
-
-    unique_media = []
-    seen = set()
-    for m in all_media:
-        if m['url'] not in seen:
-            unique_media.append(m)
-            seen.add(m['url'])
-
-    log(f"   ✅ Gathered intel from {len(all_data)} threads. Found {len(unique_media)} media items.")
+    all_insights = []
+    all_media = [] # قائمة جديدة لتجميع الوسائط
+    
+    for thread in threads:
+        if "reddit.com" in thread['link']:
+            ops, media = extract_smart_opinions(thread['link'])
+            all_insights.extend(ops)
+            all_media.extend(media) # إضافة الوسائط المكتشفة
+            time.sleep(0.5)
+            
+    # إزالة الوسائط المكررة
+    unique_media = list({v['url']:v for v in all_media}.values())
+    
+    if not all_insights: return "", unique_media
+    
+    # بناء التقرير النصي
+    report = "\n=== 📢 REAL COMMUNITY FEEDBACK (INTEGRATE THIS) ===\n"
+    report += "INSTRUCTIONS: Use these real user quotes to validate or criticize the news. \n"
+    report += "CRITICAL: When citing, you MUST hyperlink the text 'community discussion' or the Subreddit name (e.g., r/Gadgets) to the provided URL.\n\n"
+    
+    unique_insights = list({v['text']:v for v in all_insights}.values())[:4]
+    
+    for i, item in enumerate(unique_insights):
+        report += f"--- INSIGHT {i+1} ---\n"
+        report += f"SOURCE: {item['source_name']} (Use this specific name)\n"
+        report += f"LINK: {item['url']} (Link strictly to this)\n"
+        report += f"USER SAID: \"{item['text']}\"\n"
+        
+    # نعيد التقرير النصي + قائمة الوسائط
     return report, unique_media

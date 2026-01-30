@@ -1,5 +1,5 @@
 # FILE: image_processor.py
-# DESCRIPTION: Smart Image Processing (Face/Neck/Hair Blur + AI Batch Selection).
+# DESCRIPTION: Smart Image Processing (Face/Neck/Hair Blur ONLY if detected).
 
 import os
 import re
@@ -90,6 +90,8 @@ def apply_smart_privacy_blur(pil_image):
         face_cascade = cv2.CascadeClassifier(cascade_path)
         gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
         
+        # Detect faces (Human & Humanoid Robots)
+        # minNeighbors=4 makes it slightly aggressive to catch robots
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
 
         if len(faces) > 0:
@@ -97,33 +99,79 @@ def apply_smart_privacy_blur(pil_image):
             h_img, w_img, _ = img_np.shape
             
             for (x, y, w, h) in faces:
-                pad_w = int(w * 0.5)
-                pad_h_top = int(h * 0.8)
-                pad_h_bottom = int(h * 1.0)
+                # --- EXPANDED BLUR AREA LOGIC ---
+                # We expand the box significantly to cover hair and neck
+                pad_w = int(w * 0.5)        # 50% padding on sides
+                pad_h_top = int(h * 0.8)    # 80% padding on top (Hair)
+                pad_h_bottom = int(h * 1.0) # 100% padding on bottom (Neck)
                 
+                # Calculate coordinates with boundary checks
                 x1 = max(0, x - pad_w)
                 y1 = max(0, y - pad_h_top)
                 x2 = min(w_img, x + w + pad_w)
                 y2 = min(h_img, y + h + pad_h_bottom)
                 
+                # Extract Region of Interest (ROI)
                 roi = img_np[y1:y2, x1:x2]
-                k_size = (w // 2) | 1
-                k_size = max(k_size, 99)
+                
+                # Calculate blur strength based on face size
+                k_size = (w // 2) | 1 # Ensure odd number
+                k_size = max(k_size, 99) # Minimum blur strength (Very High)
                 
                 try:
+                    # Apply Gaussian Blur
                     blurred_roi = cv2.GaussianBlur(roi, (k_size, k_size), 0)
                     img_np[y1:y2, x1:x2] = blurred_roi
                 except: pass
             
+            # Convert back to PIL if changes were made
             return Image.fromarray(cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB))
         
         else:
+            # --- NO FACES DETECTED ---
             log("      👀 No faces detected. Keeping image sharp.")
-            return pil_image
+            return pil_image # Return original sharp image
 
     except Exception as e:
         log(f"      ⚠️ Smart Blur Error: {e}. Returning original.")
         return pil_image
+
+def select_best_image_with_gemini(model_name, article_title, images_list):
+    if not images_list: return None
+    valid_images = []
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    for img_data in images_list[:4]: 
+        try:
+            r = requests.get(img_data['url'], headers=headers, timeout=10)
+            if r.status_code == 200:
+                valid_images.append({"mime_type": "image/jpeg", "data": r.content, "original_url": img_data['url']})
+        except: pass
+
+    if not valid_images: return None
+
+    if len(valid_images) == 1:
+        log("      ✅ Only one source image found. Using it directly.")
+        return valid_images[0]['original_url']
+
+    prompt = f"""
+    TASK: Select best image index (0-{len(valid_images)-1}) for '{article_title}'.
+    CRITERIA: Relevance.
+    OUTPUT: Integer only.
+    """
+    try:
+        key = key_manager.get_current_key()
+        client = genai.Client(api_key=key)
+        inputs = [prompt]
+        for img in valid_images: inputs.append(types.Part.from_bytes(data=img['data'], mime_type="image/jpeg"))
+        
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=inputs)
+        match = re.search(r'\d+', response.text)
+        if match:
+            idx = int(match.group())
+            if 0 <= idx < len(valid_images): return valid_images[idx]['original_url']
+    except: pass
+    
+    return valid_images[0]['original_url']
 
 def process_source_image(source_url, overlay_text, filename_title):
     try:
@@ -148,10 +196,14 @@ def process_source_image(source_url, overlay_text, filename_title):
         top = (new_height - target_h) / 2
         base_img = original_img.crop((left, top, left+target_w, top+target_h))
         
+        # --- APPLY SMART BLUR (Only if faces detected) ---
+        # We convert to RGB for processing, then back to RGBA
         base_img_rgb = base_img.convert("RGB")
         base_img_rgb = apply_smart_privacy_blur(base_img_rgb)
         base_img = base_img_rgb.convert("RGBA")
+        # -------------------------------------------------
 
+        # Dark Overlay (For text readability)
         overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 90))
         base_img = Image.alpha_composite(base_img, overlay)
         
@@ -183,136 +235,11 @@ def process_source_image(source_url, overlay_text, filename_title):
         base_img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
         safe_name = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50] + ".jpg"
         return upload_to_github_cdn(img_byte_arr, safe_name)
-    except Exception as e:
-        log(f"      ❌ Image Processing Error: {e}")
-        return None
-
-def select_best_image_with_gemini(model_name, context_description, images_urls):
-    """
-    ينزل الصور مؤقتاً ويرسلها لـ Gemini ليختار الأفضل بناءً على السياق.
-    """
-    if not images_urls: return None
-    
-    log(f"      🧠 AI Vision: Analyzing {len(images_urls)} images for context: '{context_description}'...")
-    
-    valid_images = []
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    
-    for url in images_urls:
-        try:
-            r = requests.get(url, headers=headers, timeout=5)
-            if r.status_code == 200:
-                Image.open(BytesIO(r.content)) 
-                valid_images.append({
-                    "mime_type": "image/jpeg", 
-                    "data": r.content, 
-                    "url": url
-                })
-        except: pass
-        
-    if not valid_images: return None
-    if len(valid_images) == 1: return valid_images[0]['url']
-
-    prompt = f"""
-    TASK: You are a Photo Editor.
-    CONTEXT: I need an image that best represents: "{context_description}".
-    
-    INSTRUCTIONS:
-    - Look at the provided images.
-    - Select the one that is clearest, most relevant, and high quality.
-    - Avoid images that are just text, logos, or blurry.
-    - Return ONLY the index number (0, 1, 2, etc.) of the best image.
-    """
-    
-    try:
-        key = key_manager.get_current_key()
-        client = genai.Client(api_key=key)
-        
-        inputs = [prompt]
-        for img in valid_images: 
-            inputs.append(types.Part.from_bytes(data=img['data'], mime_type="image/jpeg"))
-        
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=inputs)
-        
-        match = re.search(r'\d+', response.text)
-        if match:
-            idx = int(match.group())
-            if 0 <= idx < len(valid_images):
-                log(f"      🌟 AI Selected Image #{idx}")
-                return valid_images[idx]['url']
-    except Exception as e:
-        log(f"      ⚠️ AI Selection Failed: {e}. Defaulting to first image.")
-    
-    return valid_images[0]['url']
-    
-def select_best_images_batch(model_name, batch_data):
-    """
-    يعالج دفعة كاملة من الصور لعدة فقرات في طلب واحد للذكاء الاصطناعي.
-    """
-    if not batch_data: return {}
-    
-    log(f"      🧠 AI Vision: Batch analyzing images for {len(batch_data)} sections...")
-    
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    inputs = []
-    prompt_text = "TASK: You are a Photo Editor. I have images for different sections of an article.\n\n"
-    
-    global_image_index = 0
-    image_map = {}
-    
-    for section_idx, data in batch_data.items():
-        context = data['context']
-        urls = data['urls']
-        
-        prompt_text += f"--- SECTION {section_idx}: {context} ---\n"
-        prompt_text += f"Images for this section are indexed from {global_image_index} to {global_image_index + len(urls) - 1}.\n"
-        
-        for url in urls:
-            try:
-                r = requests.get(url, headers=headers, timeout=4)
-                if r.status_code == 200:
-                    inputs.append(types.Part.from_bytes(data=r.content, mime_type="image/jpeg"))
-                    image_map[global_image_index] = url
-                    global_image_index += 1
-            except: 
-                pass
-        prompt_text += "\n"
-
-    prompt_text += """
-    INSTRUCTIONS:
-    - For EACH Section, select the SINGLE best image index that represents the context.
-    - Return a JSON object mapping the Section ID to the selected Image Index.
-    - Example: {"0": 2, "1": 5, "2": 8}
-    - Return JSON ONLY.
-    """
-    
-    inputs.insert(0, prompt_text)
-
-    try:
-        key = key_manager.get_current_key()
-        client = genai.Client(api_key=key)
-        
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=inputs)
-        
-        from api_manager import master_json_parser
-        result = master_json_parser(response.text)
-        
-        final_selection = {}
-        if result:
-            for section_id, img_idx in result.items():
-                if int(img_idx) in image_map:
-                    final_selection[int(section_id)] = image_map[int(img_idx)]
-                    
-        log(f"      🌟 AI Batch Selection Complete. Selected {len(final_selection)} images.")
-        return final_selection
-
-    except Exception as e:
-        log(f"      ⚠️ Batch AI Selection Failed: {e}")
-        return {}
-        
+    except: return None
 def generate_and_upload_image(prompt_text, overlay_text=""):
     log(f"   🎨 Generating Professional AI Thumbnail for: {prompt_text[:50]}...")
     
+    # --- الخلطة السرية للاحترافية ---
     style_prefix = "A high-end cinematic editorial tech photograph visualizing "
     style_suffix = (
         ". Perspective: Close-up POV shot, showing a professional human hand interacting with the subject. "
@@ -321,6 +248,7 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
         "realistic textures, storytelling composition, dramatic atmosphere, no text, no distorted features."
     )
     
+    # دمج النص القادم من الـ AI مع القالب الاحترافي
     final_prompt_text = f"{style_prefix}'{prompt_text}'{style_suffix}"
     final_prompt = urllib.parse.quote(final_prompt_text)
     
