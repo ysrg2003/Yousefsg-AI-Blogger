@@ -192,8 +192,8 @@ You MUST insert the provided tags into the `article_body` HTML where they fit be
 ---
 
 **MANDATORY "COMMUNITY FIRST" STRUCTURE:**
-1.  **THE HOOK (Reddit Pulse):** Start by acknowledging what real people are saying. Use the "REAL COMMUNITY FEEDBACK" section from the input. Quote a subreddit (e.g., r/Technology).
-2.  **THE REALITY CHECK:** After explaining the news, immediately compare it to a major competitor.
+1.  **THE HOOK (Reddit Pulse):** Your input now contains a section called "REAL HUMAN EXPERIENCES & REDDIT DISCUSSIONS". You MUST start the article by referencing these real user opinions. Quote a specific user comment or a subreddit discussion to show that you understand the community's real-world experience with this tech, before diving into the official news. Use phrases like "Over on Reddit, users are reporting..." or "The sentiment in the r/XYZ subreddit seems to be...".
+2.  **THE REALITY CHECK:** After explaining the news, immediately compare it to a major competitor, using insights from the Reddit discussions if available.
 
 **WRITING STRATEGY (MAXIMUM VALUE):**
 1.  **EXPAND, DON'T SUMMARIZE:** Explain the *implications* of the facts. If a robot walks faster, explain *why* that matters for factory owners.
