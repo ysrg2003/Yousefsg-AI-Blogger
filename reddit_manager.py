@@ -14,46 +14,49 @@ logger = logging.getLogger("RedditIntel")
 
 def search_reddit_threads(keyword):
     """
-    يبحث عن نقاشات حقيقية باستخدام فلاتر جوجل الذكية.
-    تستخدم هذه الدالة استعلاماً محسناً أولاً، ثم تعود للاستعلام الأصلي كخطة بديلة (Fallback).
+    يبحث عن نقاشات حقيقية باستخدام 3 مستويات من البحث لضمان عدم العودة بنتائج صفرية.
     """
-    # 1. الاستعلام المحسن (يركز على المشاكل والأخطاء التقنية)
-    improved_query = f"site:reddit.com {keyword} (review OR 'problem with' OR 'my thoughts' OR bug OR crash OR slow OR issue) -giveaway"
+    # المستوى 1: البحث الذكي (مشاكل تقنية محددة)
+    query_v1 = f"site:reddit.com {keyword} (review OR 'problem with' OR bug OR crash OR slow OR issue) -giveaway"
     
-    # 2. الاستعلام الأصلي (الذي كان يعمل بنجاح كخطة احتياطية)
-    original_query = f"site:reddit.com {keyword} (review OR 'after using' OR 'problem with' OR 'my thoughts' OR 'demo') -giveaway"
-
-    threads = []
+    # المستوى 2: البحث الأصلي (تجارب عامة)
+    query_v2 = f"site:reddit.com {keyword} (review OR 'after using' OR 'my thoughts' OR 'demo') -giveaway"
     
-    try:
-        # المحاولة الأولى: الاستعلام المحسن
-        logger.info(f"🔍 Primary Search: '{improved_query[:50]}...'")
-        encoded_improved = urllib.parse.quote(improved_query)
-        url_improved = f"https://news.google.com/rss/search?q={encoded_improved}&hl=en-US&gl=US&ceid=US:en"
-        feed = feedparser.parse(url_improved)
+    # المستوى 3: البحث الشامل (الكلمة المفتاحية فقط داخل ريديت - بدون قيود)
+    query_v3 = f"site:reddit.com {keyword}"
 
-        # التحقق من النتائج، إذا كانت فارغة ننتقل للاحتياطي
-        if not feed.entries:
-            logger.warning("⚠️ Primary search returned no results. Trying fallback original query...")
-            encoded_original = urllib.parse.quote(original_query)
-            url_original = f"https://news.google.com/rss/search?q={encoded_original}&hl=en-US&gl=US&ceid=US:en"
-            feed = feedparser.parse(url_original)
+    search_attempts = [
+        {"name": "Improved Search", "query": query_v1},
+        {"name": "Original Fallback", "query": query_v2},
+        {"name": "Ultra-Broad Search", "query": query_v3} # شبكة الأمان الأخيرة
+    ]
 
-        if feed.entries:
-            for entry in feed.entries[:4]: # نأخذ أفضل 4 روابط
-                threads.append({
-                    "title": entry.title,
-                    "link": entry.link
-                })
-            logger.info(f"✅ Found {len(threads)} threads to analyze.")
-        else:
-            logger.error("❌ Both search queries failed to find results.")
+    for attempt in search_attempts:
+        try:
+            logger.info(f"🔍 Attempting {attempt['name']}: '{attempt['query'][:60]}...'")
+            encoded_query = urllib.parse.quote(attempt['query'])
+            url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
+            
+            feed = feedparser.parse(url)
+            
+            if feed.entries:
+                threads = []
+                for entry in feed.entries[:4]:
+                    threads.append({
+                        "title": entry.title,
+                        "link": entry.link
+                    })
+                logger.info(f"✅ {attempt['name']} succeeded! Found {len(threads)} threads.")
+                return threads
+            else:
+                logger.warning(f"⚠️ {attempt['name']} returned no results.")
+                
+        except Exception as e:
+            logger.error(f"🚨 Error during {attempt['name']}: {e}")
+            continue # جرب المستوى التالي
 
-        return threads
-
-    except Exception as e:
-        logger.error(f"🚨 Critical Search Error: {e}")
-        return []
+    logger.error(f"❌ All 3 search levels failed for: {keyword}")
+    return []
 
 def extract_smart_opinions(reddit_url):
     """
