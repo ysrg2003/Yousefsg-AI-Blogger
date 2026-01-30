@@ -210,6 +210,85 @@ def process_source_image(source_url, overlay_text, filename_title):
         safe_name = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50] + ".jpg"
         return upload_to_github_cdn(img_byte_arr, safe_name)
     except: return None
+def select_best_images_batch(model_name, batch_data):
+    """
+    يعالج دفعة كاملة من الصور لعدة فقرات في طلب واحد للذكاء الاصطناعي.
+    batch_data structure:
+    {
+        0: {"context": "Dashboard UI", "urls": [url1, url2, url3]},
+        1: {"context": "Workflow", "urls": [url4, url5, url6]},
+        ...
+    }
+    """
+    if not batch_data: return {}
+    
+    log(f"      🧠 AI Vision: Batch analyzing images for {len(batch_data)} sections...")
+    
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    inputs = []
+    prompt_text = "TASK: You are a Photo Editor. I have images for different sections of an article.\n\n"
+    
+    global_image_index = 0
+    image_map = {} # لربط رقم الصورة التسلسلي بالرابط الخاص بها
+    
+    # 1. تجهيز الصور والنصوص
+    for section_idx, data in batch_data.items():
+        context = data['context']
+        urls = data['urls']
+        
+        prompt_text += f"--- SECTION {section_idx}: {context} ---\n"
+        prompt_text += f"Images for this section are indexed from {global_image_index} to {global_image_index + len(urls) - 1}.\n"
+        
+        for url in urls:
+            try:
+                r = requests.get(url, headers=headers, timeout=4)
+                if r.status_code == 200:
+                    # إضافة الصورة للطلب
+                    inputs.append(types.Part.from_bytes(data=r.content, mime_type="image/jpeg"))
+                    # حفظ الرابط في الخريطة
+                    image_map[global_image_index] = url
+                    global_image_index += 1
+            except: 
+                # إذا فشلت صورة، نتجاهلها ولا نزيد العداد
+                pass
+        prompt_text += "\n"
+
+    prompt_text += """
+    INSTRUCTIONS:
+    - For EACH Section, select the SINGLE best image index that represents the context.
+    - Return a JSON object mapping the Section ID to the selected Image Index.
+    - Example: {"0": 2, "1": 5, "2": 8}
+    - Return JSON ONLY.
+    """
+    
+    # نضع النص في بداية القائمة
+    inputs.insert(0, prompt_text)
+
+    try:
+        key = key_manager.get_current_key()
+        client = genai.Client(api_key=key)
+        
+        # إرسال الطلب الضخم
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=inputs)
+        
+        # استخراج الـ JSON
+        from api_manager import master_json_parser
+        result = master_json_parser(response.text)
+        
+        final_selection = {}
+        if result:
+            for section_id, img_idx in result.items():
+                # تحويل الإندكس المختار إلى رابط
+                if int(img_idx) in image_map:
+                    final_selection[int(section_id)] = image_map[int(img_idx)]
+                    
+        log(f"      🌟 AI Batch Selection Complete. Selected {len(final_selection)} images.")
+        return final_selection
+
+    except Exception as e:
+        log(f"      ⚠️ Batch AI Selection Failed: {e}")
+        return {}
+        
 def generate_and_upload_image(prompt_text, overlay_text=""):
     log(f"   🎨 Generating Professional AI Thumbnail for: {prompt_text[:50]}...")
     
