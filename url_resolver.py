@@ -30,7 +30,7 @@ def get_page_html(target_url):
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(45) # زيادة المهلة للمواقع الثقيلة
+        driver.set_page_load_timeout(120) # زيادة المهلة للمواقع الثقيلة
         
         driver.get(target_url)
         
@@ -46,18 +46,18 @@ def get_page_html(target_url):
                 if "news.google.com" not in current and "search?" not in current:
                      if "consent.google" not in current:
                         # وصلنا! ننتظر قليلاً ليتحمل المحتوى (JS)
-                        time.sleep(3) 
+                        time.sleep(30) 
                         html = driver.page_source
                         print(f"      ✅ Success: {current}")
                         return {"url": current, "html": html}
             else:
                 # إذا لم يكن رابط جوجل (مباشر)، ننتظر قليلاً ثم نسحب
-                time.sleep(4)
+                time.sleep(60)
                 html = driver.page_source
                 print(f"      ✅ Direct Access: {current}")
                 return {"url": current, "html": html}
 
-            time.sleep(1)
+            time.sleep(4)
             
         print("      ⚠️ Timeout: Could not resolve URL.")
         return None
