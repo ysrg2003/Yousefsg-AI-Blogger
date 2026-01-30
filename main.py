@@ -541,22 +541,23 @@ def run_pipeline(category, config):
         "has_real_experience_data": len(real_user_feedback) > 200 # مؤشر للكاتب
     }
     
-    # تعليمات الصدق الصارمة (The Honesty Protocol)
+    # تعليمات الصدق + بروتوكول حل النزاع (Conflict Resolution)
     experience_prompt = """
-    *** MANDATORY SECTION: FIRST-HAND EXPERIENCED the tttttttttttt***
+    *** MANDATORY SECTION: FIRST-HAND EXPERIENCE ***
     You MUST write a section titled 'My Experience' (or 'Hands-On Impressions').
     
-    RULES FOR AUTHENTICITY:
-    1. **SOURCE OF TRUTH:** You MUST use the 'REAL REDDIT DISCUSSIONS' and 'EXTERNAL REVIEW' data provided below to write this section.
-    2. **SYNTHESIS OVER INVENTION:**5
-       - If the data says "users complain about battery life", you write: "In practical use, the battery drain is noticeable..."
-       - If the data says "setup is confusing", you write: "Setting this up was trickier than expected..."
-    3. **HONESTY PROTOCOL:**
-       - If you find specific bugs mentioned in the text, cite them as things you "encountered".
-       - **CRITICAL:** If absolutely NO user feedback/review data is found in the input, DO NOT invent a fake story. Instead, write a 'Technical Analysis' section based on the specs and clearly state: "While hands-on data is limited, the specs suggest..."
-    4. **TONE:** Personal, critical, and observant.
+    RULES FOR AUTHENTICITY & CONSISTENCY:
+    1. **SOURCE OF TRUTH:** Use the 'REAL REDDIT DISCUSSIONS' and 'EXTERNAL REVIEW' data provided below.
+    2. **CONFLICT RESOLUTION (CRITICAL):** 
+       - If the Official News says "X" (e.g., Fast Speed), but Reddit users say "Y" (e.g., Laggy), **DO NOT HIDE THE CONFLICT.**
+       - Instead, HIGHLIGHT it. Write: "While the official announcement promises [X], in real-world testing, I found that [Y]..."
+       - This discrepancy creates HIGH TRUST with the reader.
+    3. **UNIFIED NARRATIVE:** Ensure the "Verdict" and "Pros/Cons" sections reflect this reality. Do not praise a feature in the intro if you criticize it in the experience section.
+    4. **SYNTHESIS:**
+       - If data says "users complain about battery", write: "In practical use, the battery drain is noticeable..."
+       - If absolutely NO user feedback is found, write a 'Technical Analysis' based on specs and clearly state: "Hands-on data is currently limited."
     """
-
+    
     payload = f"METADATA: {json.dumps(json_ctx)}\n{experience_prompt}\n\n*** RESEARCH DATA ***\n{full_research_data}"
 
     
