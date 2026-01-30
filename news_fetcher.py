@@ -15,6 +15,48 @@ from config import log
 from api_manager import generate_step_strict
 
 # ==============================================================================
+# NEW: STRICT RSS FETCHER (PRIMARY MECHANISM)
+# ==============================================================================
+
+def get_strict_rss(query_keywords, category):
+    """
+    آلية البحث الصارمة الجديدة (المرحلة 3 و 4 من الكود الجديد).
+    """
+    try:
+        if "," in query_keywords:
+            topics = [t.strip() for t in query_keywords.split(',') if t.strip()]
+            focused = random.choice(topics)
+            log(f"   🎯 Targeted Search: '{focused}'")
+            full_query = f"{focused} when:1d"
+        else:
+            full_query = f"{query_keywords} when:1d"
+
+        encoded = urllib.parse.quote(full_query)
+        url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+        
+        feed = feedparser.parse(url)
+        items = []
+        if feed.entries:
+            for entry in feed.entries[:8]:
+                pub = entry.published if 'published' in entry else "Today"
+                title_clean = entry.title.split(' - ')[0]
+                items.append({"title": title_clean, "link": entry.link, "date": pub})
+            return items 
+        else:
+            log(f"   ⚠️ RSS Empty. Fallback.")
+            fb = f"{category} news when:1d"
+            url = f"https://news.google.com/rss/search?q={urllib.parse.quote(fb)}&hl=en-US&gl=US&ceid=US:en"
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:5]:
+                items.append({"title": entry.title, "link": entry.link, "date": "Today"})
+            return items
+            
+    except Exception as e:
+        log(f"❌ RSS Error: {e}")
+        return []
+
+# ... (تأكد من بقاء باقي الكود القديم أسفل هذه الدالة ليعمل كاحتياطي) ...
+# ==============================================================================
 # 1. ELITE REPUTATION SYSTEM (MEMORY & FILTERING)
 # ==============================================================================
 
