@@ -1,5 +1,5 @@
 # FILE: image_processor.py
-# DESCRIPTION: Smart Image Processing (Face/Neck/Hair Blur ONLY if detected).
+# DESCRIPTION: Smart Image Processing (Face/Neck/Hair Blur + AI Batch Selection).
 
 import os
 import re
@@ -90,8 +90,6 @@ def apply_smart_privacy_blur(pil_image):
         face_cascade = cv2.CascadeClassifier(cascade_path)
         gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
         
-        # Detect faces (Human & Humanoid Robots)
-        # minNeighbors=4 makes it slightly aggressive to catch robots
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
 
         if len(faces) > 0:
@@ -99,54 +97,34 @@ def apply_smart_privacy_blur(pil_image):
             h_img, w_img, _ = img_np.shape
             
             for (x, y, w, h) in faces:
-                # --- EXPANDED BLUR AREA LOGIC ---
-                # We expand the box significantly to cover hair and neck
-                pad_w = int(w * 0.5)        # 50% padding on sides
-                pad_h_top = int(h * 0.8)    # 80% padding on top (Hair)
-                pad_h_bottom = int(h * 1.0) # 100% padding on bottom (Neck)
+                pad_w = int(w * 0.5)
+                pad_h_top = int(h * 0.8)
+                pad_h_bottom = int(h * 1.0)
                 
-                # Calculate coordinates with boundary checks
                 x1 = max(0, x - pad_w)
                 y1 = max(0, y - pad_h_top)
                 x2 = min(w_img, x + w + pad_w)
                 y2 = min(h_img, y + h + pad_h_bottom)
                 
-                # Extract Region of Interest (ROI)
                 roi = img_np[y1:y2, x1:x2]
-                
-                # Calculate blur strength based on face size
-                k_size = (w // 2) | 1 # Ensure odd number
-                k_size = max(k_size, 99) # Minimum blur strength (Very High)
+                k_size = (w // 2) | 1
+                k_size = max(k_size, 99)
                 
                 try:
-                    # Apply Gaussian Blur
                     blurred_roi = cv2.GaussianBlur(roi, (k_size, k_size), 0)
                     img_np[y1:y2, x1:x2] = blurred_roi
                 except: pass
             
-            # Convert back to PIL if changes were made
             return Image.fromarray(cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB))
         
         else:
-            # --- NO FACES DETECTED ---
             log("      👀 No faces detected. Keeping image sharp.")
-            return pil_image # Return original sharp image
+            return pil_image
 
     except Exception as e:
         log(f"      ⚠️ Smart Blur Error: {e}. Returning original.")
         return pil_image
 
-
-prompt = f"""
-    TASK: You are a Photo Editor.
-    CONTEXT: I need an image that best represents: {context_description}.
-    
-    INSTRUCTIONS:
-    - Look at the provided images.
-    - Select the one that is clearest, most relevant, and high quality.
-    - Avoid images that are just text, logos, or blurry.
-    - Return ONLY the index number (0, 1, 2, etc.) of the best image.
-    """
 def process_source_image(source_url, overlay_text, filename_title):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -170,14 +148,10 @@ def process_source_image(source_url, overlay_text, filename_title):
         top = (new_height - target_h) / 2
         base_img = original_img.crop((left, top, left+target_w, top+target_h))
         
-        # --- APPLY SMART BLUR (Only if faces detected) ---
-        # We convert to RGB for processing, then back to RGBA
         base_img_rgb = base_img.convert("RGB")
         base_img_rgb = apply_smart_privacy_blur(base_img_rgb)
         base_img = base_img_rgb.convert("RGBA")
-        # -------------------------------------------------
 
-        # Dark Overlay (For text readability)
         overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 90))
         base_img = Image.alpha_composite(base_img, overlay)
         
@@ -209,7 +183,9 @@ def process_source_image(source_url, overlay_text, filename_title):
         base_img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
         safe_name = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50] + ".jpg"
         return upload_to_github_cdn(img_byte_arr, safe_name)
-    except: return None
+    except Exception as e:
+        log(f"      ❌ Image Processing Error: {e}")
+        return None
 
 def select_best_image_with_gemini(model_name, context_description, images_urls):
     """
@@ -222,12 +198,10 @@ def select_best_image_with_gemini(model_name, context_description, images_urls):
     valid_images = []
     headers = {'User-Agent': 'Mozilla/5.0'}
     
-    # 1. تحميل الصور (في الذاكرة فقط)
     for url in images_urls:
         try:
             r = requests.get(url, headers=headers, timeout=5)
             if r.status_code == 200:
-                # نتأكد أنها صورة صالحة
                 Image.open(BytesIO(r.content)) 
                 valid_images.append({
                     "mime_type": "image/jpeg", 
@@ -239,7 +213,6 @@ def select_best_image_with_gemini(model_name, context_description, images_urls):
     if not valid_images: return None
     if len(valid_images) == 1: return valid_images[0]['url']
 
-    # 2. سؤال Gemini
     prompt = f"""
     TASK: You are a Photo Editor.
     CONTEXT: I need an image that best represents: "{context_description}".
@@ -256,14 +229,11 @@ def select_best_image_with_gemini(model_name, context_description, images_urls):
         client = genai.Client(api_key=key)
         
         inputs = [prompt]
-        # إرفاق الصور بالطلب
         for img in valid_images: 
             inputs.append(types.Part.from_bytes(data=img['data'], mime_type="image/jpeg"))
         
-        # نستخدم موديل قوي للرؤية
         response = client.models.generate_content(model="gemini-2.5-flash", contents=inputs)
         
-        # استخراج الرقم
         match = re.search(r'\d+', response.text)
         if match:
             idx = int(match.group())
@@ -273,18 +243,11 @@ def select_best_image_with_gemini(model_name, context_description, images_urls):
     except Exception as e:
         log(f"      ⚠️ AI Selection Failed: {e}. Defaulting to first image.")
     
-    # في حال الفشل، نعود للأولى
     return valid_images[0]['url']
     
 def select_best_images_batch(model_name, batch_data):
     """
     يعالج دفعة كاملة من الصور لعدة فقرات في طلب واحد للذكاء الاصطناعي.
-    batch_data structure:
-    {
-        0: {"context": "Dashboard UI", "urls": [url1, url2, url3]},
-        1: {"context": "Workflow", "urls": [url4, url5, url6]},
-        ...
-    }
     """
     if not batch_data: return {}
     
@@ -295,9 +258,8 @@ def select_best_images_batch(model_name, batch_data):
     prompt_text = "TASK: You are a Photo Editor. I have images for different sections of an article.\n\n"
     
     global_image_index = 0
-    image_map = {} # لربط رقم الصورة التسلسلي بالرابط الخاص بها
+    image_map = {}
     
-    # 1. تجهيز الصور والنصوص
     for section_idx, data in batch_data.items():
         context = data['context']
         urls = data['urls']
@@ -309,13 +271,10 @@ def select_best_images_batch(model_name, batch_data):
             try:
                 r = requests.get(url, headers=headers, timeout=4)
                 if r.status_code == 200:
-                    # إضافة الصورة للطلب
                     inputs.append(types.Part.from_bytes(data=r.content, mime_type="image/jpeg"))
-                    # حفظ الرابط في الخريطة
                     image_map[global_image_index] = url
                     global_image_index += 1
             except: 
-                # إذا فشلت صورة، نتجاهلها ولا نزيد العداد
                 pass
         prompt_text += "\n"
 
@@ -327,24 +286,20 @@ def select_best_images_batch(model_name, batch_data):
     - Return JSON ONLY.
     """
     
-    # نضع النص في بداية القائمة
     inputs.insert(0, prompt_text)
 
     try:
         key = key_manager.get_current_key()
         client = genai.Client(api_key=key)
         
-        # إرسال الطلب الضخم
         response = client.models.generate_content(model="gemini-2.5-flash", contents=inputs)
         
-        # استخراج الـ JSON
         from api_manager import master_json_parser
         result = master_json_parser(response.text)
         
         final_selection = {}
         if result:
             for section_id, img_idx in result.items():
-                # تحويل الإندكس المختار إلى رابط
                 if int(img_idx) in image_map:
                     final_selection[int(section_id)] = image_map[int(img_idx)]
                     
@@ -358,7 +313,6 @@ def select_best_images_batch(model_name, batch_data):
 def generate_and_upload_image(prompt_text, overlay_text=""):
     log(f"   🎨 Generating Professional AI Thumbnail for: {prompt_text[:50]}...")
     
-    # --- الخلطة السرية للاحترافية ---
     style_prefix = "A high-end cinematic editorial tech photograph visualizing "
     style_suffix = (
         ". Perspective: Close-up POV shot, showing a professional human hand interacting with the subject. "
@@ -367,7 +321,6 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
         "realistic textures, storytelling composition, dramatic atmosphere, no text, no distorted features."
     )
     
-    # دمج النص القادم من الـ AI مع القالب الاحترافي
     final_prompt_text = f"{style_prefix}'{prompt_text}'{style_suffix}"
     final_prompt = urllib.parse.quote(final_prompt_text)
     
