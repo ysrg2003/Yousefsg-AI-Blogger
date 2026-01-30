@@ -1,16 +1,13 @@
 {
   "categories": {
-    "AI Tools & Apps": {
-      "trending_focus": "DeepSeek, OpenAI, Google Gemini, Microsoft Copilot, Anthropic Claude, Perplexity, Midjourney, Grok, AI Coding, LLM Performance"
+    "AI Video Mastery": {
+      "trending_focus": "Sora, Kling AI, Runway Gen-3, Luma Dream Machine, Google Veo, Adobe Firefly Video, Pika Labs, Kling AI global, Text-to-Video updates, Cinematic AI"
     },
-    "AI Income & Hustles": {
-      "trending_focus": "AI Freelancing, Fiverr AI, Upwork automation, monetizing AI art, AI content monetization, AI copyright lawsuits, creator economy automation"
+    "AI Production Lab": {
+      "trending_focus": "ElevenLabs, HeyGen, Synthesia, AI Voice Cloning, Deepfake detection, AI Lip-sync, AI Avatars, Wondershare Virbo, Suno AI, Udio"
     },
-    "Future & Robotics": {
-      "trending_focus": "Tesla Optimus, Figure AI, Boston Dynamics, Humanoid robots, NVIDIA Robotics, OpenAI robotics, AI hardware, Neuralink, Smart devices"
-    },
-    "AI Video & Media": {
-      "trending_focus": "OpenAI Sora, Kling AI, Runway Gen-3, Luma Dream Machine, YouTube AI, Adobe Firefly, Deepfake detection, AI voice cloning, Pika Labs"
+    "AI Business & Cash": {
+      "trending_focus": "YouTube Automation AI, Monetizing AI Video, AI Influencer, Faceless YouTube Channel, AI Video Copyright, TikTok AI tools, AI Stock Footage, Passive Income AI"
     }
   },
   "settings": {
