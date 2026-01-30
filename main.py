@@ -54,7 +54,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             recent_history = history_manager.get_recent_titles_string(category=category)
             try:
                 seo_p = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today(), history=recent_history)
-                seo_plan = api_manager.generate_step_strict(model_name, seo_p, "SEO Strategy", ["target_keyword"])
+                seo_plan = api_manager.generate_step_strict(model_name, seo_p, "SEO Strategy", ["target_keyword"], use_google_search=True)
                 target_keyword = seo_plan.get('target_keyword')
             except Exception as e: return False
         if not target_keyword: return False
