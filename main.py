@@ -51,6 +51,7 @@ import youtube_manager
 import publisher
 import news_fetcher
 import ai_researcher
+import reddit_manager
 from prompts import *
 
 # ==============================================================================
@@ -488,10 +489,21 @@ def run_pipeline(category, config):
         log("❌ FATAL: All search methods failed. Aborting pipeline.")
         return
 
+    # --- STEP 1.5: REDDIT COMMUNITY INTEL ---
+    log(f"   🕵️‍♂️ [Step 1.5] Mining Reddit Community Intel for: '{target_keyword}'")
+    reddit_report, reddit_media = "", []
+    try:
+        reddit_report, reddit_media = reddit_manager.get_community_intel(target_keyword)
+    except Exception as e:
+        log(f"      ⚠️ Reddit Intel failed: {e}")
+
     # --- STEP 2: DRAFTING (The Strict Chain) ---
     log(f"   ✍️ [Step 2] Drafting Content from {len(collected_sources)} sources...")
     
     combined_text = "\n".join([f"SOURCE {i+1}: {s['domain']}\nTitle: {s['title']}\nTEXT:\n{s['text'][:8000]}" for i, s in enumerate(collected_sources)])
+    if reddit_report:
+        combined_text += f"\n\n{reddit_report}"
+        
     sources_list = [{"title": s['title'], "url": s['url']} for s in collected_sources]
     
     json_ctx = {
@@ -530,6 +542,11 @@ def run_pipeline(category, config):
 
     # --- STEP 3: MULTIMEDIA ---
     log("   🎬 [Step 3] Generating Multimedia Assets...")
+    
+    # Inject Reddit Media into available visuals if needed
+    if reddit_media:
+        log(f"      📸 Found {len(reddit_media)} Reddit visual assets to consider.")
+        # We could potentially use these URLs in the article or for video generation
     
     yt_meta = {}
     vid_main, vid_short = None, None
