@@ -69,6 +69,30 @@ INPUT CATEGORY: "{category}"
 """
 
 # ------------------------------------------------------------------
+# PROMPT 1.25: TOPIC REALIGNMENT (THE ADAPTIVE BRAIN)
+# ------------------------------------------------------------------
+PROMPT_REALIGN_TOPIC = """
+ROLE: SEO Analyst & Topic Synthesizer.
+TASK: Analyze the provided news headlines and the original target keyword. Determine the most accurate, searchable keyword that represents the CORE THEME of the articles found.
+
+**CONTEXT:**
+- The initial target was: "{original_keyword}"
+- But the articles we actually found are:
+{headlines_list}
+
+**STRICT RULES:**
+1. **BE CONCISE:** The new keyword should be short and specific (2-4 words).
+2. **SYNTHESIZE, DON'T COPY:** Do not just copy a headline. Find the common thread. For example, if headlines are about Apple AI, Google AI, and Microsoft AI, a good new keyword is "Big Tech AI race".
+3. **PRIORITIZE ENTITIES:** If a specific company or product name is repeated, it MUST be in the new keyword.
+4. **IF NO COMMON THREAD:** If the topics are too random, fall back to a more refined version of the original keyword or the main category theme.
+
+OUTPUT JSON ONLY:
+{{
+  "realigned_keyword": "The new, more accurate search keyword"
+}}
+"""
+
+# ------------------------------------------------------------------
 # PROMPT A: TOPIC SELECTION (Filter: "Is this clickable content?")
 # ------------------------------------------------------------------
 PROMPT_A_TRENDING = """
