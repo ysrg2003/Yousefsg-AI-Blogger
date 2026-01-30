@@ -180,74 +180,77 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             asset_map[tag] = html
             available_tags.append(tag)
 
-        # B) Process Images (Up to 4) WITH CONTEXT-AWARE FALLBACK
-        for i, img in enumerate(images[:4]): 
-            tag = f"[[IMAGE_{i+1}]]"
-            
-            log(f"   🎨 Processing Body Image {i+1}...")
-            
+        # B) Process Images (Batch Mode)
+        # 1. PREPARATION PHASE: Identify needs and collect candidates
+        batch_requests = {} # لتخزين المرشحين لكل فقرة
+        final_urls_map = {} # لتخزين الروابط النهائية (سواء الأصلية الصالحة أو المختارة)
+        
+        clean_keyword = target_keyword.split(':')[0].split('?')[0].strip()
+        
+        # تعريف السياقات للفقرات الأربعة
+        contexts = [
+            {"ctx": f"A clear dashboard user interface of {clean_keyword}", "q": f"{clean_keyword} dashboard interface"},
+            {"ctx": f"A workflow demonstration of {clean_keyword}", "q": f"{clean_keyword} workflow demo"},
+            {"ctx": f"An example result created by {clean_keyword}", "q": f"{clean_keyword} result example"},
+            {"ctx": f"Comparison of {clean_keyword} vs competitors", "q": f"{clean_keyword} comparison"}
+        ]
+
+        for i, img in enumerate(images[:4]):
             target_url = img['url']
-            is_fallback = False
+            needs_replacement = False
             
-            # --- 🧠 SMART CONTEXT GENERATOR (الكلمات المفتاحية القصيرة) ---
-            # تنظيف الكلمة المفتاحية من الرموز الزائدة لضمان بحث دقيق
-            clean_keyword = target_keyword.split(':')[0].split('?')[0].strip()
-            
-            if i == 0:
-                context_query = f"{clean_keyword} dashboard interface screenshot"
-            elif i == 1:
-                context_query = f"{clean_keyword} workflow demo"
-            elif i == 2:
-                context_query = f"{clean_keyword} result example"
-            else:
-                context_query = f"{clean_keyword} comparison vs competitor"
-
-            # 1. فحص الروابط المحمية أو المكسورة
+            # فحص هل الرابط محمي أو مكسور؟
             if "vertexaisearch" in target_url or "googleusercontent" in target_url or not target_url:
-                log(f"      ⚠️ Protected/Missing URL. Activating Smart Context Hunter...")
+                needs_replacement = True
+            
+            if needs_replacement:
+                log(f"   🔍 Collecting candidates for Image {i+1} ({contexts[i]['q']})...")
+                # نقلل العدد لـ 3 صور لكل فقرة لتخفيف الحمل على الشبكة (3x4=12 صورة إجمالاً)
+                candidates = scraper.get_google_image_candidates(contexts[i]['q'], limit=3)
                 
-                # --- التعديل هنا: إجبار استخدام الاستعلام الذكي القصير ---
-                # ألغينا استخدام img['description'] لأنه يسبب جملاً طويلة جداً
-                search_query = context_query 
-                
-                log(f"      🔍 Hunting Google Images for: '{search_query}'")
-                fallback_url = scraper.get_google_image_fallback(search_query)
-                
-                if fallback_url:
-                    target_url = fallback_url
-                    is_fallback = True
+                if candidates:
+                    batch_requests[i] = {
+                        "context": contexts[i]['ctx'],
+                        "urls": candidates
+                    }
                 else:
-                    # محاولة أخيرة: البحث باسم المنتج فقط
-                    log("      ⚠️ Specific context failed. Trying generic search...")
-                    fallback_url = scraper.get_google_image_fallback(f"{clean_keyword} software screenshot")
-                    if fallback_url:
-                        target_url = fallback_url
-                        is_fallback = True
-                    else:
-                        log("      ❌ Fallback failed. Removing tag.")
-                        asset_map[tag] = ""
-                        continue
+                    # إذا لم نجد مرشحين، للأسف لا يوجد صورة
+                    final_urls_map[i] = None
+            else:
+                # الرابط الأصلي سليم، نعتمد عليه
+                final_urls_map[i] = target_url
 
-            # 2. تجهيز البيانات للمعالجة
-            overlay_txt = clean_keyword # نستخدم الاسم القصير للكتابة على الصورة
+        # 2. AI SELECTION PHASE: Send batch to Gemini
+        if batch_requests:
+            selected_urls = image_processor.select_best_images_batch(model_name, batch_requests)
+            # دمج النتائج المختارة مع الخريطة النهائية
+            for idx, url in selected_urls.items():
+                final_urls_map[idx] = url
+
+        # 3. PROCESSING PHASE: Download, Edit, Upload
+        for i in range(len(images[:4])):
+            tag = f"[[IMAGE_{i+1}]]"
+            final_url = final_urls_map.get(i)
+            
+            if not final_url:
+                log(f"      ❌ No valid image for tag {tag}. Removing.")
+                asset_map[tag] = ""
+                continue
+
+            log(f"   🎨 Processing Final Image {i+1}...")
+            
+            overlay_txt = clean_keyword 
             safe_filename = f"{clean_keyword.replace(' ', '_')}_visual_{i+1}"
             
-            # 3. المعالجة والرفع
-            new_img_url = image_processor.process_source_image(target_url, overlay_txt, safe_filename)
+            # المعالجة والرفع
+            new_img_url = image_processor.process_source_image(final_url, overlay_txt, safe_filename)
             
-            # 4. شبكة الأمان الأخيرة
-            if not new_img_url and not is_fallback:
-                log(f"      ⚠️ Original image failed processing. Trying Smart Fallback...")
-                fallback_url = scraper.get_google_image_fallback(context_query)
-                if fallback_url:
-                    new_img_url = image_processor.process_source_image(fallback_url, overlay_txt, safe_filename)
-
-            # 5. النتيجة النهائية
             if new_img_url:
-                if is_fallback:
-                    alt_text = f"{clean_keyword} - {['Interface', 'Feature Demo', 'Result Example', 'Comparison'][min(i, 3)]}"
-                else:
-                    alt_text = img.get('description', target_keyword).replace('"', '')
+                # تحديد النص البديل المناسب
+                if i in batch_requests: # إذا كانت صورة بديلة
+                    alt_text = f"{clean_keyword} - {['Interface', 'Workflow', 'Result', 'Comparison'][min(i, 3)]}"
+                else: # إذا كانت أصلية
+                    alt_text = images[i].get('description', target_keyword).replace('"', '')
 
                 html = f'''
                 <figure style="margin:30px 0; text-align:center;">
@@ -258,11 +261,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 asset_map[tag] = html
                 available_tags.append(tag)
             else:
-                log(f"      ❌ All attempts failed. Removing tag {tag}.")
                 asset_map[tag] = ""
-        
-        
-        
+                        
 
         # 3. Prepare Payload for Writer
         combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + reddit_context
