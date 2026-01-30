@@ -36,6 +36,7 @@ import cluster_manager
 import indexer
 import gardener
 import ai_researcher
+import ai_strategy
 import live_auditor
 import remedy
 
@@ -45,13 +46,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     # ### NEW: CENTRALIZED SMART QUERY GENERATION ###
     # ======================================================================
 
-    log("   🧠 Generating a single, unified Smart Query for all searches...")
-    smart_query = _get_core_keywords_from_ai(target_keyword)
-    if not smart_query:
-        # Fallback to the simple heuristic if AI fails
-        smart_query = " ".join(re.split(r':|\||-', target_keyword)[0].strip().split()[:5])
-    log(f"   ✨ Unified Smart Query: '{smart_query}'")
-    
+    smart_query = ai_strategy.generate_smart_query(target_keyword)
+        
 
     
     """
