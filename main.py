@@ -352,7 +352,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         # 7.5 QUALITY IMPROVEMENT LOOP (AUDIT -> REMEDY -> UPDATE)
         # ======================================================================
-        quality_score, attempts, MAX_RETRIES = 0, 0, 3 
+        quality_score, attempts, MAX_RETRIES = 0, 0, 0
         
         while quality_score < 9.5 and attempts < MAX_RETRIES:
             attempts += 1
