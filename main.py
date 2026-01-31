@@ -224,144 +224,173 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             official_media = scraper.smart_media_hunt(smart_query, category, visual_strategy)
         reddit_context, reddit_media = reddit_manager.get_community_intel(smart_query)
 
+
+    # ======================================================================
+    # 5.5 [NEW] AI-POWERED VISUAL EVIDENCE AUGMENTATION
+    # ======================================================================
+    log("   🔍 [Augmentation] Using Gemini Search to find additional real-world evidence...")
+    ai_found_evidence = []
+    try:
+        # We use the new "Detective" prompt with web search enabled
+        augmentation_prompt = PROMPT_EVIDENCE_AUGMENTATION.format(target_keyword=target_keyword)
+        evidence_payload = api_manager.generate_step_strict(
+            model_name, 
+            augmentation_prompt, 
+            "Visual Evidence Augmentation", 
+            ["visual_evidence"], 
+            use_google_search=True
+        )
+        
+        if evidence_payload and evidence_payload.get("visual_evidence"):
+            log(f"      ✅ AI Detective found {len(evidence_payload['visual_evidence'])} new pieces of evidence.")
+            # Convert the AI's findings into the same format as our other media
+            for evidence in evidence_payload["visual_evidence"]:
+                # Map AI output type to our internal type
+                evidence_type = "image" # Default
+                if "video" in evidence.get("type", ""):
+                    evidence_type = "embed"
+                elif "gif" in evidence.get("type", ""):
+                    evidence_type = "gif"
+
+                ai_found_evidence.append({
+                    "type": evidence_type,
+                    "url": evidence["url"],
+                    "description": evidence["description"],
+                    "score": 10  # Give high priority to AI-verified evidence
+                })
+        else:
+            log("      ⚠️ AI Detective did not find any new evidence.")
+
+    except Exception as e:
+        log(f"      ❌ Visual Augmentation step failed: {e}")
+
+        
         # ======================================================================
-        # 6. WRITING, ASSETS, and VIDEO PRODUCTION
+        # 6. SYNTHESIS, VIDEO PRODUCTION, AND REAL EVIDENCE INJECTION
         # ======================================================================
         log("   ✍️ Synthesizing Content & Preparing Visual Assets...")
         
-        # --- SMART CONTEXTUAL INJECTION LOGIC ---
-        # 1. Collect and Filter Media
+        # --- [NEW] REAL EVIDENCE FILTERING & PREPARATION ---
+
         all_media = []
         for s in collected_sources:
             if s.get('media'): all_media.extend(s['media'])
         if official_media: all_media.extend(official_media)
         if reddit_media: all_media.extend(reddit_media)
-        
-        # Deduplicate
-        unique_media = {m['url']: m for m in all_media}.values()
-        
-        # Separate Videos and Images
-        videos = [m for m in unique_media if m['type'] in ['video', 'embed']]
-        images = [m for m in unique_media if m['type'] in ['image', 'gif']]
-        images = sorted(images, key=lambda x: x.get('score', 0), reverse=True)
+        if ai_found_evidence: all_media.extend(ai_found_evidence) # <-- السطر الجديد والمهم
+                
+        # Deduplicate and select the best 3-5 pieces of evidence
+        unique_media = list({m['url']: m for m in all_media}.values())
+        # Sort by score (if available) to prioritize better visuals
+        unique_media = sorted(unique_media, key=lambda x: x.get('score', 0), reverse=True)
+        best_visuals = unique_media[:5] # Take the top 5 visuals
 
-        # 2. Build Asset Map (Tag -> HTML)
         asset_map = {}
         available_tags = []
+        visual_context_for_writer = [] # Descriptions for the AI writer
 
-        # A) Process Main Video (Need at least one)
-        if videos:
-            main_vid = videos[0]
-            tag = "[[VIDEO_MAIN]]"
-            if main_vid['type'] == 'embed':
-                html = f'''<div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><iframe src="{main_vid['url']}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="Video Demo"></iframe></div>'''
-            else:
-                html = f'''<div class="video-wrapper" style="margin:30px 0;"><video controls style="width:100%;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><source src="{main_vid['url']}" type="video/mp4">Your browser does not support the video tag.</video></div>'''
-            
-            asset_map[tag] = html
-            available_tags.append(tag)
+        for i, visual in enumerate(best_visuals):
+            tag = f"[[VISUAL_EVIDENCE_{i+1}]]"
+            html = ""
+            if visual['type'] in ['image', 'gif']:
+                html = f'''
+                <figure style="margin:30px 0; text-align:center;">
+                    <img src="{visual['url']}" alt="{visual['description']}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+                    <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {visual['description']}</figcaption>
+                </figure>
+                '''
+            elif visual['type'] == 'embed':
+                 html = f'''<div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><iframe src="{visual['url']}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{visual['description']}"></iframe></div>'''
 
-        # B) Process Images (Up to 4)
-        for i, img in enumerate(images[:4]): 
-            tag = f"[[IMAGE_{i+1}]]"
-            html = f'''
-            <figure style="margin:30px 0; text-align:center;">
-                <img src="{img['url']}" alt="{img['description']}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
-                <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {img['description']}</figcaption>
-            </figure>
-            '''
-            asset_map[tag] = html
-            available_tags.append(tag)
+            if html:
+                asset_map[tag] = html
+                available_tags.append(tag)
+                visual_context_for_writer.append(f"{tag}: {visual['description']}")
 
-        # 3. Prepare Payload for Writer
+        # --- WRITING STAGE ---
         combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + reddit_context
         
         payload = {
             "keyword": target_keyword, 
             "research_data": combined_text, 
-            "visual_strategy_directive": visual_strategy,
             "AVAILABLE_VISUAL_TAGS": available_tags, # Pass the tags to AI
-            "TODAY_DATE": str(datetime.date.today()) # Fix Timeline Paradox
+            "VISUAL_DESCRIPTIONS": "\n".join(visual_context_for_writer), # Give AI context about visuals
+            "TODAY_DATE": str(datetime.date.today())
         }
         
-        json_b = api_manager.generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=json.dumps(payload), forbidden_phrases="[]"), "Writer", ["headline", "article_body", "seo", "schemaMarkup"])        
-        # 4. Perform Contextual Replacement (Python Side)
-        final_body_draft = json_b['article_body']
+        # We call the new V2 prompt now
+        json_b = api_manager.generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=json.dumps(payload), forbidden_phrases="[]"), "Writer", ["headline", "article_body"])
         
-        for tag, html_code in asset_map.items():
-            if tag in final_body_draft:
-                final_body_draft = final_body_draft.replace(tag, html_code)
-            else:
-                # Fallback: If AI forgot the video, force inject it at the end
-                if "VIDEO" in tag: 
-                    final_body_draft += f"\n<h3>Watch the Demo</h3>{html_code}"
-        
-        json_b['article_body'] = final_body_draft
+        title = json_b['headline']
+        draft_body_html = json_b['article_body']
 
-        # --- Continue Pipeline ---
-        sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
-        kg_links = history_manager.get_relevant_kg_for_linking(json_b['headline'], category)
-
-        json_c = api_manager.generate_step_strict(
-        model_name, 
-        PROMPT_C_TEMPLATE.format(json_input=json.dumps({"draft_content": json_b, "sources_data": sources_data}), knowledge_graph=kg_links), "SEO", ["finalTitle", "finalContent", "imageGenPrompt", "imageOverlayText", "seo", "schemaMarkup"]) 
-        
-                
-        # --- Humanizer Stage (THE FIX IS HERE) ---
-        # 1. استخلص فقط المحتوى النصي من المرحلة السابقة.
-        content_to_humanize = json_c['finalContent']
-
-        # 2. قم بتمرير المحتوى النظيف فقط إلى Humanizer.
-        final_article_content_only = api_manager.generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(content_input=content_to_humanize),"Humanizer", ["finalContent"])
-        final_article = {"finalTitle": json_c['finalTitle'], "finalContent": final_article_content_only['finalContent'], "imageGenPrompt": json_c['imageGenPrompt'], "imageOverlayText": json_c['imageOverlayText'], "seo": json_c['seo'], "schemaMarkup": json_c['schemaMarkup']}
-        title, full_body_html = final_article['finalTitle'], final_article['finalContent']
-
-            
-        log("   🎨 Generating Assets...")
-        img_url = image_processor.generate_and_upload_image(final_article.get('imageGenPrompt', title))
-        
+        # --- VIDEO PRODUCTION & UPLOAD ---
         log("   🎬 Video Production & Upload...")
+        vid_main_id, vid_main_url, vid_short_id, local_fb_video = None, None, None, None
         
-        # Initialize variables to avoid UnboundLocalError
-        vid_main_id, vid_main_url = None, None
-        vid_short_id, vid_short_url = None, None
-        local_fb_video = None
-        
-        # Generate Script
-        summ = re.sub('<[^<]+?>', '', full_body_html)[:1000]
-        vs = api_manager.generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script")
-        script_json = vs.get('video_script', [])
+        summ = re.sub('<[^<]+?>', '', draft_body_html)[:1000]
+        vs_payload = api_manager.generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script")
+        script_json = vs_payload.get('video_script', [])
 
-        rr = video_renderer.VideoRenderer(output_dir="output")
-        ts = int(time.time())
-        
-        # Main Video (YouTube)
-        pm = rr.render_video(script_json, title, f"main_{ts}.mp4")
-        if pm:
-            vid_main_id, vid_main_url = youtube_manager.upload_video_to_youtube(pm, title, "Technical Analysis", ["tech", category])
-        
-        # Shorts Video (YouTube + Facebook)
-        rs = video_renderer.VideoRenderer(output_dir="output", width=1080, height=1920)
-        ps = rs.render_video(script_json, title, f"short_{ts}.mp4")
-        if ps:
-            local_fb_video = ps
-            vid_short_id, vid_short_url = youtube_manager.upload_video_to_youtube(ps, f"{title[:50]} #Shorts", "Quick Review", ["shorts", category])
+        if script_json:
+            rr = video_renderer.VideoRenderer(output_dir="output")
+            ts = int(time.time())
+            
+            # Main Video (16:9)
+            main_video_path = rr.render_video(script_json, title, f"main_{ts}.mp4")
+            if main_video_path:
+                vid_main_id, vid_main_url = youtube_manager.upload_video_to_youtube(main_video_path, title, "AI Analysis", ["ai", category])
+            
+            # Shorts Video (9:16)
+            rs = video_renderer.VideoRenderer(output_dir="output", width=1080, height=1920)
+            short_video_path = rs.render_video(script_json, title, f"short_{ts}.mp4")
+            if short_video_path:
+                local_fb_video = short_video_path
+                vid_short_id, _ = youtube_manager.upload_video_to_youtube(short_video_path, f"{title[:50]} #Shorts", "Quick Look", ["shorts", category])
 
         # ======================================================================
-        # 7. ASSET INJECTION & PUBLISHING
+        # 7. FINAL ASSEMBLY & PUBLISHING
         # ======================================================================
-        log("   🔗 Injecting Assets into HTML...")
+        log("   🔗 Assembling Final HTML with All Assets...")
 
-        # Note: Videos and Research Images are already injected via Contextual Replacement.
-        # We only need to inject the "Featured Image" (Thumbnail) at the top.
+        final_body_html = draft_body_html
 
-        image_html = ""
-        if img_url:
-            image_html = f'<div class="featured-image" style="text-align: center; margin-bottom: 35px;"><img src="{img_url}" style="width: 100%; border-radius: 15px;" alt="{title}"></div>'
+        # [CRITICAL FIX] Inject the main YouTube video IFRAME directly into the HTML
+        if vid_main_url:
+            video_html = f'''
+            <h3>Watch the Video Summary</h3>
+            <div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);">
+            <iframe src="{vid_main_url}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{title}"></iframe>
+            </div>'''
+            # Inject video after the table of contents
+            if "[[TOC_PLACEHOLDER]]" in final_body_html:
+                 final_body_html = final_body_html.replace("[[TOC_PLACEHOLDER]]", "[[TOC_PLACEHOLDER]]" + video_html)
+            else:
+                 final_body_html = video_html + final_body_html # Fallback if TOC is missing
 
-        # Combine Featured Image + Body (Video is inside Body)
-        full_body_html = image_html + full_body_html
+        # Inject the REAL visual evidence found earlier
+        for tag, html_code in asset_map.items():
+            final_body_html = final_body_html.replace(tag, html_code)
 
+        # SEO Polish Stage (Now happens on a much richer draft)
+        sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
+        kg_links = history_manager.get_relevant_kg_for_linking(title, category)
+        
+        # We re-use json_c structure but with our assembled content
+        seo_payload = {"draft_content": {"headline": title, "article_body": final_body_html}, "sources_data": sources_data}
+        json_c = api_manager.generate_step_strict(
+            model_name, 
+            PROMPT_C_TEMPLATE.format(json_input=json.dumps(seo_payload), knowledge_graph=kg_links), "SEO Polish", ["finalTitle", "finalContent", "seo", "schemaMarkup"]
+        )
+
+        # Humanizer Stage
+        humanizer_payload = api_manager.generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(content_input=json_c['finalContent']),"Humanizer", ["finalContent"])
+        
+        final_title = json_c['finalTitle']
+        full_body_html = humanizer_payload['finalContent']
+
+    
+        
         log("   🚀 [Publishing] Initial Draft...")
         pub_result = publisher.publish_post(title, full_body_html, [category])
         published_url, post_id = (pub_result if isinstance(pub_result, tuple) else (pub_result, None))
