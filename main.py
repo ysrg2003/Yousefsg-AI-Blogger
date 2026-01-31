@@ -308,7 +308,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         asset_map = {}
         available_tags = []
         visual_context = []        
-        
+        visual_context_for_writer = []
         
         for i, visual in enumerate(valid_visuals):
             tag = f"[[VISUAL_EVIDENCE_{i+1}]]"
