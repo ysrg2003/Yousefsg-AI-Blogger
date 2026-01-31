@@ -209,8 +209,11 @@ The input JSON also contains `TODAY_DATE`.
 2.  `<h2>[Product Name]: What's the Official Pitch?</h2>`: Briefly explain what the company claims the product does, but with a skeptical Reddit lens.
 3.  `[[TOC_PLACEHOLDER]]`: This exact tag must be present.
 4.  `<h2>Real Talk: What Redditors Are Saying About [Product Name]</h2>`: The detailed section based on the Reddit data, as described above. This is the heart of the article.
-5.  `<h2>The Good, The Bad, and The Ugly (My Unfiltered Take)</h2>`: A balanced analysis (Pros & Cons) based on ALL collected data (official sources + community feedback), presented with your Reddit persona's honest opinion.
-6.  `<h2>TL;DR: Is [Product Name] Worth Your Time/Money?</h2>`: Your final, expert conclusion as a Reddit analyst. Be brutally honest and direct.
+5.  `<h2>Feature Breakdown & Comparison</h2>`:
+    - You MUST include a detailed HTML Comparison Table here comparing the NEW version vs the famous Competitor  (or old version).
+    - Use `<table class="comparison-table">`
+6.  `<h2>The Good, The Bad, and The Ugly (My Unfiltered Take)</h2>`: A balanced analysis (Pros & Cons) based on ALL collected data (official sources + community feedback), presented with your Reddit persona's honest opinion.
+7.  `<h2>TL;DR: Is [Product Name] Worth Your Time/Money?</h2>`: Your final, expert conclusion as a Reddit analyst. Be brutally honest and direct.
 
 ---
 ### 📦 REQUIRED JSON OUTPUT STRUCTURE
