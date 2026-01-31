@@ -373,8 +373,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             '''
             full_body_html = img_html + full_body_html
 
-        # Author Box (Professional Design with Icons)
-    author_box = """
+        author_box = """
     <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
         <div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:25px;">
             <img src="https://blogger.googleusercontent.com/img/a/AVvXsEiB6B0pK8PhY0j0JrrYCSG_QykTjsbxbbdePdNP_nRT_39FW4SGPPqTrAjendimEUZdipHUiYJfvHVjTBH7Eoz8vEjzzCTeRcDlIcDrxDnUhRJFJv4V7QHtileqO4wF-GH39vq_JAe4UrSxNkfjfi1fDS9_T4mPmwEC71VH9RJSEuSFrNb2ZRQedyA61iQ=s1017-rw" 
@@ -397,6 +396,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     </div>
     """
     full_body_html = full_body_html + author_box
+
+        
         log("   🚀 [Publishing] Initial Draft...")
         pub_result = publisher.publish_post(title, full_body_html, [category])
         published_url, post_id = (pub_result if isinstance(pub_result, tuple) else (pub_result, None))
