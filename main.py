@@ -310,7 +310,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         visual_context = []        
         
         
-        for i, visual in enumerate(best_visuals):
+        for i, visual in enumerate(valid_visuals):
             tag = f"[[VISUAL_EVIDENCE_{i+1}]]"
             html = ""
             if visual['type'] in ['image', 'gif']:
