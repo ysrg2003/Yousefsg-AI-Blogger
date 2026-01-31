@@ -2,37 +2,39 @@ name: Daily Article Publishing
 
 on:
   schedule:
-    - cron: '36 12 * * *' # توقيت افتراضي (2 ظهرا)
-  workflow_dispatch: 
+    - cron: '36 12 * * *' # توقيت افتراضي (2 ظهرا بتوقيت UTC) - يمكنك تعديله لاحقاً
+  workflow_dispatch: # يسمح بتشغيل الـ workflow يدوياً من واجهة GitHub
 
 permissions:
-  contents: write
+  contents: write # إعطاء صلاحيات الكتابة للمستودع للسماح بالـ commits
 
 jobs:
   publish-articles:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # تشغيل الوظيفة على بيئة Ubuntu حديثة
     steps:
-      - name: Checkout repository
+      - name: Checkout repository # خطوة سحب المستودع
         uses: actions/checkout@v3
         with:
-          # استخدام التوكن الشخصي الخاص بك للسماح بتعديل ملفات الـ Workflow
+          # استخدام التوكن الشخصي الخاص بك للسماح بالقيام بالـ commits وتعديل ملفات الـ Workflow
+          # هذا التوكن (MY_GITHUB_TOKEN) يجب أن يكون قد تم إعداده كـ Secret في GitHub
           token: ${{ secrets.MY_GITHUB_TOKEN }}
-          fetch-depth: 0 # ضروري لعمليات الـ Git المتكررة
+          # ضروري لعمليات الـ Git المتكررة التي تتضمن history مثل --rebase
+          fetch-depth: 0 
       
-      - name: Set up Python
+      - name: Set up Python # إعداد بيئة Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: '3.11' # تحديد إصدار Python المراد استخدامه
       
-      - name: Install dependencies
+      - name: Install dependencies # تثبيت المكتبات المطلوبة من requirements.txt
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          pip install -r requirements.txt
+          sudo apt-get update # تحديث قوائم الحزم (ضروري قبل تثبيت ffmpeg)
+          sudo apt-get install -y ffmpeg # تثبيت ffmpeg (مطلوب لـ moviepy في video_renderer.py)
+          pip install -r requirements.txt # تثبيت جميع مكتبات Python من الملف
       
-      # 1. تشغيل المولد الرئيسي
+      # 1. تشغيل المولد الرئيسي للمقالات والفيديوهات
       - name: Run Article Generator
-        env:
+        env: # متغيرات البيئة التي يحتاجها السكريبت، يتم جلبها من GitHub Secrets
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
@@ -49,45 +51,60 @@ jobs:
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
-          GITHUB_REPO_NAME: ${{ github.repository }}
-          GITHUB_IMAGE_REPO: "ysrg2003/latest-ai-assets" 
+          GITHUB_REPO_NAME: ${{ github.repository }} # يمثل المستودع الحالي (مثال: ysrg2003/AI-Blogger-Automation)
+          GITHUB_IMAGE_REPO: "ysrg2003/latest-ai-assets" # اسم المستودع الذي سيتم رفع الصور عليه (ثابت هنا)
           YOUTUBE_CREDENTIALS_JSON: ${{ secrets.YOUTUBE_CREDENTIALS_JSON }}
           GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }} 
           GOOGLE_INDEXING_JSON: ${{ secrets.GOOGLE_INDEXING_JSON }}
-          GH_MODELS_TOKEN: ${{ secrets.GH_MODELS_TOKEN }}
+          GH_MODELS_TOKEN: ${{ secrets.GH_MODELS_TOKEN }} # توكن اختياري لتحميل نماذج من GitHub (إذا كان النظام يستخدمها)
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
-        run: python -u main.py
-
-      # 2. تغيير التوقيت عشوائياً للغد
+        run: python -u main.py # تشغيل السكريبت الرئيسي (main.py)
+        
+      # 2. تغيير توقيت التشغيل العشوائي للـ workflow لليوم التالي
+      # يتم تشغيلها دائماً (if: always()) حتى لو فشلت الخطوات السابقة، لضمان تحديث التوقيت
       - name: Randomize Schedule
         if: always()
-        run: python update_schedule.py
+        run: python update_schedule.py # تشغيل سكريبت تحديث التوقيت
 
-      # 3. حفظ التغييرات ورفعها (الطريقة الصحيحة لتجنب الأخطاء)
+      # 3. حفظ جميع التغييرات التي حدثت ورفعها إلى المستودع (Git Operations)
+      # يتم تشغيلها دائماً (if: always()) لضمان حفظ حالة النظام
       - name: Push Changes
         if: always()
         run: |
+          # إعداد معلومات المستخدم لـ Git
           git config --global user.name 'Scheduler Bot'
           git config --global user.email 'scheduler@bot.com'
           
-          # 1. إضافة الملفات المعدلة إلى الـ Staging Area
-          git add knowledge_graph.json
-          git add .github/workflows/daily-publish.yml
+          # 1. إضافة الملفات المعدلة إلى الـ Staging Area (تجهيزها للـ commit)
+          # هذه الملفات يتم تعديلها بواسطة سكربتات Python وتحتوي على حالة النظام
+          git add knowledge_graph.json         # قاعدة بيانات المقالات المنشورة (history_manager.py)
+          git add .github/workflows/daily-publish.yml # ملف الـ workflow نفسه (يتم تعديل الـ cron بواسطة update_schedule.py)
+          git add source_reputation.json       # ملف سمعة المصادر (news_fetcher.py)
+          # git add content_plan.json            # ملف خطة المحتوى (العناقيد) (cluster_manager.py)
           
+          # التحقق من وجود مجلد 'archive' قبل محاولة إضافته (اختياري، إذا كان النظام يقوم بالأرشفة)
           if [ -d "archive" ]; then
             git add archive/
           fi
           
-          # 2. التحقق من وجود تغييرات ثم عمل Commit
-          # نقوم بالكوميت "قبل" الـ Pull لتجنب مشكلة Unstaged changes
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
+          # 2. التحقق من وجود تغييرات staged (تم إعدادها للـ commit) ثم عمل Commit لها
+          # الأمر 'git diff-index --quiet HEAD' يتحقق مما إذا كانت هناك تغييرات تم عمل 'git add' لها
+          # مقارنة بآخر commit. إذا لم تكن هناك تغييرات، فإن الأمر يمر بصمت (true)
+          # إذا كانت هناك تغييرات، فإنه يفشل (false) وهنا نقوم بالـ commit
+          if git diff-index --quiet HEAD; then
+            echo "No changes to commit." # لا توجد تغييرات، لا حاجة للـ commit
           else
-            git commit -m "📅 Auto-Update: Schedule & Content Data"
+            git commit -m "📅 Auto-Update: Schedule & Content Data" # عمل commit للتغييرات
             
-            # 3. سحب التحديثات من السيرفر ودمجها مع الكوميت المحلي
-            git pull origin main --rebase
+            # 3. سحب التحديثات من السيرفر ودمجها مع الـ commit المحلي
+            # استخدام 'git pull origin main --rebase --autostash'
+            #   - 'origin main': سحب التحديثات من الفرع الرئيسي (main) على السيرفر البعيد (origin)
+            #   - '--rebase': دمج التغييرات بشكل خطي (يضع التغييرات المحلية فوق التغييرات المسحوبة)
+            #   - '--autostash': يقوم تلقائياً بتخزين أي تغييرات لم يتم عمل 'git add' لها مؤقتاً قبل الـ rebase،
+            #                   ثم يعيد تطبيقها بعد الانتهاء. هذا يمنع رسالة "You have unstaged changes"
+            #                   ويزيد من متانة عملية الرفع.
+            git pull origin main --rebase --autostash
             
-            # 4. الرفع النهائي
+            # 4. الرفع النهائي: دفع التغييرات (المحلية والمسحوبة) إلى المستودع البعيد
             git push origin main
           fi
