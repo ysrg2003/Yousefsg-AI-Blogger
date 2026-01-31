@@ -284,8 +284,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             "TODAY_DATE": str(datetime.date.today()) # Fix Timeline Paradox
         }
         
-        json_b = api_manager.generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=json.dumps(payload), forbidden_phrases="[]"), "Writer", ["headline", "article_body"])
-        
+        json_b = api_manager.generate_step_strict(model_name, PROMPT_B_TEMPLATE.format(json_input=json.dumps(payload), forbidden_phrases="[]"), "Writer", ["headline", "article_body", "seo", "schemaMarkup"])        
         # 4. Perform Contextual Replacement (Python Side)
         final_body_draft = json_b['article_body']
         
