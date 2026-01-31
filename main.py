@@ -395,7 +395,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         </div>
     </div>
     """
-    full_body_html = full_body_html + author_box
+        full_body_html = full_body_html + author_box
 
         
         log("   🚀 [Publishing] Initial Draft...")
