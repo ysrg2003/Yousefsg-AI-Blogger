@@ -74,15 +74,15 @@ def extract_element_context(element):
 
 def extract_media_from_soup(soup, base_url, directive):
     """
-    Parses HTML to find high-value media (Videos, GIFs, Screenshots).
+    Parses HTML to find high-value media (Strict Mode).
     """
     candidates = []
     positive_signals = ["demo", "showcase", "tutorial", "interface", "dashboard", "generated", "result", "how to", "workflow", "reveal", "trailer", "robot", "prototype", "screenshot", "UI"]
-    negative_signals = ["logo", "icon", "background", "banner", "loader", "spinner", "avatar", "profile", "footer", "ad", "advertisement", "promo"]
+    negative_signals = ["logo", "icon", "background", "banner", "loader", "spinner", "avatar", "profile", "footer", "ad", "advertisement", "promo", "pixel", "tracker"]
 
-    # 1. Search for Videos (Iframe/Video tags)
-    for video in soup.find_all(['video', 'iframe']):
-        src = video.get('src') or (video.find('source') and video.find('source').get('src'))
+    # 1. Search for Videos (Iframe/Video tags) - STRICT FILTER
+    for video in soup.find_all(['iframe']):
+        src = video.get('src')
         if not src: continue
         
         # Normalize URL
@@ -92,13 +92,16 @@ def extract_media_from_soup(soup, base_url, directive):
         # Filter Junk
         if any(bad in src.lower() for bad in MEDIA_LINK_BLACKLIST): continue
         
+        # [FIX] Only accept standard YouTube embeds to avoid broken players
+        if "youtube.com/embed/" not in src:
+            continue # Skip weird video players that might break
+            
         context = extract_element_context(video).lower()
-        if any(bad in context or bad in src for bad in negative_signals): continue
         
-        m_type = "embed" if 'youtube' in src or 'vimeo' in src else "video"
-        score = sum(1 for sig in positive_signals if sig in context) + (3 if m_type == "embed" else 2)
-        
-        candidates.append({"type": m_type, "url": src, "description": context, "score": score})
+        # Ensure it's relevant
+        score = sum(1 for sig in positive_signals if sig in context)
+        if score > 0:
+            candidates.append({"type": "embed", "url": src, "description": context, "score": score + 3})
 
     # 2. Search for Images (GIFs & Static)
     for img in soup.find_all('img', src=True):
@@ -111,25 +114,29 @@ def extract_media_from_soup(soup, base_url, directive):
         
         # Filter Junk
         if any(bad in src.lower() for bad in MEDIA_LINK_BLACKLIST): continue
+        if src.endswith('.svg') or src.endswith('.ico'): continue # Ignore icons
         
         context = extract_element_context(img).lower()
         if any(bad in context or bad in src for bad in negative_signals): continue
         
+        # Skip small images (likely icons or junk)
+        try:
+            if 'width' in img.attrs and int(img['width']) < 300: continue
+        except: pass
+
         # Prioritize GIFs
         if src.lower().endswith('.gif'):
             candidates.append({"type": "gif", "url": src, "description": context, "score": sum(1 for sig in positive_signals if sig in context) + 2})
         
-        # If directive is for screenshots, allow static images
+        # Screenshots
         elif directive == "hunt_for_screenshot":
             if any(ext in src.lower() for ext in ['.png', '.jpg', '.jpeg', '.webp']):
-                # Strict size check handled by score logic mostly, here we just filter icons
                 if "icon" not in src.lower() and "logo" not in src.lower():
                     score = sum(1 for sig in positive_signals if sig in context)
-                    if score > 0: # Only relevant images
+                    if score > 0: 
                         candidates.append({"type": "image", "url": src, "description": context, "score": score})
 
     return candidates
-
 # ==============================================================================
 # 3. THE SMART HUNTER (AI + SELENIUM)
 # ==============================================================================
