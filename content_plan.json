@@ -1,5 +1,9 @@
 {
-  "active_cluster": "Any Video Converter V9.1.6 Mastery Series",
-  "queue": [],
+  "active_cluster": "Google Vertex AI with Gemini 3.0 Mastery Series",
+  "queue": [
+    "Topic 2 (The Guide: Mastering Advanced Multimodal Integration in Gemini 3.0 on Vertex AI)",
+    "Topic 3 (The Comparison: Gemini 3.0 on Vertex AI vs. Gemini 2.0 vs. AWS SageMaker for AI Production)",
+    "Topic 4 (The Future/Advanced: Unlocking Hidden Potential and Advanced Workflows with Gemini 3.0 on Vertex AI)"
+  ],
   "completed": []
 }
