@@ -362,6 +362,16 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         
         final_title = json_c['finalTitle']
         full_body_html = humanizer_payload['finalContent']
+        if img_url:
+            log(f"   🖼️ Injecting Featured Image into HTML...")
+            img_html = f'''
+            <div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;">
+                <a href="{img_url}" style="margin-left: 1em; margin-right: 1em;">
+                    <img border="0" src="{img_url}" alt="{final_title}" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" />
+                </a>
+            </div>
+            '''
+            full_body_html = img_html + full_body_html
 
         log("   🚀 [Publishing] Initial Draft...")
         pub_result = publisher.publish_post(title, full_body_html, [category])
