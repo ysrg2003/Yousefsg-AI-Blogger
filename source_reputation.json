@@ -1,0 +1,38 @@
+{
+  "blacklist": [
+    "instagram.com",
+    "savannahgilbo.com",
+    "globenewswire.com",
+    "twitter.com",
+    "x.com",
+    "linkedin.com",
+    "pinterest.com",
+    "prweb.com",
+    "aol.com",
+    "indiacsr.in",
+    "buzzfeed.com",
+    "msn.com",
+    "tumblr.com",
+    "facebook.com",
+    "softpedia.com",
+    "slashdot.org",
+    "dailymotion.com",
+    "reddit.com",
+    "medium.com",
+    "quora.com",
+    "officechai.com",
+    "blogspot.com",
+    "wordpress.com",
+    "yahoo.com",
+    "lynmillerlachmann.com",
+    "marketwatch.com",
+    "youtube.com",
+    "tiktok.com",
+    "analyticsinsight.net",
+    "businesswire.com",
+    "vocal.media"
+  ],
+  "whitelist": [
+    "theguardian.com"
+  ]
+}
