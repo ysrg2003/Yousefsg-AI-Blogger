@@ -171,7 +171,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         if len(collected_sources) < 3:
             log(f"   ⚠️ Primary yielded {len(collected_sources)}/3 sources. Activating Legacy Fallback...")
             try:
-                ai_results = ai_researcher.smart_hunt(target_keyword, config, mode="general")
+                ai_results = ai_researcher.smart_hunt(smart_query, config, mode="general")
                 if ai_results:
                     vetted = news_fetcher.ai_vet_sources(ai_results, model_name)
                     for item in vetted:
@@ -186,7 +186,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
             if len(collected_sources) < 3:
                 try:
-                    legacy_items = news_fetcher.get_real_news_rss(target_keyword, category) 
+                    legacy_items = news_fetcher.get_real_news_rss(smart_query, category) 
                     for item in legacy_items:
                         if len(collected_sources) >= 3: break
                         if any(s['url'] == item['link'] for s in collected_sources): continue
