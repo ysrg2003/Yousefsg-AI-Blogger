@@ -2,6 +2,7 @@
 # ROLE: Advanced Web Scraper & Visual Hunter.
 # FEATURES: AI-Guided Media Hunt, Selenium Fallback, Smart Anti-Detection.
 
+import re
 import time
 import random
 import urllib.parse
@@ -73,62 +74,61 @@ def extract_element_context(element):
     return " | ".join(context) if context else "No description available"
 
 def extract_media_from_soup(soup, base_url, directive):
-    """
-    Parses HTML to find high-value media (Strict Mode).
-    """
     candidates = []
     positive_signals = ["demo", "showcase", "tutorial", "interface", "dashboard", "generated", "result", "how to", "workflow", "reveal", "trailer", "robot", "prototype", "screenshot", "UI"]
     negative_signals = ["logo", "icon", "background", "banner", "loader", "spinner", "avatar", "profile", "footer", "ad", "advertisement", "promo", "pixel", "tracker"]
 
-    # 1. Search for Videos (Iframe/Video tags) - STRICT FILTER
-    for video in soup.find_all(['iframe']):
-        src = video.get('src')
+    # 1. Search for Videos (STRICT YOUTUBE FIX)
+    # نبحث عن أي iframe أو رابط فيديو، ولكن نقبل فقط ما يمكننا تحويله إلى embed سليم
+    for frame in soup.find_all(['iframe', 'a']):
+        src = frame.get('src') or frame.get('href')
         if not src: continue
         
-        # Normalize URL
+        # تطبيع الرابط
         if src.startswith('//'): src = 'https:' + src
         if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
-        
-        # Filter Junk
-        if any(bad in src.lower() for bad in MEDIA_LINK_BLACKLIST): continue
-        
-        # [FIX] Only accept standard YouTube embeds to avoid broken players
-        if "youtube.com/embed/" not in src:
-            continue # Skip weird video players that might break
-            
-        context = extract_element_context(video).lower()
-        
-        # Ensure it's relevant
-        score = sum(1 for sig in positive_signals if sig in context)
-        if score > 0:
-            candidates.append({"type": "embed", "url": src, "description": context, "score": score + 3})
 
-    # 2. Search for Images (GIFs & Static)
+        # استخراج ID اليوتيوب بدقة باستخدام Regex
+        # يدعم: youtube.com/watch?v=, youtu.be/, youtube.com/embed/, shorts/
+        youtube_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', src)
+        
+        if youtube_match:
+            video_id = youtube_match.group(1)
+            # نعيد بناء الرابط ليكون embed مضمون
+            clean_embed = f"https://www.youtube.com/embed/{video_id}"
+            
+            context = extract_element_context(frame).lower()
+            score = sum(1 for sig in positive_signals if sig in context)
+            
+            candidates.append({
+                "type": "embed", 
+                "url": clean_embed, 
+                "description": context or "Video demonstration", 
+                "score": score + 5 # نعطيه أولوية عالية لأنه فيديو حقيقي
+            })
+
+    # 2. Search for Images (Images Logic)
     for img in soup.find_all('img', src=True):
         src = img['src']
         if not src: continue
         
-        # Normalize
         if src.startswith('//'): src = 'https:' + src
         if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
         
-        # Filter Junk
         if any(bad in src.lower() for bad in MEDIA_LINK_BLACKLIST): continue
-        if src.endswith('.svg') or src.endswith('.ico'): continue # Ignore icons
+        if src.endswith('.svg') or src.endswith('.ico'): continue 
         
+        # استبعاد الصور الصغيرة (أيقونات)
+        try:
+            if 'width' in img.attrs and int(img['width']) < 400: continue
+        except: pass
+
         context = extract_element_context(img).lower()
         if any(bad in context or bad in src for bad in negative_signals): continue
         
-        # Skip small images (likely icons or junk)
-        try:
-            if 'width' in img.attrs and int(img['width']) < 300: continue
-        except: pass
-
-        # Prioritize GIFs
         if src.lower().endswith('.gif'):
             candidates.append({"type": "gif", "url": src, "description": context, "score": sum(1 for sig in positive_signals if sig in context) + 2})
         
-        # Screenshots
         elif directive == "hunt_for_screenshot":
             if any(ext in src.lower() for ext in ['.png', '.jpg', '.jpeg', '.webp']):
                 if "icon" not in src.lower() and "logo" not in src.lower():
