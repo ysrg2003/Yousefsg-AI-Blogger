@@ -1,5 +1,6 @@
 # FILE: cluster_manager.py
 # ROLE: Manages Topic Clusters (Silos) to build SEO Authority.
+# UPDATED: Enforces "Freshness" check via Web Search & Date Context.
 
 import json
 import os
@@ -23,21 +24,33 @@ def generate_new_cluster(category, model_name):
     """يطلب من الذكاء الاصطناعي خطة محتوى كاملة (سلسلة) بدلاً من مقال واحد"""
     log(f"   🧠 [Cluster Manager] Designing a new content series for: {category}...")
     
+    # 1. تحديد التاريخ بدقة
+    today_date = datetime.date.today()
+    
+    # 2. التحديث: تم إضافة شرط التاريخ الصارم وطلب البحث عن أحدث الإصدارات
     prompt = f"""
-    ROLE: SEO Content Strategist.
+    ROLE: SEO Content Strategist & Trend Forecaster.
+    CURRENT DATE: {today_date} (CRITICAL context).
     TASK: Create a "Topic Cluster" (Series of 4 connected articles) for the category: "{category}".
-    GOAL: Dominate a specific niche trend currently happening.
+    
+    🔥 RECENCY PROTOCOL (MANDATORY):
+    1. You MUST search/check for the LATEST version of tools available as of {today_date}.
+    2. IF "Runway Gen-3" exists, DO NOT plan a series about "Gen-2".
+    3. IF "Midjourney v7" is out, DO NOT write about "v6".
+    4. Target the *bleeding edge* technology only.
+    
+    GOAL: Dominate a specific niche trend currently happening NOW.
     
     RULES:
     1. The topics must be sequential (Beginner -> Advanced -> Comparison -> Future).
     2. They must be highly searchable keywords.
-    3. Do NOT use generic titles. Use specific product names or problems.
+    3. Do NOT use generic titles. Use specific product names with Version Numbers.
     
     OUTPUT JSON:
     {{
-      "cluster_name": "e.g., DeepSeek Mastery Series",
+      "cluster_name": "e.g., Runway Gen-3 Alpha Mastery",
       "topics": [
-        "Topic 1 (The Hook/News)",
+        "Topic 1 (The Hook/News - Must specify latest version)",
         "Topic 2 (The How-To/Guide)",
         "Topic 3 (The Comparison/Vs)",
         "Topic 4 (The Advanced/Hidden Features)"
@@ -45,7 +58,14 @@ def generate_new_cluster(category, model_name):
     }}
     """
     try:
-        plan = generate_step_strict(model_name, prompt, "Cluster Generation", required_keys=["cluster_name", "topics"])
+        # 3. التحديث: تفعيل use_google_search=True لإجبار النموذج على معرفة أحدث الأخبار
+        plan = generate_step_strict(
+            model_name, 
+            prompt, 
+            "Cluster Generation", 
+            required_keys=["cluster_name", "topics"],
+            use_google_search=True 
+        )
         return plan
     except: return None
 
