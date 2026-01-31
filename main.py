@@ -6,6 +6,7 @@
 import os
 import json
 import time
+import requests
 import random
 import sys
 import datetime
@@ -37,6 +38,18 @@ import ai_researcher
 import ai_strategy
 import live_auditor
 import remedy
+
+# --- NEW: VALIDATION FUNCTION (حارس الروابط) ---
+def is_url_accessible(url):
+    """Checks if a URL is alive (Status 200) and allows hotlinking."""
+    if not url: return False
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        # Timeout قصير (3 ثواني) لعدم تعطيل السكريبت
+        r = requests.head(url, headers=headers, timeout=3, allow_redirects=True)
+        return r.status_code == 200
+    except:
+        return False
 
 def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     """
@@ -240,8 +253,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         # 6. SYNTHESIS, VIDEO PRODUCTION, AND REAL EVIDENCE INJECTION
         # ======================================================================
-        # FIXED: This section is now properly dedented outside the previous try/except blocks
-        log("   ✍️ Synthesizing Content & Preparing Visual Assets...")
+        log("   ✍️ Synthesizing Content & Validating Assets...")
         
         all_media = []
         for s in collected_sources:
@@ -249,16 +261,55 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         if official_media: all_media.extend(official_media)
         if reddit_media: all_media.extend(reddit_media)
         if ai_found_evidence: all_media.extend(ai_found_evidence)
-                
-        # Deduplicate and select the best 5
+        
+        # ترتيب كل الوسائط حسب الأهمية
         unique_media = list({m['url']: m for m in all_media}.values())
         unique_media = sorted(unique_media, key=lambda x: x.get('score', 0), reverse=True)
-        best_visuals = unique_media[:5]
+        
+        # --- NEW: VALIDATION LOOP (فلتر الجودة) ---
+        valid_visuals = []
+        log("      🛡️ Validating all found media assets...")
+        for media in unique_media:
+            if len(valid_visuals) >= 5: break # نكتفي بـ 5 أدلة بصرية صالحة كحد أقصى
+            
+            # إصلاح تلقائي لروابط يوتيوب
+            if "youtube.com" in media['url'] or "youtu.be" in media['url']:
+                video_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', media['url'])
+                if video_id_match:
+                    media['url'] = f"https://www.youtube.com/embed/{video_id_match.group(1)}"
+                    media['type'] = 'embed'
+                else:
+                    continue # تجاهل رابط يوتيوب التالف
+
+            # فحص هل الرابط يعمل؟
+            if is_url_accessible(media['url']):
+                valid_visuals.append(media)
+            else:
+                log(f"      ⚠️ Broken Link Detected & Removed: {media['url']}")
+
+        # --- NEW: IMAGE PRIORITY LOGIC (منطق اختيار الصورة الرئيسية) ---
+        # 1. البحث عن صورة حقيقية صالحة من الأدلة
+        for m in valid_visuals:
+            if m['type'] == 'image' and not img_url:
+                img_url = m['url']
+                log(f"      📸 PRIORITY 1: Selected Real Image from Evidence.")
+                break
+        
+        # 2. إذا فشل، البحث عن صورة من مصادر المقالات (og:image)
+        if not img_url:
+            for s in collected_sources:
+                if s.get('source_image') and is_url_accessible(s['source_image']):
+                    img_url = s['source_image']
+                    log(f"      📸 PRIORITY 2: Selected Image from Article Source.")
+                    break
+        
+        # الخطوة 3 (توليد صورة AI) ستأتي لاحقاً فقط إذا بقي img_url فارغاً
 
         asset_map = {}
         available_tags = []
-        visual_context_for_writer = []
-
+        visual_context = []        
+        
+        
         for i, visual in enumerate(best_visuals):
             tag = f"[[VISUAL_EVIDENCE_{i+1}]]"
             html = ""
@@ -353,8 +404,10 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             PROMPT_C_TEMPLATE.format(json_input=json.dumps(seo_payload), knowledge_graph=kg_links), "SEO Polish", ["finalTitle", "finalContent", "seo", "schemaMarkup"]
         )
 
-        # Image Generation if Prompt exists
-        if json_c.get('imageGenPrompt'):
+        # 3. AI Image Generation (LAST RESORT ONLY)
+        # هذه الخطوة تعمل فقط إذا كان img_url لا يزال فارغاً
+        if not img_url and json_c.get('imageGenPrompt'):
+             log("   🎨 No real image found. Falling back to AI Image Generation...")
              gen_img = image_processor.generate_and_upload_image(json_c['imageGenPrompt'], json_c.get('imageOverlayText', ''))
              if gen_img: img_url = gen_img
 
