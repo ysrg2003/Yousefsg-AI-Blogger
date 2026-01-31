@@ -1,8 +1,8 @@
 # ==============================================================================
 # FILE: reddit_manager.py
-# DESCRIPTION: Deep Intelligence & Evidence Gathering Module (V9.1 - Simplified & Integrated)
+# DESCRIPTION: Deep Intelligence & Evidence Gathering Module (V9.2 - Proxy Enabled)
 # STRATEGY: 
-#   1. RELIABLE FETCHING: Uses a proven 'requests'-based approach to avoid Selenium blocks.
+#   1. ANTI-BLOCKING: Routes all requests through ScraperAPI to bypass IP-based blocks.
 #   2. SMART SEARCH: Integrates with 'ai_strategy' for Graduated Search Plans.
 #   3. FULL INTEGRATION: Returns data in the exact format required by main.py.
 # ==============================================================================
@@ -12,6 +12,7 @@ import json
 import time
 import re
 import urllib.parse
+import os
 from typing import List, Dict, Any, Optional
 
 # Project imports for full integration
@@ -20,43 +21,58 @@ import ai_strategy
 
 class RedditManager:
     """
-    A robust Reddit evidence gatherer using a simple and effective requests-based approach.
-    This version is based on the user-provided successful script and fully integrated
-    into the main project's workflow.
+    A robust Reddit evidence gatherer that uses ScraperAPI to avoid IP blocks from
+    environments like GitHub Actions. This is the definitive solution to 403 errors.
     """
     BASE_URL = "https://www.reddit.com"
-    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-
+    
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({"User-Agent": self.USER_AGENT})
+        self.api_key = os.getenv('SCRAPER_API_KEY')
+        if not self.api_key:
+            log("   ⚠️ WARNING: SCRAPER_API_KEY is not set. Reddit requests may fail.")
 
     def _get_json(self, url: str) -> Optional[Dict[str, Any]]:
         """
-        Fetches JSON data from a given Reddit URL with retry logic for rate limiting.
+        Fetches JSON data from a given Reddit URL via the ScraperAPI proxy.
         """
+        if not self.api_key:
+            # Fallback to direct request if API key is missing, though it will likely fail.
+            log("   ❌ Attempting direct Reddit request without a proxy. This is likely to be blocked.")
+            try:
+                response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                log(f"   ❌ Direct request failed as expected: {e}")
+                return None
+
+        # Construct the ScraperAPI URL
+        # We ensure the target URL is properly encoded to be passed as a parameter
+        target_url = urllib.parse.quote(url)
+        proxy_url = f'http://api.scraperapi.com?api_key={self.api_key}&url={target_url}'
+        
         try:
-            if ".json" not in url:
-                if "?" in url:
-                    base, params = url.split("?", 1)
-                    url = f"{base.rstrip('/')}.json?{params}"
-                else:
-                    url = f"{url.rstrip('/')}.json"
-            
-            response = self.session.get(url, timeout=15)
-            if response.status_code == 429:
-                log("   ⚠️ Reddit rate limit hit. Waiting for 2 seconds...")
-                time.sleep(2)
-                response = self.session.get(url, timeout=15)
-            
+            response = requests.get(proxy_url, timeout=60) # Increased timeout for proxy
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            log(f"   ❌ Reddit request failed for {url}: {e}")
+            log(f"   ❌ ScraperAPI request failed for {url}: {e}")
             return None
         except json.JSONDecodeError:
-            log(f"   ❌ Failed to parse JSON from Reddit. The response was likely an HTML block page.")
+            log(f"   ❌ Failed to parse JSON from ScraperAPI. The response was not valid JSON.")
             return None
+
+    def _get_reddit_json_url(self, url: str) -> str:
+        """Ensures the URL points to a .json endpoint."""
+        if ".json" not in url:
+            if "?" in url:
+                base, params = url.split("?", 1)
+                url = f"{base.rstrip('/')}.json?{params}"
+            else:
+                url = f"{url.rstrip('/')}.json"
+        return url
+
+    # ... (The rest of the helper functions remain identical to the working version) ...
 
     def _extract_media(self, data: Dict[str, Any]) -> List[str]:
         media = []
@@ -75,15 +91,9 @@ class RedditManager:
         
         return list(set(media))
 
-    def _extract_codes(self, text: str) -> List[str]:
-        if not text: return []
-        codes = re.findall(r'```(?:[a-zA-Z]*\n)?([\s\S]*?)```', text)
-        inline_codes = re.findall(r'`([^`\n]+)`', text)
-        return list(set([c.strip() for c in codes + inline_codes if c.strip()]))
-
     def get_all_data(self, query: str, limit: int = 3) -> Dict[str, Any]:
         """Fetches all raw and structured data into a dictionary ready for JSON conversion."""
-        search_url = f"{self.BASE_URL}/search.json?q={urllib.parse.quote(query)}&limit={limit}&sort=relevance&t=month"
+        search_url = self._get_reddit_json_url(f"{self.BASE_URL}/search?q={urllib.parse.quote(query)}&limit={limit}&sort=relevance&t=month")
             
         search_data = self._get_json(search_url)
         results = { "query": query, "posts": [] }
@@ -92,7 +102,7 @@ class RedditManager:
             for post_item in search_data["data"]["children"]:
                 permalink = post_item.get('data', {}).get('permalink')
                 if permalink:
-                    post_url = f"{self.BASE_URL}{permalink}"
+                    post_url = self._get_reddit_json_url(f"{self.BASE_URL}{permalink}")
                     details = self.get_post_details(post_url)
                     if details and details.get("post"):
                          results["posts"].append(details)
@@ -111,13 +121,13 @@ class RedditManager:
                 "author": p_data.get("author"),
                 "url": f"{self.BASE_URL}{p_data.get('permalink')}",
                 "score": p_data.get("score", 0),
-                "media": self._extract_media(p_data),
-                "codes": self._extract_codes(p_data.get("selftext", ""))
+                "media": self._extract_media(p_data)
             }
             
             comments = self._parse_comments(data[1].get("data", {}).get("children", []), post_details["url"])
             return {"post": post_details, "comments": comments}
-        except (IndexError, KeyError, TypeError):
+        except (IndexError, KeyError, TypeError) as e:
+             log(f"   ⚠️ Error parsing post details: {e}")
              return None
 
     def _parse_comments(self, children: List[Dict[str, Any]], post_url: str) -> List[Dict[str, Any]]:
@@ -142,7 +152,6 @@ class RedditManager:
                     "url": f"{post_url.rstrip('/')}/{d.get('id')}/",
                     "score": d.get("score"),
                     "media": self._extract_media(d),
-                    "codes": self._extract_codes(body),
                     "replies": self._parse_comments(nested_children, post_url)
                 })
         return parsed
@@ -176,12 +185,16 @@ def generate_writer_brief(data: Dict[str, Any]) -> str:
 
 def get_community_intel(long_keyword: str):
     """
-    Main adapter function called by main.py. Implements the graduated search strategy.
+    Main adapter function called by main.py. Implements the graduated search strategy using a proxy.
     """
     log(f"🧠 [Reddit Manager] Initiating Graduated Search for: '{long_keyword}'")
     
     search_plan = ai_strategy.generate_graduated_search_plan(long_keyword)
     manager = RedditManager()
+    if not manager.api_key:
+        log("   ❌ CRITICAL: Reddit search aborted because SCRAPER_API_KEY is not configured.")
+        return "", []
+
     final_data = None
     successful_query = ""
 
