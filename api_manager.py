@@ -24,10 +24,10 @@ PUTER_MODEL = "claude-3-5-sonnet"
 
 # 2. Google Gemini Fallback Chain (Ordered from Strongest/Smartest to Fastest/Cheapest)
 GEMINI_FALLBACK_CHAIN = [
-    "gemini-2.0-flash-exp",   # Best reasoning capabilities
-    "gemini-1.5-pro-latest",  # Best context handling
+    "gemini-3-flash-preview",   # Best reasoning capabilities
+    "gemini-2.5-flash-lite,  # Best context handling
     "gemini-2.5-flash",       # Balanced performance
-    "gemini-1.5-flash"        # Reliable fallback
+    "gemini-robotics-er-1.5-preview"        # Reliable fallback
 ]
 
 class KeyManager:
