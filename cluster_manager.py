@@ -1,6 +1,6 @@
 # FILE: cluster_manager.py
 # ROLE: Manages Topic Clusters (Silos) to build SEO Authority.
-# UPDATED: Enforces "Freshness" check via Web Search & Date Context.
+# UPDATED: Generic "Version Hunter" Logic - Works for ANY category.
 
 import json
 import os
@@ -21,44 +21,41 @@ def save_plan(data):
     with open(CLUSTER_FILE, 'w') as f: json.dump(data, f, indent=2)
 
 def generate_new_cluster(category, model_name):
-    """يطلب من الذكاء الاصطناعي خطة محتوى كاملة (سلسلة) بدلاً من مقال واحد"""
-    log(f"   🧠 [Cluster Manager] Designing a new content series for: {category}...")
+    """
+    يولد خطة محتوى ذكية تعتمد على البحث المباشر عن أحدث الإصدارات 
+    بغض النظر عن نوع الفئة (فيديو، برمجة، صوت، تسويق...).
+    """
+    log(f"   🧠 [Cluster Manager] Scanning for the absolute latest trends in: {category}...")
     
-    # 1. تحديد التاريخ بدقة
     today_date = datetime.date.today()
     
-    # 2. التحديث: تم إضافة شرط التاريخ الصارم وطلب البحث عن أحدث الإصدارات
+    # البرومبت "الجوكر" - لا يحتوي على أسماء محددة بل "منطق بحث"
     prompt = f"""
-    ROLE: SEO Content Strategist & Trend Forecaster.
-    CURRENT DATE: {today_date} (CRITICAL context).
-    TASK: Create a "Topic Cluster" (Series of 4 connected articles) for the category: "{category}".
+    ROLE: Elite Tech Trend Analyst & Version Hunter.
+    CURRENT DATE: {today_date} (We are strictly in the present/future).
+    TARGET CATEGORY: "{category}".
     
-    🔥 RECENCY PROTOCOL (MANDATORY):
-    1. You MUST search/check for the LATEST version of tools available as of {today_date}.
-    2. IF "Runway Gen-3" exists, DO NOT plan a series about "Gen-2".
-    3. IF "Midjourney v7" is out, DO NOT write about "v6".
-    4. Target the *bleeding edge* technology only.
+    🛑 DYNAMIC VERSION DISCOVERY PROTOCOL (EXECUTE STEP-BY-STEP):
+    1. **SEARCH PHASE:** Search Google for "Latest {category} tools releases {today_date.year}".
+    2. **VERSION CHECK:** Identify the top 2 market leaders in this category.
+       - If your internal memory says "Tool v3" is latest, explicitly search: "Is Tool v4 released?".
+       - If "Tool v5" exists in search results, IGNORE your memory and write about v5.
+    3. **IGNORE OLD TECH:** If a tool hasn't had a major update in 6 months, find a newer competitor that *did* update recently.
+    4. **CONTENT PLAN:** Create a 4-part series about the SINGLE most exciting *new* tool or update found in step 1.
     
-    GOAL: Dominate a specific niche trend currently happening NOW.
-    
-    RULES:
-    1. The topics must be sequential (Beginner -> Advanced -> Comparison -> Future).
-    2. They must be highly searchable keywords.
-    3. Do NOT use generic titles. Use specific product names with Version Numbers.
-    
-    OUTPUT JSON:
+    OUTPUT JSON ONLY:
     {{
-      "cluster_name": "e.g., Runway Gen-3 Alpha Mastery",
+      "cluster_name": "e.g., [Newest Tool Name] [Version] Mastery Series",
       "topics": [
-        "Topic 1 (The Hook/News - Must specify latest version)",
-        "Topic 2 (The How-To/Guide)",
-        "Topic 3 (The Comparison/Vs)",
-        "Topic 4 (The Advanced/Hidden Features)"
+        "Topic 1 (The Hook: Review of [Newest Tool] [Latest Version] - Is it a Game Changer?)",
+        "Topic 2 (The Guide: How to master [New Feature] in [Latest Version])",
+        "Topic 3 (The Comparison: [Latest Version] vs [Previous Version] vs Competitor)",
+        "Topic 4 (The Future/Advanced: Hidden tricks in [Latest Version])"
       ]
     }}
     """
     try:
-        # 3. التحديث: تفعيل use_google_search=True لإجبار النموذج على معرفة أحدث الأخبار
+        # تفعيل البحث (Google Search) إلزامي هنا
         plan = generate_step_strict(
             model_name, 
             prompt, 
@@ -79,7 +76,7 @@ def get_strategic_topic(category, config):
         next_topic = data['queue'].pop(0)
         log(f"   🔗 [Cluster Strategy] Continuing series '{data['active_cluster']}': {next_topic}")
         save_plan(data)
-        return next_topic, True # True تعني "هذا جزء من سلسلة"
+        return next_topic, True 
 
     # 2. إذا انتهى العنقود أو لم يوجد، ننشئ واحداً جديداً
     log("   🆕 [Cluster Strategy] No active series. Generating new cluster...")
@@ -95,6 +92,6 @@ def get_strategic_topic(category, config):
         log(f"   🚀 [Cluster Strategy] Starting NEW series '{new_plan['cluster_name']}': {first_topic}")
         return first_topic, True
     
-    # 3. الفشل (العودة للنظام القديم)
+    # 3. الفشل
     log("   ⚠️ Cluster generation failed. Falling back to Daily Hunt.")
     return None, False
