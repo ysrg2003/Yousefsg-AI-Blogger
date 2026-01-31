@@ -223,65 +223,52 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         if visual_strategy.startswith("hunt"):
             official_media = scraper.smart_media_hunt(smart_query, category, visual_strategy)
         reddit_context, reddit_media = reddit_manager.get_community_intel(smart_query)
+        except Exception as e:
+            log(f"   ⚠️ Visual/Reddit Hunt Error: {e}")
+
+      
 
 
-            # ======================================================================
-# 5.5 [NEW] AI-POWERED VISUAL EVIDENCE AUGMENTATION
-# ======================================================================
-
-log("   🔍 [Augmentation] Using Gemini Search to find additional real-world evidence...")
-ai_found_evidence = []
-
-try:
-    # We use the new "Detective" prompt with web search enabled
-    augmentation_prompt = PROMPT_EVIDENCE_AUGMENTATION.format(
-        target_keyword=target_keyword
-    )
-
-    evidence_payload = api_manager.generate_step_strict(
-        model_name,
-        augmentation_prompt,
-        "Visual Evidence Augmentation",
-        ["visual_evidence"],
-        use_google_search=True
-    )
-
-    if evidence_payload and evidence_payload.get("visual_evidence"):
-        log(
-            f"      ✅ AI Detective found "
-            f"{len(evidence_payload['visual_evidence'])} new pieces of evidence."
+        
+        
+    # ======================================================================
+    # 5.5 [NEW] AI-POWERED VISUAL EVIDENCE AUGMENTATION
+    # ======================================================================
+    log("   🔍 [Augmentation] Using Gemini Search to find additional real-world evidence...")
+    ai_found_evidence = []
+    try:
+        # We use the new "Detective" prompt with web search enabled
+        augmentation_prompt = PROMPT_EVIDENCE_AUGMENTATION.format(target_keyword=target_keyword)
+        evidence_payload = api_manager.generate_step_strict(
+            model_name, 
+            augmentation_prompt, 
+            "Visual Evidence Augmentation", 
+            ["visual_evidence"], 
+            use_google_search=True
         )
-
-        # Convert the AI's findings into the same format as our other media
-        for evidence in evidence_payload["visual_evidence"]:
-            # Map AI output type to our internal type
-            evidence_type = "image"  # Default
-
-            if "video" in evidence.get("type", ""):
-                evidence_type = "embed"
-            elif "gif" in evidence.get("type", ""):
-                evidence_type = "gif"
-
-            ai_found_evidence.append({
-                "type": evidence_type,
-                "url": evidence["url"],
-                "description": evidence["description"],
-                "score": 10  # High priority for AI-verified evidence
-            })
-    else:
-        log("      ⚠️ AI Detective did not find any new evidence.")
-
-except Exception as e:
-    log(f"      ❌ Visual Augmentation step failed: {e}")
-
-
-
-
-
         
+        if evidence_payload and evidence_payload.get("visual_evidence"):
+            log(f"      ✅ AI Detective found {len(evidence_payload['visual_evidence'])} new pieces of evidence.")
+            # Convert the AI's findings into the same format as our other media
+            for evidence in evidence_payload["visual_evidence"]:
+                # Map AI output type to our internal type
+                evidence_type = "image" # Default
+                if "video" in evidence.get("type", ""):
+                    evidence_type = "embed"
+                elif "gif" in evidence.get("type", ""):
+                    evidence_type = "gif"
 
-    
-        
+                ai_found_evidence.append({
+                    "type": evidence_type,
+                    "url": evidence["url"],
+                    "description": evidence["description"],
+                    "score": 10  # Give high priority to AI-verified evidence
+                })
+        else:
+            log("      ⚠️ AI Detective did not find any new evidence.")
+
+    except Exception as e:
+        log(f"      ❌ Visual Augmentation step failed: {e}")
         # ======================================================================
         # 6. SYNTHESIS, VIDEO PRODUCTION, AND REAL EVIDENCE INJECTION
         # ======================================================================
