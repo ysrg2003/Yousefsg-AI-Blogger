@@ -58,7 +58,35 @@ def publish_post(title, content, labels):
         log(f"❌ Blogger API Error: {e.response.text if e.response else e}")
         return None
 
+
+
+def get_post_by_id(post_id):
+    """
+    Fetches the content and title of a specific post by its ID.
+    """
+    token = get_blogger_token()
+    if not token:
+        log(f"❌ Failed to get Blogger token for fetching post {post_id}.")
+        return None, None
+        
+    blog_id = os.getenv('BLOGGER_BLOG_ID')
+    url = f"https://www.googleapis.com/blogger/v3/blogs/{blog_id}/posts/{post_id}"
     
+    headers = {
+        "Authorization": f"Bearer {token}", 
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        r = requests.get(url, headers=headers)
+        r.raise_for_status()
+        data = r.json()
+        log(f"   ✅ Fetched content for post ID: {post_id}")
+        return data.get('title'), data.get('content')
+    except requests.exceptions.RequestException as e:
+        error_msg = e.response.text if e.response else str(e)
+        log(f"   ❌ Blogger Fetch API Error for post {post_id}: {error_msg}")
+        return None, None
 
 def update_existing_post(post_id, title, content):
     """
