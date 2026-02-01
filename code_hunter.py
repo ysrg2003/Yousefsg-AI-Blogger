@@ -10,7 +10,8 @@ def find_code_snippet(topic: str, model_name: str) -> str | None:
     """
     log(f"   💻 [Code Hunter] Searching for a practical code snippet for: '{topic}'")
     
-    prompt = f\"\"\"
+    # تصحيح الخطأ هنا: إزالة الشرطات المائلة العكسية قبل علامات التنصيص
+    prompt = f"""
     ROLE: Senior Developer & Technical Writer.
     TASK: Find or generate a single, practical Python code snippet that demonstrates how to use the core technology mentioned in the topic: "{topic}".
 
@@ -26,7 +27,7 @@ def find_code_snippet(topic: str, model_name: str) -> str | None:
       "snippet_html": "<pre><code class=\\"language-python\\"># Your Python code here...\\nprint('Hello, World!')</code></pre>",
       "explanation": "A brief, one-sentence explanation of what this code does."
     }}
-    \"\"\"
+    """
     
     try:
         response = generate_step_strict(
