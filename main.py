@@ -163,6 +163,11 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
                 for item in rss_items[:6]:
                     if len(collected_sources) >= 4: break # Limit sources
+
+                    if official_source_url and item['link'] == official_source_url:
+                        continue 
+                    
+                    
                     if item['title'][:20] in recent_titles: continue
                     
                     # Avoid duplicates of the official source
@@ -283,6 +288,17 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 chart_data = api_manager.generate_step_strict(model_name, chart_prompt, "Data Extraction", ["data_points"])
                 
                 if chart_data and chart_data.get('data_points'):
+                    safe_data = {}
+                    for k, v in chart_data['data_points'].items():
+                        try:
+                            safe_data[k] = float(v)
+                        except: continue
+                    
+                    if len(safe_data) >= 2:
+                        chart_url = chart_generator.create_chart_from_data(
+                            safe_data, 
+                            chart_data.get('chart_title', 'Performance Comparison')
+                        )
                     chart_url = chart_generator.create_chart_from_data(
                         chart_data['data_points'], 
                         chart_data.get('chart_title', 'Performance Comparison')
@@ -615,6 +631,8 @@ def main():
                     if run_pipeline(cat, cfg, forced_keyword=topic, is_cluster_topic=is_c):
                         published_today = True
                         break
+                    else:
+                        cluster_manager.mark_topic_failed(topic)
             except Exception as e: 
                 log(f"   ⚠️ Cluster Strategy Error: {e}")
 
