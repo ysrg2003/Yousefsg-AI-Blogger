@@ -29,3 +29,5 @@ pytrends
 pandas
 matplotlib
 seaborn
+sentence-transformers
+scikit-learn
