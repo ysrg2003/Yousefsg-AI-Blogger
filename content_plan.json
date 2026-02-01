@@ -1,7 +1,6 @@
 {
   "active_cluster": "Google Vertex AI with Gemini 3.0 Mastery Series",
   "queue": [
-    "Topic 3 (The Comparison: Gemini 3.0 on Vertex AI vs. Gemini 2.0 vs. AWS SageMaker for AI Production)",
     "Topic 4 (The Future/Advanced: Unlocking Hidden Potential and Advanced Workflows with Gemini 3.0 on Vertex AI)"
   ],
   "completed": []
