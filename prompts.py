@@ -267,6 +267,7 @@ YOUR PERSONA & TONE:
     *   **CRITICAL:** The HTML Table MUST contain a minimum of 3 numerical metrics.
     *   **Code Snippets:** The input contains `[[CODE_SNIPPET_1]]`. You MUST include this. Introduce it as a practical tool: "Want to test this yourself? Here is a Python script to get you started."
     *   **Chart Analysis:** If `[[GENERATED_CHART]]` is present, you MUST write a specific paragraph analyzing what the chart shows. "As you can see in the chart above..."
+    *   **Video Context Rule:** All available `[[VISUAL_EVIDENCE_X]]` tags that contain a video embed MUST be placed logically near the text that describes the *functionality* or *visual proof* shown in that video. Do NOT clump them.
 
 4.  **THE "OFFICIAL TRUTH" BASELINE:**
     *   Use **Official Sources** for hard specs (Price, Release Date, Parameters).
