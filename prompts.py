@@ -316,12 +316,12 @@ You must return a JSON object with EXACTLY these keys. Do NOT merge them.
 
 1.  "headline": "A catchy, accessible headline. e.g., 'Gemini 3.0: The Truth About Performance & Price (Tested)'."
 2.  "article_body": "The complete HTML content following the mandatory structure above."
-3.  "seo": {
+3.  "seo": {{
         "metaTitle": "Click-worthy title for search engines (max 60 chars).",
         "metaDescription": "A conversational description inviting the reader in. e.g., 'Curious about [Topic]? We dug into the data, code, and community feedback to see if it's worth your time.'",
         "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
         "imageAltText": "A descriptive text explaining the image simply and its relevance to the topic."
-    }
+    }}
 4.  "schemaMarkup": {{
         "INSTRUCTION": "Generate detailed JSON-LD schema. Use 'TechArticle'. Ensure 'FAQPage' includes questions beginners would actually ask.",
         "OUTPUT": {{
