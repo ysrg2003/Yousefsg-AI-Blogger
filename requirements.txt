@@ -25,3 +25,7 @@ numpy
 openai
 oauth2client
 puter
+pytrends
+pandas
+matplotlib
+seaborn
