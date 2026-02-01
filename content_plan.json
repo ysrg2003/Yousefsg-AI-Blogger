@@ -1,7 +1,11 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Amplified 2026: The Annual State of Voice Report Mastery Series",
+  "queue": [
+    "From Report to Reality: A Practical Guide to Implementing Amplified 2026 Voice Strategy Trends",
+    "Amplified 2026 in Context: Comparing the State of Voice Report with Google, OpenAI, and Industry Leaders"
+  ],
   "completed": [
     "Google Vertex AI with Gemini 3.0 Mastery Series"
-  ]
+  ],
+  "last_generated": "2026-02-01"
 }
