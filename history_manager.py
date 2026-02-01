@@ -1,8 +1,9 @@
-# FILE: history_manager.py
-# ROLE: Central Intelligence Memory & Semantic Deduplication Engine (V10.0)
+# FILE: history_manager.py (V11.0 - Self-Healing & Semantic Linking Integration)
+# ROLE: Central Intelligence Memory & Semantic Deduplication Engine
 # DESCRIPTION: Manages the Knowledge Graph (knowledge_graph.json). 
-#              Prevents SEO Cannibalization and Content Redundancy using a 
-#              Hybrid Blacklist Strategy (Fuzzy Matching + Deep Semantic Value Check).
+#              Prevents SEO Cannibalization using a Hybrid Blacklist Strategy.
+#              UPGRADED: Now features self-healing for legacy data and a semantic
+#              vector-based internal linking strategy for superior SEO siloing.
 # INTEGRATION: Directly linked to main.py, cluster_manager.py, and gardener.py.
 
 import os
@@ -10,18 +11,37 @@ import json
 import datetime
 import difflib
 import traceback
+import numpy as np
 from config import log
 from api_manager import generate_step_strict
 
+# --- الترقية: إضافة الذكاء الدلالي (Semantic Intelligence) ---
+try:
+    from sentence_transformers import SentenceTransformer
+    from sklearn.metrics.pairwise import cosine_similarity
+except ImportError:
+    log("❌ CRITICAL ERROR: 'sentence-transformers' or 'scikit-learn' not installed.")
+    log("   Please add them to your requirements.txt file and ensure they are installed.")
+    raise
+
+# --- الترقية: تحميل النموذج الذكي مرة واحدة عالمياً لتوفير الموارد ---
+# هذا النموذج يعمل محلياً، لا يحتاج لإنترنت (بعد التحميل الأول) ولا مفتاح API.
+_model = SentenceTransformer('all-MiniLM-L6-v2')
+
 # --- GLOBAL CONFIGURATION ---
 DB_FILE = 'knowledge_graph.json'
-MAX_HISTORY_ITEMS_FOR_AI = 60  # عدد المقالات التي يتم إرسالها للذكاء الاصطناعي للمقارنة
-SIMILARITY_THRESHOLD = 0.65    # حد التشابه النصي للمقارنة السريعة (Fuzzy)
+MAX_HISTORY_ITEMS_FOR_AI = 60
+SIMILARITY_THRESHOLD = 0.65
 
-def load_kg():
+# --- الترقية: دالة مساعدة لتوليد المتجهات الرقمية ---
+def _generate_embedding(text: str):
+    """Generates a sentence embedding (vector) for the given text."""
+    return _model.encode(text, convert_to_numpy=True)
+
+def _load_kg_raw():
     """
-    Loads the knowledge graph history from the JSON file with strict UTF-8 encoding.
-    Ensures the system can handle non-English characters in titles.
+    Loads the raw knowledge graph data from the JSON file with strict UTF-8 encoding.
+    This is the initial, unprocessed load.
     """
     try:
         if os.path.exists(DB_FILE):
@@ -40,21 +60,58 @@ def load_kg():
         return []
     return []
 
+# --- الترقية: دالة الإصلاح الذاتي الآلية ---
+def _ensure_all_embeddings_exist(data):
+    """
+    Self-healing function. Checks if any old article is missing an embedding and fixes it.
+    This runs automatically, removing the need for a separate backfill script.
+    """
+    needs_saving = False
+    for item in data:
+        if "embedding" not in item or not item.get("embedding"):
+            title = item.get("title")
+            if title:
+                log(f"   🔧 [Self-Healing] Found old article missing vector. Generating for: {title[:40]}...")
+                item["embedding"] = _generate_embedding(title).tolist()
+                needs_saving = True
+    
+    if needs_saving:
+        log("   💾 Saving updated knowledge graph with backfilled vectors...")
+        try:
+            with open(DB_FILE, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            log(f"   ❌ Self-Healing Save Error: {e}")
+    return data
+
+# --- الترقية: تحميل ومعالجة قاعدة البيانات عند بدء تشغيل الوحدة ---
+_kg_data = _load_kg_raw()
+_kg_data = _ensure_all_embeddings_exist(_kg_data) # <--- الفحص الآلي والإصلاح الذاتي يتم هنا
+
+def load_kg():
+    """
+    Returns the globally loaded and potentially healed knowledge graph data.
+    This replaces multiple file reads with a single, efficient memory access.
+    """
+    global _kg_data
+    return _kg_data
+
 def update_kg(title, url, section, post_id=None):
     """
-    Updates the Knowledge Graph with a new published article.
-    CRITICAL: This is the only source of truth for the 'Blacklist'.
-    Saves metadata required for the Gardener module to perform future updates.
+    Updates the Knowledge Graph with a new published article AND its semantic embedding.
     """
+    global _kg_data
     try:
-        data = load_kg()
-        
         # 1. Idempotency Check: Prevent duplicate URL entries
-        if any(item.get('url') == url for item in data):
+        if any(item.get('url') == url for item in _kg_data):
             log(f"   ⚠️ URL '{url}' already exists in History. Entry skipped.")
             return
 
-        # 2. Construction of the Master Entry
+        # 2. الترقية: توليد المتجه الرقمي للعنوان الجديد
+        log("   🧠 Generating semantic vector for the new title...")
+        embedding = _generate_embedding(title)
+
+        # 3. Construction of the Master Entry
         new_entry = {
             "title": str(title).strip(),
             "url": str(url).strip(),
@@ -62,17 +119,18 @@ def update_kg(title, url, section, post_id=None):
             "date": str(datetime.date.today()),
             "post_id": str(post_id) if post_id else None,
             "last_verified": str(datetime.date.today()),
-            "update_count": 0
+            "update_count": 0,
+            "embedding": embedding.tolist()  # <-- حفظ المتجه الجديد في قاعدة البيانات
         }
 
-        # 3. Atomic Append
-        data.append(new_entry)
+        # 4. Atomic Append to the global variable
+        _kg_data.append(new_entry)
         
-        # 4. Save with high precision and formatting
+        # 5. Save with high precision and formatting
         with open(DB_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            json.dump(_kg_data, f, indent=2, ensure_ascii=False)
             
-        log(f"   💾 [Memory Updated] Total Articles in Blacklist: {len(data)}.")
+        log(f"   💾 [Memory Updated] Total Articles in Blacklist: {len(_kg_data)}.")
         
     except Exception as e:
         log(f"   ❌ Failed to update Knowledge Graph: {str(e)}")
@@ -87,13 +145,11 @@ def get_blacklist_context(category=None, days_limit=120):
     if not kg:
         return "NO_PREVIOUS_CONTENT"
     
-    # Calculate date cutoff for relevance (default 120 days)
     cutoff_date = datetime.date.today() - datetime.timedelta(days=days_limit)
     
     relevant_items = []
     for item in kg:
         try:
-            # Parse date and filter
             pub_date_str = item.get('date', '2024-01-01')
             pub_date = datetime.datetime.strptime(pub_date_str, "%Y-%m-%d").date()
             
@@ -102,16 +158,10 @@ def get_blacklist_context(category=None, days_limit=120):
         except:
             continue
 
-    # Sort: Newest first
     relevant_items.sort(key=lambda x: x.get('date', ''), reverse=True)
-    
-    # Take only the top N items to avoid prompt flooding
     recent_subset = relevant_items[:MAX_HISTORY_ITEMS_FOR_AI]
     
-    # Format for the AI
-    formatted_list = []
-    for i in recent_subset:
-        formatted_list.append(f"- [Published: {i.get('date')}] Topic: {i.get('title')}")
+    formatted_list = [f"- [Published: {i.get('date')}] Topic: {i.get('title')}" for i in recent_subset]
         
     return "\n".join(formatted_list)
 
@@ -122,25 +172,19 @@ def check_semantic_duplication(new_keyword, category, config):
     """
     target = str(new_keyword).strip().lower()
     
-    # --- PHASE 1: LOCAL FUZZY MATCH (High Speed) ---
-    # Catches 1:1 duplicates or very similar titles without API calls.
     kg = load_kg()
     for item in kg:
         existing_title = item.get('title', '').lower()
         
-        # Levenshtein Distance
         ratio = difflib.SequenceMatcher(None, target, existing_title).ratio()
         if ratio > SIMILARITY_THRESHOLD:
             log(f"      ⛔ [Phase 1 REJECT] '{target}' is {int(ratio*100)}% similar to an existing title.")
             return True
 
-        # Substring check
         if len(target) > 8 and target in existing_title:
              log(f"      ⛔ [Phase 1 REJECT] '{target}' is a subset of an existing title.")
              return True
 
-    # --- PHASE 2: DEEP SEMANTIC VALUE JUDGE (AI) ---
-    # Compares the "Core Value" and "Reader Takeaway".
     model_name = config['settings'].get('model_name', 'gemini-2.5-flash')
     blacklist_text = get_blacklist_context(category)
     
@@ -148,7 +192,6 @@ def check_semantic_duplication(new_keyword, category, config):
         return False
 
     log(f"   🧠 [Phase 2 Judge] Analyzing 'Reader Value' of '{new_keyword}' against Blacklist...")
-
     prompt = f"""
     ROLE: Ruthless SEO Editor-in-Chief.
     TASK: Content Cannibalization Audit (Blacklist Comparison).
@@ -181,7 +224,6 @@ def check_semantic_duplication(new_keyword, category, config):
     """
 
     try:
-        # Use the system's generator
         result = generate_step_strict(
             model_name, 
             prompt, 
@@ -220,28 +262,51 @@ def get_recent_titles_string(category=None, limit=100):
     titles = [f"- {i.get('title', 'Untitled')}" for i in subset]
     return "\n".join(titles)
 
+# --- الترقية: استبدال كامل لمنطق الربط الداخلي ---
 def get_relevant_kg_for_linking(current_title, current_category):
     """
-    Logic for Internal Linking Strategy (Siloing).
-    Selects 5 relevant past articles from the Knowledge Graph.
+    V3.0 - Semantic Linking Strategy.
+    Finds the 5 most conceptually similar articles from the Knowledge Graph using vector similarity.
     """
+    log("   🔗 [Semantic Linker] Finding conceptually related articles...")
     kg = load_kg()
     
-    # 1. Try to find articles in the same category (Silo)
-    same_cat = [i for i in kg if i.get('section') == current_category]
+    # 1. فلترة المقالات التي لا تحتوي على متجهات أو المقال الحالي نفسه
+    kg_with_embeddings = [
+        item for item in kg if item.get("embedding") and item.get("title") != current_title
+    ]
     
-    # 2. Selection: Take the most recent ones
-    selected = same_cat[-5:]
-    
-    # 3. Backfill if less than 3
-    if len(selected) < 3:
-        others = [i for i in kg if i.get('section') != current_category]
-        needed = 3 - len(selected)
-        selected.extend(others[-needed:])
+    if len(kg_with_embeddings) < 1:
+        log("      ⚠️ Not enough historical data for semantic linking. Skipping.")
+        return json.dumps([])
 
-    # 4. Format as JSON for the Prompt C (SEO Polish)
+    # 2. توليد متجه للمقال الحالي
+    current_embedding = _generate_embedding(current_title)
+    
+    # 3. استخراج متجهات المقالات السابقة
+    historical_embeddings = np.array([item["embedding"] for item in kg_with_embeddings])
+    
+    # 4. حساب التشابه الدلالي (Cosine Similarity)
+    similarities = cosine_similarity(
+        current_embedding.reshape(1, -1),
+        historical_embeddings
+    )[0]
+    
+    # 5. ترتيب المقالات حسب درجة التشابه
+    scored_articles = sorted(
+        zip(similarities, kg_with_embeddings), 
+        key=lambda x: x[0], 
+        reverse=True
+    )
+    
+    # 6. اختيار أفضل 5 مقالات ذات صلة
+    top_5_semantically_related = [article for score, article in scored_articles[:5]]
+
+    # 7. تجهيز المخرجات للبرومبت
     output = []
-    for item in selected:
+    log("      ✅ Top 5 Semantic Matches Found:")
+    for item in top_5_semantically_related:
+        log(f"         - (Score: {scored_articles[len(output)][0]:.2f}) {item.get('title')}")
         output.append({
             "title": item.get('title'),
             "url": item.get('url')
@@ -252,14 +317,10 @@ def get_relevant_kg_for_linking(current_title, current_category):
 def perform_maintenance_cleanup():
     """
     Maintenance task to keep the Knowledge Graph healthy.
-    Prevents the JSON file from becoming too massive.
-    Prunes metadata but keeps URLs and Titles for Deduplication.
     """
     try:
         data = load_kg()
         if len(data) > 1000:
-            # We keep everything but we could implement archival logic here
-            # For now, we just log the size
             log(f"   📊 Knowledge Graph size: {len(data)} entries. Maintenance healthy.")
     except Exception as e:
         log(f"   ⚠️ Maintenance Error: {str(e)}")
