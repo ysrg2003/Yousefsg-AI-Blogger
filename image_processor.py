@@ -17,6 +17,7 @@ from google.genai import types
 from bs4 import BeautifulSoup
 from config import log, USER_AGENTS
 from api_manager import key_manager
+import time # <--- إضافة استيراد الوقت هنا
 
 def extract_og_image(html_content):
     try:
@@ -173,6 +174,48 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
     
     return valid_images[0]['original_url']
 
+def upload_external_image(source_url, filename_title):
+    """
+    Downloads an image from a URL, applies smart blur, and uploads it to GitHub CDN.
+    This ensures all images in the article are hosted internally (no broken hotlinks).
+    Returns: Public CDN URL or None.
+    """
+    try:
+        # استخدام User-Agent عشوائي لتقليد المتصفح
+        headers = {'User-Agent': random.choice(USER_AGENTS)} 
+        r = requests.get(source_url, headers=headers, timeout=15, stream=True)
+        if r.status_code != 200: 
+            log(f"      ⚠️ Failed to download external image (Status {r.status_code}): {source_url}")
+            return None
+        
+        # 1. فتح الصورة
+        original_img = Image.open(BytesIO(r.content)).convert("RGBA")
+        
+        # 2. تطبيق التشويش الذكي (Smart Blur)
+        base_img_rgb = original_img.convert("RGB")
+        base_img_rgb = apply_smart_privacy_blur(base_img_rgb)
+        
+        # 3. الحفظ إلى Buffer والرفع
+        img_byte_arr = BytesIO()
+        # نحفظها كـ JPEG بجودة عالية (95) لتقليل حجم الملف مقارنة بـ PNG/RGBA
+        base_img_rgb.save(img_byte_arr, format='JPEG', quality=95)
+        
+        # إنشاء اسم ملف آمن
+        safe_name = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50]
+        safe_name = f"{int(time.time())}_{safe_name}.jpg" # إضافة وقت لضمان التفرد
+
+        public_url = upload_to_github_cdn(img_byte_arr, safe_name)
+        
+        if public_url:
+            log(f"      ✅ Image Mirrored to CDN: {public_url}")
+            return public_url
+        else:
+            return None
+
+    except Exception as e:
+        log(f"      ❌ External Image Upload Failed: {e}")
+        return None
+
 def process_source_image(source_url, overlay_text, filename_title):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -277,5 +320,3 @@ def generate_and_upload_image(prompt_text, overlay_text=""):
         img.convert("RGB").save(img_byte_arr, format='JPEG', quality=95)
         return upload_to_github_cdn(img_byte_arr, f"ai_gen_{seed}.jpg")
     except: return None
-        
-        
