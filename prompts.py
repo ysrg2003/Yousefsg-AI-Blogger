@@ -322,56 +322,56 @@ You must return a JSON object with EXACTLY these keys. Do NOT merge them.
         "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
         "imageAltText": "A descriptive text explaining the image simply and its relevance to the topic."
     }
-4.  "schemaMarkup": {
+4.  "schemaMarkup": {{
         "INSTRUCTION": "Generate detailed JSON-LD schema. Use 'TechArticle'. Ensure 'FAQPage' includes questions beginners would actually ask.",
-        "OUTPUT": {
+        "OUTPUT": {{
             "@context": "https://schema.org",
             "@type": "TechArticle",
-            "mainEntityOfPage": {
+            "mainEntityOfPage": {{
                 "@type": "WebPage",
                 "@id": "ARTICLE_URL_PLACEHOLDER"
-            },
+            }},
             "headline": "HEADLINE_PLACEHOLDER",
             "image": "IMAGE_URL_PLACEHOLDER",
             "datePublished": "DATE_PLACEHOLDER",
-            "author": {
+            "author": {{
                 "@type": "Person",
                 "name": "Yousef S.",
                 "url": "https://www.latestai.me"
-            },
-            "publisher": {
+            }},
+            "publisher": {{
                 "@type": "Organization",
                 "name": "Latest AI",
-                "logo": {
+                "logo": {{
                     "@type": "ImageObject",
                     "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"
-                }
-            },
+                }}
+            }},
             "mainEntity": [
-                {
+                {{
                     "@type": "FAQPage",
                     "mainEntity": [
-                        {
+                        {{
                             "@type": "Question",
                             "name": "Generated Question 1 (Simple)?",
-                            "acceptedAnswer": {
+                            "acceptedAnswer": {{
                                 "@type": "Answer",
                                 "text": "Simple Answer 1."
-                            }
-                        },
-                        {
+                            }}
+                        }},
+                        {{
                             "@type": "Question",
                             "name": "Generated Question 2 (Useful)?",
-                            "acceptedAnswer": {
+                            "acceptedAnswer": {{
                                 "@type": "Answer",
                                 "text": "Simple Answer 2."
-                            }
-                        }
+                            }}
+                        }}
                     ]
-                }
+                }}
             ]
-        }
-    }
+        }}
+    }}
 
 CRITICAL OUTPUT RULES:
 
