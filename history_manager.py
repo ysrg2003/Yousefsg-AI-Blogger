@@ -193,36 +193,41 @@ def check_semantic_duplication(new_keyword, category, config):
 
     log(f"   🧠 [Phase 2 Judge] Analyzing 'Reader Value' of '{new_keyword}' against Blacklist...")
     prompt = f"""
-    ROLE: Ruthless SEO Editor-in-Chief.
-    TASK: Content Cannibalization Audit (Blacklist Comparison).
+    ROLE: Ruthless Editor-in-Chief & Duplicate Content Police.
+    TASK: Determine if the "New Proposal" is redundant based on the "Blacklist" (Past Articles).
     
-    INPUT PROPOSAL: "{new_keyword}"
-    CATEGORY: "{category}"
+    INPUT PROPOSAL: {new_keyword}
+    CATEGORY: {category}
     
     RECENTLY PUBLISHED ARTICLES (THE BLACKLIST):
     {blacklist_text}
     
     ------------------------------------------------------------------------
-    STRICT DECISION LOGIC:
-    1. ANALYZE VALUE: If I write about "{new_keyword}", what NEW facts or lessons will the reader learn that are NOT in the Blacklist?
-    2. REJECT (is_duplicate: true) IF:
-       - The core news event is already covered (e.g., "Product Launch" vs "Product is here").
-       - The "Core Insight" is identical (e.g., "Why X is better than Y" vs "Comparison of X and Y").
-       - The proposal is just a minor sub-feature of a large review we already published.
-    3. ALLOW (is_duplicate: false) ONLY IF:
-       - It is a significant NEW update (Version 2.0 vs Version 1.0).
-       - It is a deep-dive "How-to Guide" and the previous one was just a "News Flash".
-       - It covers a completely different user problem/intent.
+    🚨 STRICT DUPLICATION RULES (READ CAREFULLY):
+    
+    1. **THE "CONTAINMENT" RULE:** 
+       - If the New Proposal is a "Weekly Roundup" or "News Summary" (e.g., "Google Cloud News"), and we JUST wrote about the main item in that news (e.g., "Gemini 3.0"), **REJECT IT**.
+       - We do not want a general summary immediately after a specific deep dive.
+       
+    2. **THE "ENTITY" RULE:**
+       - If the New Proposal focuses on the SAME Product/Entity (e.g., "Gemini 3") as a recent article, even if the title is different (e.g., "Gemini 3 Pricing" vs "Gemini 3 Review"), **REJECT IT** unless it is at least 7 days later.
+       
+    3. **THE "REPHRASING" RULE:**
+       - "Is X good?" vs "X Review" -> DUPLICATE.
+       - "How to use X" vs "X Guide" -> DUPLICATE.
+    
+    DECISION MATRIX:
+    - If strictly distinct (different product, different intent): "is_duplicate": false.
+    - If overlapping, contained, or repetitive: "is_duplicate": true.
     ------------------------------------------------------------------------
     
     OUTPUT JSON FORMAT ONLY:
     {{
         "is_duplicate": true/false,
-        "conflict_title": "Title of the existing article that causes the conflict",
-        "reason": "Detailed logic on why the reader gain is identical or unique"
+        "conflict_title": "Title of the existing article that causes the conflict (or 'None')",
+        "reason": "Explain clearly why this is rejected based on the Containment or Entity rule."
     }}
     """
-
     try:
         result = generate_step_strict(
             model_name, 
