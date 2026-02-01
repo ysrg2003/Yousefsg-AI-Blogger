@@ -1,18 +1,38 @@
 {
   "categories": {
-    "AI Video Mastery": {
-      "trending_focus": "Sora, Kling AI, Runway Gen-3, Luma Dream Machine, Google Veo, Adobe Firefly Video, Pika Labs, Kling AI global, Text-to-Video updates, Cinematic AI"
+    "AI Viral Video Tactics": {
+      "trending_focus": "best AI text to video generator reviews, new cinematic AI video tools official release, high quality AI video generator benchmarks, realistic AI avatars for social media, AI video editing automation trends",
+      "reader_intent": "Find the best tool to create viral videos without showing my face",
+      "chart_data_priority": ["Rendering Speed", "Visual Realism Score", "Price per Minute", "Clip Duration Limit"]
     },
-    "AI Production Lab": {
-      "trending_focus": "ElevenLabs, HeyGen, Synthesia, AI Voice Cloning, Deepfake detection, AI Lip-sync, AI Avatars, Wondershare Virbo, Suno AI, Udio"
+    "AI Audio & Voice Branding": {
+      "trending_focus": "most realistic AI voice cloning tools, new AI music generators for creators, AI speech to speech translation updates, best text to speech for YouTube faceless channels, official AI audio enhancement tools",
+      "reader_intent": "Make my content sound professional and human-like using AI",
+      "chart_data_priority": ["Voice Naturalness", "Language Count", "API Latency", "Monthly Cost"]
     },
-    "AI Business & Cash": {
-      "trending_focus": "YouTube Automation AI, Monetizing AI Video, AI Influencer, Faceless YouTube Channel, AI Video Copyright, TikTok AI tools, AI Stock Footage, Passive Income AI"
+    "AI Money Engines": {
+      "trending_focus": "how to monetize AI generated content, automated faceless YouTube channel strategies, AI tools for TikTok shop automation, passive income with AI art and video, AI content copyright official news",
+      "reader_intent": "Turn AI tools into a real source of monthly income",
+      "chart_data_priority": ["Estimated ROI", "Setup Time", "Ease of Use", "Profit Potential"]
     }
   },
   "settings": {
-    "date_range_query": "when:2d",
     "model_name": "gemini-2.5-flash",
-    "adsense_optimization": true
+    "discovery_protocol": "intent_based",
+    "date_range_query": "when:2d",
+    "search_region": "global",
+    "semantic_dedup": {
+      "mode": "strict_blacklist",
+      "history_days": 120
+    },
+    "visualization": {
+      "enable_auto_charts": true,
+      "style": "clean_infographic"
+    },
+    "humanizer_persona": "Professional Tech Reviewer & Reddit Power User",
+    "adsense_optimization": {
+      "focus": "high_cpc_keywords",
+      "target_audience": "Digital Entrepreneurs & Content Creators"
+    }
   }
 }
