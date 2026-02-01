@@ -273,7 +273,8 @@ YOUR PERSONA & TONE:
     *   Use **Community Sources** for performance reality (Does it hallucinate? Is it actually slow?).
 
 5.  **MANDATORY HTML CITATIONS & BACKLINK STRATEGY:**
-    *   Link to sources using `<a href="..." target="_blank" rel="noopener noreferrer">...</a>`.
+    *   **CRITICAL LINK RULE:** You MUST NOT create a hyperlink (<a> tag) if you do not have a real, functioning URL (starting with http:// or https://) for the anchor text. **DO NOT use "#" or "javascript:void(0)" or the current article URL.** If the link is missing, simply write the text without the <a> tag.
+    *   **Link to sources:* using `<a href="..." target="_blank" rel="noopener noreferrer">...</a>`.
     *   **Credit the Community:** "As <a href='...'>u/TechGuy pointed out on Reddit</a>..."
     *   **Authority Backlinks:** If the research data mentions big names like **TechCrunch**, **The Verge**, or **documentation**, link to them. This increases trust.
 
