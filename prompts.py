@@ -12,13 +12,13 @@
 
 # STRICT RULE: NO SIMPLIFICATIONS. NO ABBREVIATIONS. NO DELETIONS.
 
-==============================================================================
+# ==============================================================================
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-PROMPT ZERO: SEO STRATEGIST (THE BRAIN) - V3.0 INTENT & RECENCY
+# PROMPT ZERO: SEO STRATEGIST (THE BRAIN) - V3.0 INTENT & RECENCY
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_ZERO_SEO = """
 Role: Aggressive SEO Strategist & Tech Trend Forecaster for a high-traffic Tech Publication.
@@ -81,11 +81,11 @@ CRITICAL OUTPUT RULES:
 
 
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-PROMPT 0.5: THE CREATIVE DIRECTOR (VISUAL STRATEGY) - V2.0
+# PROMPT 0.5: THE CREATIVE DIRECTOR (VISUAL STRATEGY) - V2.0
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_VISUAL_STRATEGY = """
 ROLE: Creative Director at a top-tier tech publication (like The Verge or Wired).
@@ -138,11 +138,11 @@ OUTPUT PURE JSON ONLY:
 }}
 """
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-PROMPT A: TOPIC SELECTION (LEGACY FALLBACK - FOR RSS)
+# PROMPT A: TOPIC SELECTION (LEGACY FALLBACK - FOR RSS)
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_A_TRENDING = """
 A: You are a Viral Content Strategist for a Tech Blog.
@@ -214,11 +214,11 @@ CRITICAL OUTPUT RULES:
 
 
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-PROMPT B: CONTENT CREATOR (V10.0 - THE MASTER SYNTHESIZER)
+# PROMPT B: CONTENT CREATOR (V10.0 - THE MASTER SYNTHESIZER)
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_B_TEMPLATE = """
 ROLE: You are a seasoned Reddit power-user and a brutally honest tech enthusiast (Persona: u/TechCritic). Your tone is conversational, opinionated, and uses common internet/Reddit slang where appropriate. You speak directly to the reader, sharing insights as if you're in a lively discussion thread. Your goal is to cut through the marketing hype and give the real, unfiltered truth based on community experiences.
@@ -431,11 +431,11 @@ CRITICAL OUTPUT RULES:
 
 
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-PROMPT C: VISUALS & SEO (The "Magazine Editor") - V2.0
+# PROMPT C: VISUALS & SEO (The "Magazine Editor") - V2.0
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_C_TEMPLATE = """
 C: Polish the content for a high-end blog.
@@ -552,11 +552,11 @@ CRITICAL OUTPUT RULES:
 
 
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-PROMPT D: HUMANIZER (The "Vibe Check" - NO DELETION)
+# PROMPT D: HUMANIZER (The "Vibe Check" - NO DELETION)
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_D_TEMPLATE = """
 PROMPT D — The "Beginner-Friendly" Filter
@@ -636,11 +636,11 @@ CRITICAL OUTPUT RULES:
 
 
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-PROMPT E: CLEANER (JSON REPAIR)
+# PROMPT E: CLEANER (JSON REPAIR)
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_E_TEMPLATE = """
 E: You are a JSON Formatter.
@@ -671,11 +671,11 @@ CRITICAL OUTPUT RULES:
 
 
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-SOCIAL: VIDEO SCRIPT (WHATSAPP STYLE)
+# SOCIAL: VIDEO SCRIPT (WHATSAPP STYLE)
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_VIDEO_SCRIPT = """
 Role: Scriptwriter for Viral Tech Shorts.
@@ -735,11 +735,11 @@ CRITICAL OUTPUT RULES:
 
 
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-SOCIAL: YOUTUBE METADATA
+# SOCIAL: YOUTUBE METADATA
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_YOUTUBE_METADATA = """
 Role: YouTube Growth Expert.
@@ -765,11 +765,11 @@ CRITICAL OUTPUT RULES:
 
 
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-SOCIAL: FACEBOOK HOOK
+# SOCIAL: FACEBOOK HOOK
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_FACEBOOK_HOOK = """
 Role: Viral Tech Copywriter.
@@ -799,11 +799,11 @@ Output PURE JSON ONLY:
 }}
 """
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-PROMPT: VISUAL EVIDENCE AUGMENTATION (THE DETECTIVE)
+# PROMPT: VISUAL EVIDENCE AUGMENTATION (THE DETECTIVE)
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 PROMPT_EVIDENCE_AUGMENTATION = """
 ROLE: Visual Evidence Detective.
@@ -831,11 +831,11 @@ Output PURE JSON ONLY:
 }}
 """
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
-MASTER SYSTEM PROMPT (STRICT MODE)
+# MASTER SYSTEM PROMPT (STRICT MODE)
 
-------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 STRICT_SYSTEM_PROMPT = """
 You are an autonomous AI agent operating within a high-precision content pipeline.
