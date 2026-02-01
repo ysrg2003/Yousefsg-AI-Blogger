@@ -391,30 +391,50 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 log(f"      ⚠️ Broken Link Removed: {media['url']}")
 
         # Image Priority: 1. Real Evidence, 2. Source OG Image, 3. AI Gen (Later)
+        # Image Priority: 1. AI Vision from Mirrored Assets, 2. Source OG Image, 3. AI Gen (Later)
+        
+        mirrored_image_candidates = [{'url': m['url'], 'title': m['description']} for m in valid_visuals if m['type'] in ['image', 'gif']]
+        
+        if not img_url and mirrored_image_candidates:
+            log("      🧠 Using Gemini Vision to select the best Featured Image from Mirrored Assets...")
+            # محاولة اختيار أفضل صورة من الأدلة التي تم رفعها للـ CDN
+            best_url = image_processor.select_best_image_with_gemini(model_name, target_keyword, mirrored_image_candidates)
+            if best_url: img_url = best_url
+                
         if not img_url:
-            for m in valid_visuals:
-                if m['type'] == 'image':
-                    img_url = m['url']; break
-        if not img_url:
+            # آخر محاولة: الرجوع لـ OG Image الأصلية للمقال الرئيسي (ولكنها قد تكون صورة مكسورة)
             for s in collected_sources:
                 if s.get('source_image') and is_url_accessible(s['source_image']):
                     img_url = s['source_image']; break
+        
 
         asset_map = {}
         available_tags = []
         visual_context_for_writer = []
         
         for i, visual in enumerate(valid_visuals):
+            
             tag = f"[[VISUAL_EVIDENCE_{i+1}]]"
             html = ""
+            
             if visual['type'] in ['image', 'gif']:
+                # --- [1] Images/GIFs: Mirror to CDN (To prevent hotlink break) ---
+                # استخدام دالة رفع الصور الخارجية
+                cdn_url = image_processor.upload_external_image(visual['url'], f"visual-evidence-{target_keyword}")
+                if not cdn_url:
+                    log(f"      ⚠️ Failed to mirror image {visual['url']}. Skipping.")
+                    continue
+                visual['url'] = cdn_url # استبدال الرابط الخارجي برابط CDN الداخلي
+                
                 html = f'''
                 <figure style="margin:30px 0; text-align:center;">
                     <img src="{visual['url']}" alt="{visual['description']}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
                     <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {visual['description']}</figcaption>
                 </figure>
                 '''
+                
             elif visual['type'] == 'embed':
+                # --- [2] Embeds (Videos): Pass the embed code as is (للسماح للمخرج الذكي بوضعها) ---
                  html = f'''<div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><iframe src="{visual['url']}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{visual['description']}"></iframe></div>'''
 
             if html:
@@ -429,6 +449,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             available_tags.append(tag)
             visual_context_for_writer.append(f"{tag}: A practical Python code example for developers.")
             log(f"      💻 Code Snippet injected into asset map.")
+        
 
         # --- WRITING STAGE ---
         combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + reddit_context
