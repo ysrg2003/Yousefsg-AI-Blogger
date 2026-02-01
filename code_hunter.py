@@ -13,13 +13,15 @@ def find_code_snippet(topic: str, model_name: str) -> str | None:
     # تصحيح الخطأ هنا: إزالة الشرطات المائلة العكسية قبل علامات التنصيص
     prompt = f"""
     ROLE: Senior Developer & Technical Writer.
-    TASK: Find or generate a single, practical Python code snippet that demonstrates how to use the core technology mentioned in the topic: "{topic}".
-
+    TASK: Find or generate a single, practical Python code snippet that demonstrates the core API usage for the topic: "{topic}".
+    
     STRICT REQUIREMENTS:
-    1.  **Relevance:** The code MUST be directly related to the topic. For "Gemini 3.0 API", it should show an API call. For "Sora Video Gen", it might show how to call a hypothetical API.
-    2.  **Simplicity:** The code should be a clear, "hello world" style example. Easy to copy, paste, and run. It must be self-contained.
-    3.  **Correctness:** Use modern, idiomatic Python. Add comments explaining the key parts.
-    4.  **Source Priority:** First, search for an official code example from documentation. If none is found, generate a clear, functional example.
+    1.  **API Specificity (CRITICAL):** If the topic involves Google, AWS, or OpenAI, the code MUST use the actual, correct Python SDK (e.g., `google-genai` or `openai` library calls). **Hypothetical or generic API calls (e.g., `api.example.com`) are FORBIDDEN if an official SDK exists.**
+    2.  **Relevance:** The code MUST be directly related to the topic's advanced function (e.g., multimodal chat, function calling, batch processing).
+    3.  **Simplicity:** The code should be a clear, self-contained example.
+    4.  **Output HTML:** Must use `<pre><code class=\"language-python\">...</code></pre>`
+    5.  **Correctness:** Use modern, idiomatic Python. Add comments explaining the key parts.
+    6.  **Source Priority:** First, search for an official code example from documentation. 
 
     OUTPUT JSON ONLY:
     {{
