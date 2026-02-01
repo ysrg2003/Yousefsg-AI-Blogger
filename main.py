@@ -612,9 +612,17 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 def main():
     try:
         with open('config_advanced.json','r') as f: cfg = json.load(f)
-        try: gardener.run_daily_maintenance(cfg)
-        except: pass
         
+        # --- Maintenance Phase (Living Article Protocol) ---
+        log("--- Starting Maintenance Phase ---")
+        try:
+            gardener.run_daily_maintenance(cfg)
+            log("--- Maintenance Phase Complete ---")
+        except Exception as e:
+            log(f"   ⚠️ Gardener maintenance run failed: {e}")
+            log("--- Maintenance Phase Skipped due to error ---")
+        # --------------------------------------------------
+            
         cats = list(cfg['categories'].keys())
         random.shuffle(cats)
         
