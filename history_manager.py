@@ -1,203 +1,265 @@
 # FILE: history_manager.py
-# ROLE: Knowledge Graph & Memory Core.
-# FEATURES: 
-#   1. Prevents content cannibalization via Hybrid Semantic Checks (Fuzzy + AI).
-#   2. Manages 'post_id' storage for the Gardener module (Update capability).
-#   3. Provides intelligent context for internal linking strategies.
-#   4. CRITICAL FIX: Solved SyntaxError regarding dictionary construction.
+# ROLE: Central Intelligence Memory & Semantic Deduplication Engine (V10.0)
+# DESCRIPTION: Manages the Knowledge Graph (knowledge_graph.json). 
+#              Prevents SEO Cannibalization and Content Redundancy using a 
+#              Hybrid Blacklist Strategy (Fuzzy Matching + Deep Semantic Value Check).
+# INTEGRATION: Directly linked to main.py, cluster_manager.py, and gardener.py.
 
 import os
 import json
 import datetime
 import difflib
+import traceback
 from config import log
 from api_manager import generate_step_strict
 
-# Path to the JSON database
+# --- GLOBAL CONFIGURATION ---
 DB_FILE = 'knowledge_graph.json'
+MAX_HISTORY_ITEMS_FOR_AI = 60  # عدد المقالات التي يتم إرسالها للذكاء الاصطناعي للمقارنة
+SIMILARITY_THRESHOLD = 0.65    # حد التشابه النصي للمقارنة السريعة (Fuzzy)
 
 def load_kg():
     """
-    Loads the knowledge graph history from the JSON file safely.
-    Returns an empty list if file doesn't exist or is corrupted.
-    """
-    try:
-        if os.path.exists(DB_FILE):
-            with open(DB_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-    except Exception as e:
-        log(f"⚠️ Warning: Could not load History DB: {e}")
-    return []
-
-def update_kg(title, url, section, post_id=None):
-    """
-    Updates the Knowledge Graph with a new published article.
-    CRITICAL FIX: Accepts 'post_id' (optional) and handles dictionary insertion correctly.
-    """
-    try:
-        data = load_kg()
-        
-        # 1. Prevent exact URL duplicates (Idempotency)
-        if any(item.get('url') == url for item in data):
-            log(f"   ⚠️ URL already exists in KG. Skipping duplicate entry.")
-            return
-
-        # 2. Construct the new entry
-        new_entry = {
-            "title": title,
-            "url": url,
-            "section": section,
-            "date": str(datetime.date.today())
-        }
-
-        # 3. Store Blogger Post ID if available (Essential for Gardener updates)
-        # This fixes the SyntaxError by using standard dictionary assignment
-        if post_id:
-            new_entry["post_id"] = post_id
-            
-        data.append(new_entry)
-        
-        # 4. Save atomically with UTF-8 encoding
-        with open(DB_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            
-        log(f"   💾 History updated. Total Knowledge Graph: {len(data)} articles.")
-        
-    except Exception as e:
-        log(f"❌ Error updating Knowledge Graph: {e}")
-
-def perform_maintenance_cleanup():
-    """
-    Keeps the JSON file size manageable by pruning very old entries.
-    Retains the last 500 articles to maintain context for linking and duplication checks.
+    Loads the knowledge graph history from the JSON file with strict UTF-8 encoding.
+    Ensures the system can handle non-English characters in titles.
     """
     try:
         if os.path.exists(DB_FILE):
             with open(DB_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            
-            # Keep the last 500 articles. Oldest are removed first.
-            if len(data) > 500:
-                trimmed_data = data[-500:]
-                with open(DB_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(trimmed_data, f, indent=2, ensure_ascii=False)
-                log(f"   🧹 Maintenance: Trimmed history DB to last 500 entries.")
+                if isinstance(data, list):
+                    return data
+                else:
+                    log(f"   ⚠️ History DB is not a list. Resetting memory...")
+                    return []
+    except json.JSONDecodeError:
+        log(f"   ⚠️ History DB is corrupted (JSON Error). Creating fresh database...")
+        return []
     except Exception as e:
-        log(f"   ⚠️ Maintenance error: {e}")
+        log(f"   ❌ Critical error loading History DB: {str(e)}")
+        return []
+    return []
+
+def update_kg(title, url, section, post_id=None):
+    """
+    Updates the Knowledge Graph with a new published article.
+    CRITICAL: This is the only source of truth for the 'Blacklist'.
+    Saves metadata required for the Gardener module to perform future updates.
+    """
+    try:
+        data = load_kg()
+        
+        # 1. Idempotency Check: Prevent duplicate URL entries
+        if any(item.get('url') == url for item in data):
+            log(f"   ⚠️ URL '{url}' already exists in History. Entry skipped.")
+            return
+
+        # 2. Construction of the Master Entry
+        new_entry = {
+            "title": str(title).strip(),
+            "url": str(url).strip(),
+            "section": str(section).strip(),
+            "date": str(datetime.date.today()),
+            "post_id": str(post_id) if post_id else None,
+            "last_verified": str(datetime.date.today()),
+            "update_count": 0
+        }
+
+        # 3. Atomic Append
+        data.append(new_entry)
+        
+        # 4. Save with high precision and formatting
+        with open(DB_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            
+        log(f"   💾 [Memory Updated] Total Articles in Blacklist: {len(data)}.")
+        
+    except Exception as e:
+        log(f"   ❌ Failed to update Knowledge Graph: {str(e)}")
+        traceback.print_exc()
+
+def get_blacklist_context(category=None, days_limit=120):
+    """
+    Prepares a descriptive 'Blacklist String' for the AI Judge.
+    Filters content by date to keep the prompt window efficient but relevant.
+    """
+    kg = load_kg()
+    if not kg:
+        return "NO_PREVIOUS_CONTENT"
+    
+    # Calculate date cutoff for relevance (default 120 days)
+    cutoff_date = datetime.date.today() - datetime.timedelta(days=days_limit)
+    
+    relevant_items = []
+    for item in kg:
+        try:
+            # Parse date and filter
+            pub_date_str = item.get('date', '2024-01-01')
+            pub_date = datetime.datetime.strptime(pub_date_str, "%Y-%m-%d").date()
+            
+            if pub_date >= cutoff_date:
+                relevant_items.append(item)
+        except:
+            continue
+
+    # Sort: Newest first
+    relevant_items.sort(key=lambda x: x.get('date', ''), reverse=True)
+    
+    # Take only the top N items to avoid prompt flooding
+    recent_subset = relevant_items[:MAX_HISTORY_ITEMS_FOR_AI]
+    
+    # Format for the AI
+    formatted_list = []
+    for i in recent_subset:
+        formatted_list.append(f"- [Published: {i.get('date')}] Topic: {i.get('title')}")
+        
+    return "\n".join(formatted_list)
+
+def check_semantic_duplication(new_keyword, category, config):
+    """
+    THE ULTIMATE DEDUPLICATION GUARD (The Blacklist Comparison Engine).
+    Executes a two-phase check to ensure NO repetitive content.
+    """
+    target = str(new_keyword).strip().lower()
+    
+    # --- PHASE 1: LOCAL FUZZY MATCH (High Speed) ---
+    # Catches 1:1 duplicates or very similar titles without API calls.
+    kg = load_kg()
+    for item in kg:
+        existing_title = item.get('title', '').lower()
+        
+        # Levenshtein Distance
+        ratio = difflib.SequenceMatcher(None, target, existing_title).ratio()
+        if ratio > SIMILARITY_THRESHOLD:
+            log(f"      ⛔ [Phase 1 REJECT] '{target}' is {int(ratio*100)}% similar to an existing title.")
+            return True
+
+        # Substring check
+        if len(target) > 8 and target in existing_title:
+             log(f"      ⛔ [Phase 1 REJECT] '{target}' is a subset of an existing title.")
+             return True
+
+    # --- PHASE 2: DEEP SEMANTIC VALUE JUDGE (AI) ---
+    # Compares the "Core Value" and "Reader Takeaway".
+    model_name = config['settings'].get('model_name', 'gemini-2.5-flash')
+    blacklist_text = get_blacklist_context(category)
+    
+    if blacklist_text == "NO_PREVIOUS_CONTENT":
+        return False
+
+    log(f"   🧠 [Phase 2 Judge] Analyzing 'Reader Value' of '{new_keyword}' against Blacklist...")
+
+    prompt = f"""
+    ROLE: Ruthless SEO Editor-in-Chief.
+    TASK: Content Cannibalization Audit (Blacklist Comparison).
+    
+    INPUT PROPOSAL: "{new_keyword}"
+    CATEGORY: "{category}"
+    
+    RECENTLY PUBLISHED ARTICLES (THE BLACKLIST):
+    {blacklist_text}
+    
+    ------------------------------------------------------------------------
+    STRICT DECISION LOGIC:
+    1. ANALYZE VALUE: If I write about "{new_keyword}", what NEW facts or lessons will the reader learn that are NOT in the Blacklist?
+    2. REJECT (is_duplicate: true) IF:
+       - The core news event is already covered (e.g., "Product Launch" vs "Product is here").
+       - The "Core Insight" is identical (e.g., "Why X is better than Y" vs "Comparison of X and Y").
+       - The proposal is just a minor sub-feature of a large review we already published.
+    3. ALLOW (is_duplicate: false) ONLY IF:
+       - It is a significant NEW update (Version 2.0 vs Version 1.0).
+       - It is a deep-dive "How-to Guide" and the previous one was just a "News Flash".
+       - It covers a completely different user problem/intent.
+    ------------------------------------------------------------------------
+    
+    OUTPUT JSON FORMAT ONLY:
+    {{
+        "is_duplicate": true/false,
+        "conflict_title": "Title of the existing article that causes the conflict",
+        "reason": "Detailed logic on why the reader gain is identical or unique"
+    }}
+    """
+
+    try:
+        # Use the system's generator
+        result = generate_step_strict(
+            model_name, 
+            prompt, 
+            "Semantic Blacklist Check", 
+            required_keys=["is_duplicate"]
+        )
+        
+        is_dup = result.get('is_duplicate', False)
+        reason = result.get('reason', 'N/A')
+        
+        if is_dup:
+            log(f"      ⛔ [Phase 2 REJECT] '{new_keyword}' blocked. Reason: {reason}")
+            return True
+        else:
+            log(f"      ✅ [Phase 2 PASSED] Topic is unique. Reason: {reason}")
+            return False
+            
+    except Exception as e:
+        log(f"      ⚠️ Semantic Check API Failure: {str(e)}. Proceeding with Phase 1 result (False).")
+        return False
 
 def get_recent_titles_string(category=None, limit=100):
     """
-    Returns a formatted string of recent titles to feed into the AI Context.
-    Used by the Strategy module to avoid writing about the same topic twice.
+    Compatibility function for older modules. 
+    Returns a simple string of titles.
     """
     kg = load_kg()
-    if not kg: return "No previous articles found."
+    if not kg: return ""
     
     if category:
         relevant = [i for i in kg if i.get('section') == category]
     else:
         relevant = kg
         
-    # Get the last 'limit' items to keep context window manageable
-    recent_subset = relevant[-limit:]
-    
-    titles = [f"- {i.get('title', 'Unknown Title')}" for i in recent_subset]
-    
-    if not titles: return "No previous articles in this category."
+    subset = relevant[-limit:]
+    titles = [f"- {i.get('title', 'Untitled')}" for i in subset]
     return "\n".join(titles)
 
 def get_relevant_kg_for_linking(current_title, current_category):
     """
-    Selects 5 relevant past articles to suggest as Internal Links in the new article.
-    Strategy:
-    1. Prioritize articles in the same Category (Silo Structure).
-    2. Backfill with recent articles from other categories if needed.
+    Logic for Internal Linking Strategy (Siloing).
+    Selects 5 relevant past articles from the Knowledge Graph.
     """
     kg = load_kg()
     
-    # Filter by same category (Priority)
+    # 1. Try to find articles in the same category (Silo)
     same_cat = [i for i in kg if i.get('section') == current_category]
     
-    # Select recent ones (Fresher content is usually better for linking news)
-    # Taking the last 5 items
-    selected_links = same_cat[-5:]
+    # 2. Selection: Take the most recent ones
+    selected = same_cat[-5:]
     
-    # If we don't have enough, grab some from other categories purely for volume/structure
-    if len(selected_links) < 3:
-        other_cat = [i for i in kg if i.get('section') != current_category]
-        needed = 3 - len(selected_links)
-        selected_links.extend(other_cat[-needed:])
+    # 3. Backfill if less than 3
+    if len(selected) < 3:
+        others = [i for i in kg if i.get('section') != current_category]
+        needed = 3 - len(selected)
+        selected.extend(others[-needed:])
 
-    # Format for AI Prompt
-    formatted_output = [{"title": i['title'], "url": i['url']} for i in selected_links]
-    return json.dumps(formatted_output)
-
-def check_semantic_duplication(new_keyword, history_string):
-    """
-    Hybrid Duplication Check (The "Paranoid" Guard):
-    1. Phase 1: Local Fuzzy Match (Fast/Cheap) - Catches obvious duplicates.
-    2. Phase 2: AI Semantic Judge (Smart/Contextual) - Catches "Cannibalization" (different words, same meaning).
-    """
-    if not history_string or len(history_string) < 10: 
-        return False
-    
-    # --- Phase 1: Local Heuristics (Fuzzy Match) ---
-    target = new_keyword.lower().strip()
-    
-    for line in history_string.split('\n'):
-        existing_title = line.replace("- ", "").strip().lower()
+    # 4. Format as JSON for the Prompt C (SEO Polish)
+    output = []
+    for item in selected:
+        output.append({
+            "title": item.get('title'),
+            "url": item.get('url')
+        })
         
-        # Levenshtein distance ratio
-        # Threshold 0.65 is strict: catches "Sora Price" vs "Sora Cost"
-        similarity_ratio = difflib.SequenceMatcher(None, target, existing_title).ratio()
-        
-        if similarity_ratio > 0.65:
-            log(f"      ⛔ BLOCKED (Local Fuzzy Match): '{target}' is {int(similarity_ratio*100)}% similar to '{existing_title}'")
-            return True
+    return json.dumps(output, ensure_ascii=False)
 
-        # Substring check for short titles
-        if len(target) > 5 and target in existing_title:
-             log(f"      ⛔ BLOCKED (Local Substring): '{target}' found in '{existing_title}'")
-             return True
-
-    # --- Phase 2: AI Semantic Judge (Using Hybrid Engine) ---
-    # We use a fast model via api_manager to perform a logic check
+def perform_maintenance_cleanup():
+    """
+    Maintenance task to keep the Knowledge Graph healthy.
+    Prevents the JSON file from becoming too massive.
+    Prunes metadata but keeps URLs and Titles for Deduplication.
+    """
     try:
-        # Use a reliable model identifier for the judge
-        judge_model_name = "gemini-2.5-flash" 
-        
-        log(f"   🧠 Semantic Check: Asking AI Judge to compare '{target}' against history...")
-        
-        prompt = f"""
-        ROLE: Strict Editor-in-Chief.
-        TASK: Detect Content Redundancy / SEO Cannibalization.
-        
-        NEW TOPIC PROPOSAL: "{new_keyword}"
-        
-        RECENTLY PUBLISHED ARTICLES:
-        {history_string}
-        
-        CRITERIA FOR BLOCKING (STRICT):
-        1. **SAME EVENT RULE:** If the NEW TOPIC covers the exact same news event (e.g., "DeepSeek R1 Launched" vs "DeepSeek R1 is Here"), BLOCK IT.
-        2. **SYNONYM RULE:** "Price of X" and "Cost of X" are the SAME article. BLOCK IT.
-        3. **EXCEPTION:** Only allow if the NEW TOPIC is a completely different angle (e.g., "Installation Guide" vs "Business Implications").
-        
-        QUESTION: Is this new topic redundant?
-        OUTPUT JSON: {{"is_duplicate": true}} OR {{"is_duplicate": false}}
-        """
-        
-        # Using the unified generator from api_manager
-        result = generate_step_strict(judge_model_name, prompt, "Semantic Judge", required_keys=["is_duplicate"])
-        is_dup = result.get('is_duplicate', False)
-        
-        if is_dup:
-            log(f"      ⛔ BLOCKED (AI Judge): Detected redundancy for '{new_keyword}'.")
-        else:
-            log(f"      ✅ PASSED (AI Judge): '{new_keyword}' is considered a fresh topic.")
-            
-        return is_dup
-    
+        data = load_kg()
+        if len(data) > 1000:
+            # We keep everything but we could implement archival logic here
+            # For now, we just log the size
+            log(f"   📊 Knowledge Graph size: {len(data)} entries. Maintenance healthy.")
     except Exception as e:
-        log(f"      ⚠️ Semantic Check Error (API): {e}. Proceeding cautiously (Defaulting to False).")
-        # If AI check fails (e.g. network error), we trust the local check which already passed.
-        return False
+        log(f"   ⚠️ Maintenance Error: {str(e)}")
