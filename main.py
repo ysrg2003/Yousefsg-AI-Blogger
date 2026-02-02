@@ -418,12 +418,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             if len(valid_visuals) >= 5: break
             
             # YouTube Link Fixer
-            if "youtube.com" in media['url'] or "youtu.be" in media['url']:
-                video_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', media['url'])
-                if video_id_match:
-                    media['url'] = f"https://www.youtube.com/embed/{video_id_match.group(1)}"
-                    media['type'] = 'embed'
-                else: continue
+            if media['type'] in ['embed', 'video'] or any(domain in media['url'] for domain in ["youtube.com", "youtu.be", "vimeo.com"]):
+                log(f"      🚫 Policy Blocked External Video/Embed: {media['url'][:50]}")
+                continue 
 
             if is_url_accessible(media['url']):
                 valid_visuals.append(media)
