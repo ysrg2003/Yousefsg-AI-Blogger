@@ -98,13 +98,13 @@ def apply_smart_privacy_blur(pil_image):
         if len(faces) > 0:
             log(f"      🕵️‍♂️ Detected {len(faces)} face(s). Applying Extended Blur (Face+Hair+Neck)...")
             h_img, w_img, _ = img_np.shape
-            
+
+            # ... (داخل حلقة for (x, y, w, h) in faces:)
             for (x, y, w, h) in faces:
-                # --- EXPANDED BLUR AREA LOGIC ---
-                # We expand the box significantly to cover hair and neck
-                pad_w = int(w * 0.5)        # 50% padding on sides
-                pad_h_top = int(h * 0.8)    # 80% padding on top (Hair)
-                pad_h_bottom = int(h * 1.0) # 100% padding on bottom (Neck)
+                # --- EXPANDED BLUR AREA LOGIC (Same as original) ---
+                pad_w = int(w * 0.5)
+                pad_h_top = int(h * 0.8)
+                pad_h_bottom = int(h * 1.0)
                 
                 # Calculate coordinates with boundary checks
                 x1 = max(0, x - pad_w)
@@ -115,15 +115,27 @@ def apply_smart_privacy_blur(pil_image):
                 # Extract Region of Interest (ROI)
                 roi = img_np[y1:y2, x1:x2]
                 
-                # Calculate blur strength based on face size
-                k_size = (w // 2) | 1 # Ensure odd number
-                k_size = max(k_size, 99) # Minimum blur strength (Very High)
+                # --- CRITICAL FIX START ---
+                # 1. Calculate blur strength (k_size)
+                # k_size يجب أن تكون فردية وأكبر من 1
+                # نستخدم w // 5 لبلور أخف، ثم نضمن أنها فردية وأكبر من 9
+                k_size = (w // 5) | 1 # قيمة أكثر واقعية للبلور
+                k_size = max(k_size, 9) # الحد الأدنى للقوة
+                if k_size % 2 == 0: k_size += 1 # ضمان القيمة الفردية
+                # --- CRITICAL FIX END ---
                 
                 try:
                     # Apply Gaussian Blur
-                    blurred_roi = cv2.GaussianBlur(roi, (k_size, k_size), 0)
-                    img_np[y1:y2, x1:x2] = blurred_roi
-                except: pass
+                    # التأكد من أن ROI ليست فارغة قبل المعالجة
+                    if roi.size > 0 and k_size > 1:
+                        blurred_roi = cv2.GaussianBlur(roi, (k_size, k_size), 0)
+                        img_np[y1:y2, x1:x2] = blurred_roi
+                except Exception as blur_e:
+                    # تسجيل الخطأ بدلاً من ابتلاعه بصمت
+                    log(f"      ❌ CV2 BLUR ERROR! Failed to apply blur on face: {blur_e}. Using original.")
+                    pass 
+
+            
             
             # Convert back to PIL if changes were made
             return Image.fromarray(cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB))
