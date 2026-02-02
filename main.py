@@ -47,6 +47,23 @@ import truth_verifier
 import chart_generator
 import code_hunter  # <--- NEW: Code Snippet Hunter
 
+
+def is_source_viable(url, min_text_length=600):
+    """Checks if a source URL is valid and has content."""
+    try:
+        # فحص سريع
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
+        if r.status_code == 404: return False, "404 Not Found"
+        
+        # فحص المحتوى (نستخدم السكرابر الموجود)
+        _, _, text, _, _ = scraper.resolve_and_scrape(url)
+        if text and len(text) >= min_text_length:
+            return True, "Valid Content"
+        return False, "Content too short or empty"
+    except:
+        return False, "Connection Failed"
+        
 # --- VALIDATION FUNCTION ---
 def is_url_accessible(url):
     """Checks if a URL is alive (Status 200) and allows hotlinking."""
@@ -412,6 +429,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         available_tags = []
         visual_context_for_writer = []
         
+        
         for i, visual in enumerate(valid_visuals):
             
             tag = f"[[VISUAL_EVIDENCE_{i+1}]]"
@@ -422,9 +440,10 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 # استخدام دالة رفع الصور الخارجية
                 cdn_url = image_processor.upload_external_image(visual['url'], f"visual-evidence-{target_keyword}")
                 if not cdn_url:
-                    log(f"      ⚠️ Failed to mirror image {visual['url']}. Skipping.")
-                    continue
-                visual['url'] = cdn_url # استبدال الرابط الخارجي برابط CDN الداخلي
+                    log(f"      ⚠️ Failed to mirror image. Skipping tag {tag}.")
+                    continue 
+                
+                visual['url'] = cdn_url 
                 
                 html = f'''
                 <figure style="margin:30px 0; text-align:center;">
@@ -590,7 +609,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         # 10. QUALITY IMPROVEMENT LOOP
         # ======================================================================
-        quality_score, attempts, MAX_RETRIES = 0, 0, 2
+        quality_score, attempts, MAX_RETRIES = 0, 0, 0
         
         while quality_score < 9.5 and attempts < MAX_RETRIES:
             attempts += 1
@@ -604,6 +623,14 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             
             fixed_html = remedy.fix_article_content(full_body_html, audit_report, target_keyword, combined_text, iteration=attempts)
             if fixed_html and len(fixed_html) > 1000:
+                # === شبكة أمان: فحص عدد الروابط ===
+                orig_links = full_body_html.count("<a href")
+                new_links = fixed_html.count("<a href")
+                
+                if orig_links > 0 and new_links < (orig_links * 0.7):
+                    log(f"   ❌ REMEDY FAILED: Destroyed {orig_links - new_links} links. Discarding changes.")
+                    break # توقف عن محاولات الإصلاح
+                
                 if publisher.update_existing_post(post_id, title, fixed_html):
                     full_body_html = fixed_html
                     time.sleep(10)
