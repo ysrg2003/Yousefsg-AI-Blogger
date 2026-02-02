@@ -80,7 +80,7 @@ def smart_hunt(topic, config, mode="general"):
     log(f"   🕵️‍♂️ [AI Researcher] Executing ({mode}) search for: '{active_query}'")
     google_search_tool = types.Tool(google_search=types.GoogleSearch())
 
-    # === الجذر: تعليمات صارمة تمنع الروابط الوسيطة ===
+    # === تعديل: تعليمات صارمة لمنع الروابط الوسيطة ===
     sys_instruction = """
     You are a Research Engine. 
     MANDATORY RULE FOR LINKS:
@@ -89,12 +89,12 @@ def smart_hunt(topic, config, mode="general"):
     3. If the search tool gives you a redirect link, you MUST extract the actual destination domain.
     4. Return ONLY a JSON list of objects with 'title' and 'link'.
     """
-    
+
     config_gen = types.GenerateContentConfig(
         tools=[google_search_tool],
-        system_instruction=sys_instruction, # استخدام التعليمات الجديدة
+        system_instruction=sys_instruction,
         temperature=0.2,
-        response_mime_type="application/json" # إجبار النموذج على JSON نقي
+        response_mime_type="application/json"
     )
 
     try:
@@ -104,10 +104,7 @@ def smart_hunt(topic, config, mode="general"):
             config=config_gen
         )
         
-        # استخراج البيانات من البيانات الوصفية (Metadata) إن وجدت، فهي أدق من النص
-        # ولكن للاحتياط نعتمد على النص المنظف
         raw_text = response.text.replace("```json", "").replace("```", "").strip()
-        
         from api_manager import master_json_parser
         parsed_data = master_json_parser(raw_text)
         
@@ -116,13 +113,12 @@ def smart_hunt(topic, config, mode="general"):
             for item in parsed_data:
                 url = item.get('link') or item.get('url')
                 
-                # === الجذر: فلتر كود برمجي لمنع مرور أي رابط خبيث ===
+                # === تعديل: فلتر كود برمجي ===
                 if url:
-                    # تنظيف الرابط من أي بقايا
-                    if "vertexaisearch" in url or "google.com/url" in url:
+                    # نرفض أي رابط يحتوي على هذه الكلمات
+                    if any(x in url for x in ["vertexaisearch", "google.com/url", "google.com/search"]):
                         log(f"      🗑️ [Root Fix] Blocked internal Google link: {url}")
                         continue
-                        
                     results.append({"title": item.get('title', 'Source'), "link": url, "url": url})
         
         return results
