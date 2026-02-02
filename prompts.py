@@ -321,10 +321,11 @@ YOUR PERSONA & TONE:
     *   **Comparison Table:** Include the HTML table here with quantitative data.
     *   **Analysis:** Explain the numbers. "You'll notice X is cheaper, which adds up if you're a heavy user."
     *   **Visuals:** Place `[[GENERATED_CHART]]` here if available.
-5.  `<h2>Getting Started: For the Developers</h2>`:
-    *   **CRITICAL RULE:** You MUST include the HTML code block: `[[CODE_SNIPPET_1]]`.
-    *   The snippet MUST be introduced as a practical example for the API usage discussed.
-    *   The section MUST end with a clear explanation of what the code does, focusing on the main API call (e.g., how to use the 'Ingredient Image' feature, or how to call the 'Answer Engine' with a citation).6.  `<h2>Community Pulse: What Real Users Are Saying</h2>`:
+5.  `<h2>Getting Started: A Simple Code Example</h2>`:
+    *   "For the developers and builders out there, here is how you run this."
+    *   Insert `[[CODE_SNIPPET_1]]`.
+    *   Briefly explain what the code does in simple English.
+6.  `<h2>Community Pulse: What Real Users Are Saying</h2>`:
     *   **THIS IS THE SOUL OF THE ARTICLE.** Summarize the "Vibe" of the subreddit.
     *   Are people happy? Angry? Confused?
     *   Quote specific users (with links).
@@ -485,8 +486,56 @@ Action: Insert 1-2 such "Bridge Links" naturally in the text.
 
 5. Schema:
 
-Use Article or TechArticle schema.
-
+"schemaMarkup": {{
+        "INSTRUCTION": "Generate detailed JSON-LD schema. Use 'TechArticle'. Ensure 'FAQPage' includes questions beginners would actually ask.",
+        "OUTPUT": {{
+            "@context": "https://schema.org",
+            "@type": "TechArticle",
+            "mainEntityOfPage": {{
+                "@type": "WebPage",
+                "@id": "ARTICLE_URL_PLACEHOLDER"
+            }},
+            "headline": "HEADLINE_PLACEHOLDER",
+            "image": "IMAGE_URL_PLACEHOLDER",
+            "datePublished": "DATE_PLACEHOLDER",
+            "author": {{
+                "@type": "Person",
+                "name": "Yousef S.",
+                "url": "https://www.latestai.me"
+            }},
+            "publisher": {{
+                "@type": "Organization",
+                "name": "Latest AI",
+                "logo": {{
+                    "@type": "ImageObject",
+                    "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"
+                }}
+            }},
+            "mainEntity": [
+                {{
+                    "@type": "FAQPage",
+                    "mainEntity": [
+                        {{
+                            "@type": "Question",
+                            "name": "Generated Question 1 (Simple)?",
+                            "acceptedAnswer": {{
+                                "@type": "Answer",
+                                "text": "Simple Answer 1."
+                            }}
+                        }},
+                        {{
+                            "@type": "Question",
+                            "name": "Generated Question 2 (Useful)?",
+                            "acceptedAnswer": {{
+                                "@type": "Answer",
+                                "text": "Simple Answer 2."
+                            }}
+                        }}
+                    ]
+                }}
+            ]
+        }}
+    }}
 
 
 6. Sources Section (Critical Requirement):
