@@ -534,6 +534,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 asset_map[tag] = html
                 available_tags.append(tag)
                 visual_context_for_writer.append(f"{tag}: {visual['description']}")
+
+                
+        
             
             
 
