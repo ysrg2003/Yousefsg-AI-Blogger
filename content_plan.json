@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Introducing AI Answer Engine | American Banker Mastery Series",
+  "queue": [
+    "Mastering the AI Answer Engine: A Practical Guide to Leveraging American Banker's New Features",
+    "The AI Answer Engine Landscape: American Banker's Innovation Compared to Google, OpenAI, and Legacy Systems"
+  ],
   "completed": [
     "Google Vertex AI with Gemini 3.0 Mastery Series",
     "Amplified 2026: The Annual State of Voice Report Mastery Series",
