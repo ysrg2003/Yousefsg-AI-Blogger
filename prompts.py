@@ -367,8 +367,8 @@ You must return a JSON object with EXACTLY these keys. Do NOT merge them.
             "@context": "https://schema.org",
             "@type": "TechArticle",
             "mainEntityOfPage": {{
-                "@type": "WebPage",
-                "@id": "ARTICLE_URL_PLACEHOLDER"
+                "@type": "WebPage"
+                
             }},
             "headline": "HEADLINE_PLACEHOLDER",
             "image": "IMAGE_URL_PLACEHOLDER",
@@ -492,8 +492,8 @@ Action: Insert 1-2 such "Bridge Links" naturally in the text.
             "@context": "https://schema.org",
             "@type": "TechArticle",
             "mainEntityOfPage": {{
-                "@type": "WebPage",
-                "@id": "ARTICLE_URL_PLACEHOLDER"
+                "@type": "WebPage"
+                
             }},
             "headline": "HEADLINE_PLACEHOLDER",
             "image": "IMAGE_URL_PLACEHOLDER",
