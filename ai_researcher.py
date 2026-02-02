@@ -152,8 +152,7 @@ def smart_hunt(topic, config, mode="general"):
     try:
         response = client.models.generate_content(
             model=model_name,
-            contents=f"Find 3 high-authority sources for: '{active_query}'. Ensure links are direct and accessible.",
-            config=config_gen
+            contents=f"Find 15 high-authority sources for: '{active_query}'. Ensure links are direct and accessible. Return up to 15 entries.",            config=config_gen
         )
         
         raw_text = response.text.replace("```json", "").replace("```", "").strip()
