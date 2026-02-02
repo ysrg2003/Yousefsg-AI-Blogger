@@ -512,14 +512,14 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
             log(f"      ✅ Final Assets: {len(process_visuals)} Process Visuals + {len(valid_visuals) - len(process_visuals)} General Visuals.")
 
-                visual['url'] = cdn_url 
+            visual['url'] = cdn_url 
                 
-                html = f'''
-                <figure style="margin:30px 0; text-align:center;">
-                    <img src="{visual['url']}" alt="{visual['description']}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
-                    <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {visual['description']}</figcaption>
-                </figure>
-                '''
+            html = f'''
+            <figure style="margin:30px 0; text-align:center;">
+                <img src="{visual['url']}" alt="{visual['description']}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+                <figcaption style="font-size:14px; color:#666; margin-top:8px; font-style:italic;">📸 {visual['description']}</figcaption>
+            </figure>
+            '''
                 
             elif visual['type'] == 'embed':
                 embed_url = visual.get('url')
