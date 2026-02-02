@@ -80,6 +80,26 @@ CRITICAL OUTPUT RULES:
 """
 
 
+# ------------------------------------------------------------------
+# PROMPT: ARTICLE INTENT ANALYZER (V3.0)
+# ------------------------------------------------------------------
+PROMPT_ARTICLE_INTENT = """
+ROLE: Senior Content Strategist & Intent Analyst.
+TASK: Analyze the keyword and category to determine the user's PRIMARY intent.
+
+INPUT TOPIC: "{target_keyword}"
+INPUT CATEGORY: "{category}"
+
+OUTPUT REQUIREMENTS:
+1. **content_type**: Choose ONE of: "Guide" (How-to, Tutorial, Steps), "Review" (Honest Verdict, Features, Deep Dive), or "Comparison" (Vs, Better than, Alternative).
+2. **visual_strategy**: Choose the BEST default visual for that intent (e.g., Guide needs 'hunt_for_screenshot'; Review needs 'generate_chart').
+
+OUTPUT PURE JSON ONLY:
+{{
+"content_type": "The chosen primary intent (e.g., Guide)",
+"visual_strategy": "The chosen best visual strategy (e.g., hunt_for_screenshot)"
+}}
+"""
 
 # ------------------------------------------------------------------
 
@@ -268,7 +288,7 @@ YOUR PERSONA & TONE:
     *   **Code Snippets:** The input contains `[[CODE_SNIPPET_1]]`. You MUST include this. Introduce it as a practical tool: "Want to test this yourself? Here is a Python script to get you started."
     *   **Chart Analysis:** If `[[GENERATED_CHART]]` is present, you MUST write a specific paragraph analyzing what the chart shows. "As you can see in the chart above..."
     *   **Video Context Rule:** All available `[[VISUAL_EVIDENCE_X]]` tags that contain a video embed MUST be placed logically near the text that describes the *functionality* or *visual proof* shown in that video. Do NOT clump them.
-    *   **MANDATORY VISUAL EVIDENCE PLACEMENT (CRITICAL FOR E-A-A-T):** You have been provided with a list of `AVAILABLE_VISUAL_TAGS` (e.g., `[[VISUAL_EVIDENCE_1]]`, `[[VISUAL_EVIDENCE_2]]`). You MUST intelligently and logically place **AT LEAST TWO** of these image/video tags within the article body. The tags should be placed immediately after the paragraph that discusses the context of that visual. Do NOT clump all visuals at the end. Integrate them to support your text and prove your points. Failure to include at least two visual tags will result in failure.
+    *   **MANDATORY VISUAL EVIDENCE PLACEMENT (CRITICAL FOR E-A-A-T):** You have been provided with a list of `AVAILABLE_VISUAL_TAGS` (e.g., `[[VISUAL_EVIDENCE_1]]`, `[[VISUAL_EVIDENCE_2]]`). You MUST intelligently and logically place **AT LEAST FOUR ** of these image/video tags **AT LEAST TOW IMAGES & TOW VIDEOS ** within the article body. The tags should be placed immediately after the paragraph that discusses the context of that visual. Do NOT clump all visuals at the end. Integrate them to support your text and prove your points. Failure to include at least two visual tags will result in failure.
     *   **Data Citation Rule:** Any specific numerical claim you place in the article body (e.g., "Latency dropped by 30%") MUST be linked via an <a> tag to the source data you used to create the comparison table.
 
 4.  **THE "OFFICIAL TRUTH" BASELINE:**
@@ -314,7 +334,17 @@ YOUR PERSONA & TONE:
     *   Don't just say "It depends." Give a recommendation.
     *   "If you are a beginner, go with X. If you are a pro, Y is better."
 8.  `<h3>Sources & References</h3>`: An HTML `<ul>` list of all used source URLs.
+9.  INTENT-SPECIFIC STRUCTURE MANDATE(CRITICAL FOR UX) :
+IF content_type is "Guide":
+    1. The article MUST begin with a numbered or bulleted list titled "Quick 5-Step Action Plan".
+    2. The body MUST use H3 headers for each step (e.g., "<h3>Step 1: Obtain Your API Key</h3>").
+    3. You MUST integrate AT LEAST ONE visual tag (e.g., [[VISUAL_EVIDENCE_1]]) in every section that corresponds to a screenshot.
+    4. The Final Verdict MUST be a clear recommendation on "Who is this Guide for?".
 
+IF content_type is "Review":
+    1. The structure MUST focus on Pros, Cons, and a Final Verdict.
+    2. The body MUST include a COMPARISON TABLE with 3 numerical metrics.
+    3. The conclusion MUST recommend an "Alternative" if the product fails.
 ---
 
 📦 REQUIRED JSON OUTPUT STRUCTURE
