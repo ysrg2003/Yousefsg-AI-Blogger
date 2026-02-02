@@ -120,7 +120,30 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         if not target_keyword: return False
 
         smart_query = ai_strategy.generate_smart_query(target_keyword)
+        
 
+        # ... (بعد الحصول على target_keyword)
+
+        # 1. NEW: AI Intent Analysis Step (V2.0)
+        log("   🧠 [Strategy] Analyzing Topic Intent for Content Type...")
+        intent_prompt = PROMPT_ARTICLE_INTENT.format(target_keyword=target_keyword, category=category)
+        try:
+            # سيتم استدعاء برومبت جديد يحدد النية المطلوبة (Review, Guide, Comparison)
+            intent_analysis = api_manager.generate_step_strict(
+                model_name, intent_prompt, "Intent Analysis", ["content_type", "visual_strategy"]
+            )
+            # نستخدم النتائج كمتغيرات توجيهية
+            content_type = intent_analysis.get("content_type", "Review")
+            visual_strategy = intent_analysis.get("visual_strategy", "generate_comparison_table")
+            log(f"   🎯 Detected Intent: {content_type} | Visual Strategy: {visual_strategy}")
+        
+            # التعديل الحاسم: نحتاج إلى تمرير content_type إلى كل الدوال اللاحقة
+        except Exception as e:
+            log(f"   ⚠️ Intent Analysis Failed: {e}. Defaulting to Review/Comparison.")
+            content_type = "Review"
+            visual_strategy = "generate_comparison_table"
+            
+        # ... (استبدال الخطوة القديمة 3 بهذه المتغيرات الجديدة)
         # ======================================================================
         # 2. SEMANTIC GUARD (ANTI-DUPLICATION)
         # ======================================================================
