@@ -80,37 +80,37 @@ def extract_element_context(element):
 
 def extract_media_from_soup(soup, base_url, directive):
     candidates = []
-    positive_signals = ["demo", "showcase", "tutorial", "interface", "dashboard", "generated", "result", "how to", "workflow", "reveal", "trailer", "robot", "prototype", "screenshot", "UI"]
+    positive_signals = ["demo", "step", "showcase", "tutorial", "interface", "dashboard", "generated", "result", "how to", "workflow", "reveal", "trailer", "robot", "prototype", "screenshot", "UI"]
     negative_signals = ["logo", "icon", "background", "banner", "loader", "spinner", "avatar", "profile", "footer", "ad", "advertisement", "promo", "pixel", "tracker"]
 
     # 1. Search for Videos (STRICT YOUTUBE FIX)
     # نبحث عن أي iframe أو رابط فيديو، ولكن نقبل فقط ما يمكننا تحويله إلى embed سليم
-    for frame in soup.find_all(['iframe', 'a']):
-        src = frame.get('src') or frame.get('href')
-        if not src: continue
+    # for frame in soup.find_all(['iframe', 'a']):
+       # src = frame.get('src') or frame.get('href')
+       # if not src: continue
         
         # تطبيع الرابط
-        if src.startswith('//'): src = 'https:' + src
-        if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
+       # if src.startswith('//'): src = 'https:' + src
+       # if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
 
         # استخراج ID اليوتيوب بدقة باستخدام Regex
         # يدعم: youtube.com/watch?v=, youtu.be/, youtube.com/embed/, shorts/
-        youtube_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', src)
+       # youtube_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', src)
         
-        if youtube_match:
-            video_id = youtube_match.group(1)
+       # if youtube_match:
+           # video_id = youtube_match.group(1)
             # نعيد بناء الرابط ليكون embed مضمون
-            clean_embed = f"https://www.youtube.com/embed/{video_id}"
+          #  clean_embed = f"https://www.youtube.com/embed/{video_id}"
             
-            context = extract_element_context(frame).lower()
-            score = sum(1 for sig in positive_signals if sig in context)
+          #  context = extract_element_context(frame).lower()
+           # score = sum(1 for sig in positive_signals if sig in context)
             
-            candidates.append({
-                "type": "embed", 
-                "url": clean_embed, 
-                "description": context or "Video demonstration", 
-                "score": score + 5 # نعطيه أولوية عالية لأنه فيديو حقيقي
-            })
+           # candidates.append({
+              #  "type": "embed", 
+             #   "url": clean_embed, 
+             #   "description": context or "Video demonstration", 
+             #  "score": score + 5 # نعطيه أولوية عالية لأنه فيديو حقيقي
+           # })
 
     # 2. Search for Images (Images Logic)
     for img in soup.find_all('img', src=True):
@@ -278,7 +278,8 @@ def resolve_and_scrape(google_url):
         soup = BeautifulSoup(page_source, 'html.parser')
 
         # Always hunt for video embeds in scraped articles (high value)
-        found_media = extract_media_from_soup(soup, final_url, "hunt_for_video") 
+       # found_media = extract_media_from_soup(soup, final_url, "hunt_for_video")
+        found_media = [] 
         if found_media: log(f"         📸 Found {len(found_media)} embedded visuals.")
 
         og_image = (soup.find('meta', property='og:image') or {}).get('content')
