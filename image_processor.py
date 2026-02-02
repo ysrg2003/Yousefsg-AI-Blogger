@@ -120,7 +120,7 @@ def apply_smart_privacy_blur(pil_image):
                 # k_size يجب أن تكون فردية وأكبر من 1
                 # نستخدم w // 5 لبلور أخف، ثم نضمن أنها فردية وأكبر من 9
                 k_size = (w // 5) | 1 # قيمة أكثر واقعية للبلور
-                k_size = max(k_size, 9) # الحد الأدنى للقوة
+                k_size = max(k_size,  99) # الحد الأدنى للقوة، كلما كبرت زاد البلور
                 if k_size % 2 == 0: k_size += 1 # ضمان القيمة الفردية
                 # --- CRITICAL FIX END ---
                 
