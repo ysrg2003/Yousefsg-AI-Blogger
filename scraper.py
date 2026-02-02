@@ -146,7 +146,7 @@ def extract_media_from_soup(soup, base_url, directive):
 # 3. THE SMART HUNTER (AI + SELENIUM)
 # ==============================================================================
 
-def smart_media_hunt(target_keyword, category, directive):
+def smart_media_hunt(target_keyword, category, directive,content_type="Review"):
     """
     Hybrid Hunt:
     1. Uses AI Researcher to find direct visual links (Fast/Smart).
@@ -188,7 +188,7 @@ def smart_media_hunt(target_keyword, category, directive):
 
     # --- STRATEGY B: SELENIUM SNIPER (The Manual Way) ---
     log("         🕵️‍♂️ Switching to Selenium Sniper for deep visual search...")
-    search_query = get_smart_query_by_category(target_keyword, category, directive)
+    search_query = get_smart_query_by_category(target_keyword, category, directive,content_type)
     
     chrome_options = Options()
     chrome_options.page_load_strategy = 'eager'
