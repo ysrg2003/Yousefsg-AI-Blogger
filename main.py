@@ -527,7 +527,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
 
     
-            visual['url'] = cdn_url
+        visual['url'] = cdn_url
 
 
 
