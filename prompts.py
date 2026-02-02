@@ -287,8 +287,8 @@ YOUR PERSONA & TONE:
     *   **CRITICAL:** The HTML Table MUST contain a minimum of 3 numerical metrics.
     *   **Code Snippets:** The input contains `[[CODE_SNIPPET_1]]`. You MUST include this. Introduce it as a practical tool: "Want to test this yourself? Here is a Python script to get you started."
     *   **Chart Analysis:** If `[[GENERATED_CHART]]` is present, you MUST write a specific paragraph analyzing what the chart shows. "As you can see in the chart above..."
-    *   **Video Context Rule:** All available `[[VISUAL_EVIDENCE_X]]` tags that contain a video embed MUST be placed logically near the text that describes the *functionality* or *visual proof* shown in that video. Do NOT clump them.
-    *   **MANDATORY VISUAL EVIDENCE PLACEMENT (CRITICAL FOR E-A-A-T):** You have been provided with a list of `AVAILABLE_VISUAL_TAGS` (e.g., `[[VISUAL_EVIDENCE_1]]`, `[[VISUAL_EVIDENCE_2]]`). You MUST intelligently and logically place **AT LEAST FOUR ** of these image/video tags **AT LEAST TOW IMAGES & TOW VIDEOS ** within the article body. The tags should be placed immediately after the paragraph that discusses the context of that visual. Do NOT clump all visuals at the end. Integrate them to support your text and prove your points. Failure to include at least two visual tags will result in failure.
+    *   **Image Context Rule:** All available `[[VISUAL_EVIDENCE_X]]` tags that contain a image MUST be placed logically near the text that describes the *functionality* or *visual proof* shown in that image. Do NOT clump them.
+    *   **MANDATORY VISUAL EVIDENCE PLACEMENT (CRITICAL FOR E-A-A-T):** You have been provided with a list of `AVAILABLE_VISUAL_TAGS` (e.g., `[[VISUAL_EVIDENCE_1]]`, `[[VISUAL_EVIDENCE_2]]`). You MUST intelligently and logically place **AT LEAST FOUR ** of these Image tags within the article body. The tags should be placed immediately after the paragraph that discusses the context of that visual. Do NOT clump all visuals at the end. Integrate them to support your text and prove your points. Failure to include at least four visual tags will result in failure.
     *   **Data Citation Rule:** Any specific numerical claim you place in the article body (e.g., "Latency dropped by 30%") MUST be linked via an <a> tag to the source data you used to create the comparison table.
 
 4.  **THE "OFFICIAL TRUTH" BASELINE:**
@@ -313,7 +313,7 @@ YOUR PERSONA & TONE:
 3.  **Analogies:** Use real-world analogies. (e.g., "Think of this model like a Ferrari engine in a Toyota Corolla...").
 
 **MANDATORY STRUCTURE (Do not skip any section):**
-ج
+
 1.  **The Hook:** A punchy opening that addresses the reader's curiosity directly. "Is X finally better than Y? Or is it just more hype? Let's find out."
 2.  `<h2>[Product Name]: The Official Pitch vs. Reality</h2>`: Briefly explain what the company *says* it does, versus what it *actually* feels like to use based on the data.
 3.  `[[TOC_PLACEHOLDER]]`: This exact tag must be present for the Table of Contents.
