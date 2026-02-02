@@ -34,7 +34,7 @@ def generate_search_plan(topic, client, model_name):
     log(f"   🧠 [AI Researcher] Analyzing topic to create a search plan...")
     prompt = f"""
     TASK: You are a Search Engine Specialist.
-    INPUT TOPIC: "{topic}"
+    INPUT TOPIC: {topic}
     
     ACTION: Break this long, descriptive topic down into 3 short, effective Google Search Queries.
     
@@ -80,24 +80,34 @@ def smart_hunt(topic, config, mode="general"):
     log(f"   🕵️‍♂️ [AI Researcher] Executing ({mode}) search for: '{active_query}'")
     google_search_tool = types.Tool(google_search=types.GoogleSearch())
 
-    # تم إزالة response_mime_type من هنا لحل المشكلة
+    # === الجذر: تعليمات صارمة تمنع الروابط الوسيطة ===
+    sys_instruction = """
+    You are a Research Engine. 
+    MANDATORY RULE FOR LINKS:
+    1. You MUST return the ORIGINAL, PUBLIC URL (e.g., 'wired.com/article', 'youtube.com/watch').
+    2. You are STRICTLY FORBIDDEN from returning 'google.com/search', 'vertexaisearch', or any redirect/proxy links.
+    3. If the search tool gives you a redirect link, you MUST extract the actual destination domain.
+    4. Return ONLY a JSON list of objects with 'title' and 'link'.
+    """
+    
     config_gen = types.GenerateContentConfig(
         tools=[google_search_tool],
-        system_instruction="Find high-authority sources. Return ONLY a JSON list of objects with 'title' and 'link'.",
-        temperature=0.2
+        system_instruction=sys_instruction, # استخدام التعليمات الجديدة
+        temperature=0.2,
+        response_mime_type="application/json" # إجبار النموذج على JSON نقي
     )
 
     try:
         response = client.models.generate_content(
             model=model_name,
-            contents=f"Find 3 sources for: '{active_query}'. Output JSON format.",
+            contents=f"Find 3 high-authority sources for: '{active_query}'. Ensure links are direct and accessible.",
             config=config_gen
         )
         
-        # تنظيف النص المستلم لأنه لن يكون JSON صافي
+        # استخراج البيانات من البيانات الوصفية (Metadata) إن وجدت، فهي أدق من النص
+        # ولكن للاحتياط نعتمد على النص المنظف
         raw_text = response.text.replace("```json", "").replace("```", "").strip()
         
-        # استخدام المفسر الذكي من api_manager
         from api_manager import master_json_parser
         parsed_data = master_json_parser(raw_text)
         
@@ -105,7 +115,14 @@ def smart_hunt(topic, config, mode="general"):
         if parsed_data and isinstance(parsed_data, list):
             for item in parsed_data:
                 url = item.get('link') or item.get('url')
+                
+                # === الجذر: فلتر كود برمجي لمنع مرور أي رابط خبيث ===
                 if url:
+                    # تنظيف الرابط من أي بقايا
+                    if "vertexaisearch" in url or "google.com/url" in url:
+                        log(f"      🗑️ [Root Fix] Blocked internal Google link: {url}")
+                        continue
+                        
                     results.append({"title": item.get('title', 'Source'), "link": url, "url": url})
         
         return results
