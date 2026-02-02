@@ -411,8 +411,11 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         
         unique_media = list({m['url']: m for m in all_media}.values())
         unique_media = sorted(unique_media, key=lambda x: x.get('score', 0), reverse=True)
-        
+
+        # CRITICAL FIX: إعطاء الأولوية للصور السياقية (Screenshots)
         valid_visuals = []
+        process_visuals = []  # لقطات الشاشة و UI
+        general_visuals = []  # الصور العامة
         log("      🛡️ Validating all found media assets...")
         for media in unique_media:
             if len(valid_visuals) >= 5: break
@@ -461,8 +464,26 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 cdn_url = image_processor.upload_external_image(visual['url'], f"visual-evidence-{target_keyword}")
                 if not cdn_url:
                     log(f"      ⚠️ Failed to mirror image. Skipping tag {tag}.")
-                    continue 
+                    continue
+
+                if not is_url_accessible(media['url']):
+                    log(f"      ⚠️ Broken Link Removed: {media['url']}")
+                    continue
+
                 
+                # التصنيف بناءً على السياق (Heuristic: Images ending in .png or mentioning 'screenshot' are process images)
+                if "screenshot" in media['url'].lower() or media['url'].lower().endswith('.png') or 'ui' in media['description'].lower():
+                    process_visuals.append(media)
+                else:
+                    general_visuals.append(media)
+            
+            # البناء النهائي: نفضل صور العملية أولاً، ثم الصور العامة
+            valid_visuals.extend(process_visuals)
+            # نضيف فقط الأصول العامة حتى لا نتجاوز الحد الأقصى (5)
+            valid_visuals.extend(general_visuals[:5 - len(process_visuals)])
+
+            log(f"      ✅ Final Assets: {len(process_visuals)} Process Visuals + {len(valid_visuals) - len(process_visuals)} General Visuals.")
+
                 visual['url'] = cdn_url 
                 
                 html = f'''
