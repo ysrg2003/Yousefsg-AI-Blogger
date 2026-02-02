@@ -521,17 +521,18 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
         
         # Insert Video
-    
-        if vid_main_url:
-            video_html = f'''
-            <h3>Watch the Video Summary</h3>
-            <div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);">
-            <iframe src="{vid_main_url}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{title}"></iframe>
-            </div>'''
-            if "[[TOC_PLACEHOLDER]]" in final_body_html:
-                 final_body_html = final_body_html.replace("[[TOC_PLACEHOLDER]]", "[[TOC_PLACEHOLDER]]" + video_html)
-            else:
-                 final_body_html = video_html + final_body_html
+        if vid_main_url and vid_main_url.startswith("https://"):
+           video_html = f'''
+           <h3>Watch the Video Summary</h3>
+           <div class="video-wrapper" style="position:relative;padding-bottom:56.25%;...">
+           <iframe src="{vid_main_url}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{title}"></iframe>
+           </div>'''  
+           if "[[TOC_PLACEHOLDER]]" in final_body_html:
+               final_body_html = final_body_html.replace("[[TOC_PLACEHOLDER]]", "[[TOC_PLACEHOLDER]]" + video_html)
+           else:
+               final_body_html = video_html + final_body_html
+
+        
 
         # Insert Generated Chart (The Upgrade)
         if chart_html_snippet:
