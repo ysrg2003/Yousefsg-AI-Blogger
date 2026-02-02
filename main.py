@@ -531,6 +531,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 # html = f'''<div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><iframe src="{visual['url']}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{visual['description']}"></iframe></div>'''
 
             if html:
+            
                 asset_map[tag] = html
                 available_tags.append(tag)
                 visual_context_for_writer.append(f"{tag}: {visual['description']}")
