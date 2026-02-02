@@ -44,6 +44,17 @@ def get_smart_query_by_category(keyword, category, directive, content_type):
     Generates specific queries based on the visual directive AND the content type.
     """
     base = f"{keyword}"
+
+    if content_type == "Guide" or directive == "hunt_for_screenshot":
+        # نجبره على البحث عن لقطات للشاشة + دليل الاستخدام (الصور السياقية)
+        # هذا الاستعلام يبحث عن لقطات واجهة المستخدم (UI) والخطوات
+        return f"{base} step-by-step UI screenshot tutorial process guide"
+    
+    # OLD CODE (hunt_for_video is removed anyway, this is for clarity)
+    if directive == "hunt_for_video":
+        return f"{base} official demo walkthrough" # This is now ineffective due to zero-video policy
+
+    return f"{base} official visual evidence"
     
     # NEW: The Guide Fix (CRITICAL)
     if content_type == "Guide" or directive == "hunt_for_screenshot":
@@ -121,7 +132,16 @@ def extract_media_from_soup(soup, base_url, directive):
         if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
         
         if any(bad in src.lower() for bad in MEDIA_LINK_BLACKLIST): continue
-        if src.endswith('.svg') or src.endswith('.ico'): continue 
+        if src.endswith('.svg') or src.endswith('.ico'): continue
+
+        elif directive == "hunt_for_screenshot":
+            if any(ext in src.lower() for ext in ['.png', '.jpg', '.jpeg', '.webp']):
+                # نُفضل PNG و Screenshots (عادة ما تكون ذات حجم ملف أكبر/دقة أعلى)
+                if ("icon" not in src.lower() and "logo" not in src.lower() and 
+                    src.lower().endswith('.png') or src.lower().endswith('screenshot')):
+                    score = sum(1 for sig in positive_signals if sig in context)
+                    if score > 0: 
+                        candidates.append({"type": "image", "url": src, "description": context, "score": score + 5}) # نعطيها أولوية أعلى!
         
         # استبعاد الصور الصغيرة (أيقونات)
         try:
