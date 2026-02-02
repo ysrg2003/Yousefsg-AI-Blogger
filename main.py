@@ -606,10 +606,44 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     """
         full_body_html = full_body_html + author_box
 
-        log("   🚀 [Publishing] Initial Draft...")
-        pub_result = publisher.publish_post(title, full_body_html, [category])
+        # CRITICAL: استخراج الـ SEO Metadata من النتيجة النهائية للـ AI
+        seo_metadata = json_c.get('seo', {})
+        meta_title = seo_metadata.get('metaTitle', final_title)
+        meta_description = seo_metadata.get('metaDescription', '')
+        
+        # التأكد من أن العنوان الذي يتم نشره هو العنوان المُحسن للميتا
+        final_publish_title = meta_title 
+        
+        log(f"   🚀 [Publishing] Final Title: {final_publish_title}")
+        log("   🏷️  Category Included: " + category)
+
+        # UPDATE: نرسل عنوان المقالة والـ Category إلى الناشر
+        pub_result = publisher.publish_post(final_publish_title, full_body_html, [category]) 
         published_url, post_id = (pub_result if isinstance(pub_result, tuple) else (pub_result, None))
 
+        if not published_url or not post_id:
+            log("   ❌ CRITICAL FAILURE: Could not publish the initial draft.")
+            return False
+
+        # ملاحظة: الميتا داتا (metaTitle/metaDescription) لا يتم إرسالها لـ Blogger API مباشرة. 
+        # Blogger يستخدم محتوى المقالة (title و content) فقط. 
+        # لهذا نحتاج إلى حقن الميتا داتا في كود الـ HTML للمقالة!
+        
+        # [NEW CRITICAL STEP]: حقن الميتا داتا في كود المقالة
+        # هذا يضمن أن القارئ لا يراها، ولكن محركات البحث تراها في الـ <head>
+        meta_tags_to_inject = f"""
+        <!-- SEO Metadata Injection -->
+        <meta name="description" content={meta_description}>
+        <meta property="og:title" content={meta_title}>
+        <meta property="og:description" content={meta_description}>
+        """
+        # حقنها في بداية المحتوى
+        full_body_html = meta_tags_to_inject + full_body_html
+        
+        # يجب أن نُحدث المقالة التي تم نشرها للتو بهذا الـ HTML الجديد!
+        if post_id:
+             publisher.update_existing_post(post_id, final_publish_title, full_body_html)
+         
         if not published_url or not post_id:
             log("   ❌ CRITICAL FAILURE: Could not publish the initial draft.")
             return False
