@@ -1,9 +1,12 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Veo 3.1 Ingredients to Video: More consistency, creativity and control - Google Blog Mastery Series",
+  "queue": [
+    "Mastering Veo 3.1: A Hands-On Guide to Leveraging Google's Latest AI for Consistent & Creative Video Production",
+    "Veo 3.1's Competitive Edge: Google's AI Video Generation Compared to OpenAI Sora and Industry Rivals"
+  ],
   "completed": [
     "Google Vertex AI with Gemini 3.0 Mastery Series",
     "Amplified 2026: The Annual State of Voice Report Mastery Series"
   ],
-  "last_generated": "2026-02-01"
+  "last_generated": "2026-02-02"
 }
