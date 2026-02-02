@@ -519,7 +519,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
         final_body_html = draft_body_html
 
+        
         # Insert Video
+    
         if vid_main_url:
             video_html = f'''
             <h3>Watch the Video Summary</h3>
