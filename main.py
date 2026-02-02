@@ -353,7 +353,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         official_media, reddit_media = [], []
         try:
             if visual_strategy.startswith("hunt"):
-                official_media = scraper.smart_media_hunt(smart_query, category, visual_strategy)
+                official_media = scraper.smart_media_hunt(smart_query, category, visual_strategy,content_type)
             reddit_context, reddit_media = reddit_manager.get_community_intel(smart_query)
         except Exception as e:
             log(f"   ⚠️ Visual/Reddit Hunt Error: {e}")
