@@ -446,6 +446,34 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             for s in collected_sources:
                 if s.get('source_image') and is_url_accessible(s['source_image']):
                     img_url = s['source_image']; break
+
+
+                # [CRITICAL FIX]: MANDATORY IMAGE MIRRORING TO GITHUB CDN
+        if img_url:
+            log(f"   🖼️ Enforcing Self-Hosting Policy for Featured Image: {img_url[:50]}...")
+            
+            # نستخدم دالة upload_external_image التي تقوم بالتحميل، تطبيق الـ Blur، والرفع
+            # نستخدم target_keyword كاسم ملف أساسي
+            featured_img_cdn_url = image_processor.upload_external_image(
+                img_url, 
+                f"featured-img-{target_keyword}"
+            )
+            
+            if featured_img_cdn_url:
+                # تحديث img_url لـ CDN URL الجديد
+                img_url = featured_img_cdn_url
+                log(f"      ✅ Featured Image successfully mirrored to CDN: {img_url}")
+            else:
+                # إذا فشل الرفع لأي سبب (مثل خطأ في GitHub Token)، نضطر لإزالة الرابط
+                # لتجنب نشر صورة من مصدر خارجي.
+                log("      ❌ CRITICAL: Failed to mirror Featured Image to CDN. Removing image to maintain policy.")
+                img_url = None
+        
+        # ... (بقية المنطق يستمر) ...
+        
+        # ... (حوالي السطر 700 - حقن الصورة الرئيسية في HTML)
+        if img_url:
+            log(f"   🖼️ Injecting Featured Image into HTML...")
         
 
         asset_map = {}
@@ -606,6 +634,10 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
              log("   🎨 No real image found. Falling back to AI Image Generation...")
              gen_img = image_processor.generate_and_upload_image(json_c['imageGenPrompt'], json_c.get('imageOverlayText', ''))
              if gen_img: img_url = gen_img
+
+
+        
+        
 
         humanizer_payload = api_manager.generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(content_input=json_c['finalContent']),"Humanizer", ["finalContent"])
         
