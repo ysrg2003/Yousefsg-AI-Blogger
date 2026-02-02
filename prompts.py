@@ -268,6 +268,7 @@ YOUR PERSONA & TONE:
     *   **Code Snippets:** The input contains `[[CODE_SNIPPET_1]]`. You MUST include this. Introduce it as a practical tool: "Want to test this yourself? Here is a Python script to get you started."
     *   **Chart Analysis:** If `[[GENERATED_CHART]]` is present, you MUST write a specific paragraph analyzing what the chart shows. "As you can see in the chart above..."
     *   **Video Context Rule:** All available `[[VISUAL_EVIDENCE_X]]` tags that contain a video embed MUST be placed logically near the text that describes the *functionality* or *visual proof* shown in that video. Do NOT clump them.
+    *   **MANDATORY VISUAL EVIDENCE PLACEMENT (CRITICAL FOR E-A-A-T):** You have been provided with a list of `AVAILABLE_VISUAL_TAGS` (e.g., `[[VISUAL_EVIDENCE_1]]`, `[[VISUAL_EVIDENCE_2]]`). You MUST intelligently and logically place **AT LEAST TWO** of these image/video tags within the article body. The tags should be placed immediately after the paragraph that discusses the context of that visual. Do NOT clump all visuals at the end. Integrate them to support your text and prove your points. Failure to include at least two visual tags will result in failure.
     *   **Data Citation Rule:** Any specific numerical claim you place in the article body (e.g., "Latency dropped by 30%") MUST be linked via an <a> tag to the source data you used to create the comparison table.
 
 4.  **THE "OFFICIAL TRUTH" BASELINE:**
