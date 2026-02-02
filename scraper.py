@@ -223,6 +223,45 @@ def smart_media_hunt(target_keyword, category, directive,content_type="Review"):
         driver.set_page_load_timeout(45)
         
         # Search Google
+        driver.get(f"https://www.google.com/search?tbm=isch&q={urllib.parse.quote(search_query)}")
+        time.sleep(3)
+        
+        # نمرر لأسفل الصفحة لتحميل المزيد من الصور (Deep Search)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(2) 
+        
+        # نجمع كل الروابط الصغيرة للصور المصغرة التي يمكن أن نستخدمها كمرشح
+        image_elements = driver.find_elements(By.CSS_SELECTOR, 'img.Q4LuWd')
+        
+        log(f"         📸 Sniper found {len(image_elements)} candidate thumbnails.")
+        
+        # نأخذ أول 10 عناصر ونحلل الروابط الأصلية المخفية بها
+        for i, img_el in enumerate(image_elements[:10]):
+            try:
+                # الروابط الأصلية تكون غالباً في عنصر الأب (a) أو مخفية في (data-src)
+                url = img_el.get_attribute('src') or img_el.get_attribute('data-src')
+
+                if url and url.startswith("http"):
+                    all_media.append({
+                        "type": "image", 
+                        "url": url, 
+                        "description": img_el.get_attribute('alt') or f"Google Image Search result {i+1}",
+                        "score": 5 # نعطيها درجة متوسطة
+                    })
+            except: continue
+        
+    except Exception as e:
+        log(f"      ⚠️ Selenium Sniper Error: {e}")
+    finally:
+        if driver: driver.quit()
+            
+        
+
+        
+    except Exception as e:
+        log(f"      ⚠️ Selenium Sniper Error: {e}")
+    finally:
+        if driver: driver.quit()
         driver.get(f"https://www.google.com/search?q={urllib.parse.quote(search_query)}")
         time.sleep(2)
         
