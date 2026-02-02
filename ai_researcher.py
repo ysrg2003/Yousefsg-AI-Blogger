@@ -66,6 +66,58 @@ def generate_search_plan(topic, client, model_name):
             "visual_query": f"{short_topic} demo"
         }
 
+def upload_external_image(source_url, filename_title):
+    """
+    Downloads an image, checks if it's valid, applies smart blur, and uploads to GitHub.
+    """
+    try:
+        headers = {'User-Agent': random.choice(USER_AGENTS)} 
+        
+        # === تعديل: فحص الرأس (Head Check) ===
+        try:
+            head_req = requests.head(source_url, headers=headers, timeout=5, allow_redirects=True)
+            content_type = head_req.headers.get('Content-Type', '').lower()
+            if 'image' not in content_type and content_type != '':
+                log(f"      ⚠️ Skipped non-image URL ({content_type}): {source_url}")
+                return None
+        except: pass # إذا فشل الفحص السريع، نكمل للتنزيل العادي كمحاولة أخيرة
+
+        # التنزيل
+        r = requests.get(source_url, headers=headers, timeout=15, stream=True)
+        if r.status_code != 200: 
+            log(f"      ⚠️ Failed to download external image (Status {r.status_code}): {source_url}")
+            return None
+        
+        # 1. فتح الصورة
+        try:
+            original_img = Image.open(BytesIO(r.content)).convert("RGBA")
+        except Exception:
+            log(f"      ❌ Corrupt image data from: {source_url}")
+            return None
+        
+        # 2. تطبيق التشويش الذكي
+        base_img_rgb = original_img.convert("RGB")
+        base_img_rgb = apply_smart_privacy_blur(base_img_rgb)
+        
+        # 3. الحفظ والرفع
+        img_byte_arr = BytesIO()
+        base_img_rgb.save(img_byte_arr, format='JPEG', quality=95)
+        
+        safe_name = re.sub(r'[^a-zA-Z0-9\s-]', '', filename_title).strip().replace(' ', '-').lower()[:50]
+        safe_name = f"{int(time.time())}_{safe_name}.jpg"
+
+        public_url = upload_to_github_cdn(img_byte_arr, safe_name)
+        
+        if public_url:
+            log(f"      ✅ Image Mirrored to CDN: {public_url}")
+            return public_url
+        else:
+            return None
+
+    except Exception as e:
+        log(f"      ❌ External Image Upload Failed: {e}")
+        return None
+        
 def smart_hunt(topic, config, mode="general"):
     model_name = "gemini-2.5-flash" 
     key = key_manager.get_current_key()
