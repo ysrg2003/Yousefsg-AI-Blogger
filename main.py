@@ -651,6 +651,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         seo_metadata = json_c.get('seo', {})
         meta_title = seo_metadata.get('metaTitle', final_title)
         meta_description = seo_metadata.get('metaDescription', '')
+
+        schema_data = json_c.get('schemaMarkup', {}).get('OUTPUT', None)
         
         # التأكد من أن العنوان الذي يتم نشره هو العنوان المُحسن للميتا
         final_publish_title = meta_title 
@@ -677,9 +679,41 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         <meta name="description" content={meta_description}>
         <meta property="og:title" content={meta_title}>
         <meta property="og:description" content={meta_description}>
-        """
-        # حقنها في بداية المحتوى
-        full_body_html = meta_tags_to_inject + full_body_html
+        # [CRITICAL STEP 2]: بناء كود Schema JSON-LD
+        schema_tags_to_inject = """
+        if schema_data:
+            try:
+                # 1. تحديث الـ Placeholders في الـ Schema
+                # (يجب أن يتم هذا قبل تحويل الـ JSON إلى نص)
+                article_url_final = published_url if published_url else "ARTICLE_URL_PLACEHOLDER"
+                
+                # نستخدم دالة dump مع ensure_ascii=False لضمان دعم اللغة العربية
+                schema_json_string = json.dumps(schema_data, indent=2, ensure_ascii=False)
+                
+                # استبدال الـ Placeholders المتبقية (HEADLINE, IMAGE, URL)
+                schema_json_string = schema_json_string.replace("HEADLINE_PLACEHOLDER", final_publish_title)
+                schema_json_string = schema_json_string.replace("IMAGE_URL_PLACEHOLDER", img_url if img_url else "IMAGE_URL_PLACEHOLDER")
+                schema_json_string = schema_json_string.replace("ARTICLE_URL_PLACEHOLDER", article_url_final)
+                
+                schema_tags_to_inject = f"""
+                <!-- JSON-LD Schema Markup Injection -->
+                <script type="application/ld+json">
+                {schema_json_string}
+                </script>
+                """
+                
+                
+            
+                
+                log("      ✅ Schema JSON-LD successfully generated.")
+            except Exception as e:
+                log(f"      ❌ Schema JSON-LD generation failed: {e}")
+        
+        # حقن الميتا داتا والـ Schema في بداية المحتوى
+        full_body_html = meta_tags_to_inject + schema_tags_to_inject + full_body_html
+        
+        
+        
         
         # يجب أن نُحدث المقالة التي تم نشرها للتو بهذا الـ HTML الجديد!
         if post_id:
