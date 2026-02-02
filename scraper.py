@@ -39,20 +39,25 @@ MEDIA_LINK_BLACKLIST = [
 # 2. HELPER FUNCTIONS
 # ==============================================================================
 
-def get_smart_query_by_category(keyword, category, directive):
+def get_smart_query_by_category(keyword, category, directive, content_type):
     """
-    Generates specific queries based on the visual directive.
+    Generates specific queries based on the visual directive AND the content type.
     """
     base = f"{keyword}"
     
-    if directive == "hunt_for_screenshot":
-        return f"{base} official UI interface screenshot dashboard"
+    # NEW: The Guide Fix (CRITICAL)
+    if content_type == "Guide" or directive == "hunt_for_screenshot":
+        # نجبره على البحث عن لقطات للشاشة
+        return f"{base} step-by-step UI screenshot tutorial guide"
+    
     if directive == "hunt_for_video":
         if "Robotics" in category or "Hardware" in category:
             return f"{base} official reveal video demonstration"
         return f"{base} official demo walkthrough"
     
-    return f"{base} official visual guide"
+    return f"{base} official visual evidence"
+
+# ... وتأكد من تحديث استدعاء هذه الدالة في main.py لتمرير content_type الجديد
 
 def is_official_looking_url(url, keyword):
     try:
