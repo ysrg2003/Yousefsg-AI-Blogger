@@ -146,7 +146,7 @@ def smart_hunt(topic, config, mode="general"):
         tools=[google_search_tool],
         system_instruction=sys_instruction,
         temperature=0.2,
-        response_mime_type="application/json"
+        
     )
 
     try:
