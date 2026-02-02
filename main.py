@@ -513,7 +513,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             log(f"      ✅ Final Assets: {len(process_visuals)} Process Visuals + {len(valid_visuals) - len(process_visuals)} General Visuals.")
 
             visual['url'] = cdn_url 
-                
+
             html = f'''
             <figure style="margin:30px 0; text-align:center;">
                 <img src="{visual['url']}" alt="{visual['description']}" style="max-width:100%; height:auto; border-radius:10px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
@@ -521,20 +521,21 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             </figure>
             '''
                 
-            elif visual['type'] == 'embed':
-                    embed_url = visual.get('url')
-                    if embed_url and isinstance(embed_url, str) and embed_url.startswith("https://"):
-                        html = f'''<div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><iframe src="{embed_url}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{visual['description']}"></iframe></div>'''
-    
-                    
-                    # --- [2] Embeds (Videos): Pass the embed code as is (للسماح للمخرج الذكي بوضعها) ---
-                    # html = f'''<div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><iframe src="{visual['url']}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{visual['description']}"></iframe></div>'''
-    
-                if html:
+        elif visual['type'] == 'embed':
+                embed_url = visual.get('url')
+                if embed_url and isinstance(embed_url, str) and embed_url.startswith("https://"):
+                    html = f'''<div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><iframe src="{embed_url}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{visual['description']}"></iframe></div>'''
+
                 
-                    asset_map[tag] = html
-                    available_tags.append(tag)
-                    visual_context_for_writer.append(f"{tag}: {visual['description']}")
+                # --- [2] Embeds (Videos): Pass the embed code as is (للسماح للمخرج الذكي بوضعها) ---
+                # html = f'''<div class="video-wrapper" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin:30px 0;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);"><iframe src="{visual['url']}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{visual['description']}"></iframe></div>'''
+
+            if html:
+                asset_map[tag] = html
+                available_tags.append(tag)
+                visual_context_for_writer.append(f"{tag}: {visual['description']}")
+            
+            
 
         # --- NEW: Inject Code Snippet if found ---
         if code_snippet_html:
