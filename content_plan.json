@@ -1,12 +1,11 @@
 {
-  "active_cluster": "Introducing AI Answer Engine | American Banker Mastery Series",
-  "queue": [
-    "The AI Answer Engine Landscape: American Banker's Innovation Compared to Google, OpenAI, and Legacy Systems"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Google Vertex AI with Gemini 3.0 Mastery Series",
     "Amplified 2026: The Annual State of Voice Report Mastery Series",
-    "Veo 3.1 Ingredients to Video: More consistency, creativity and control - Google Blog Mastery Series"
+    "Veo 3.1 Ingredients to Video: More consistency, creativity and control - Google Blog Mastery Series",
+    "Introducing AI Answer Engine | American Banker Mastery Series"
   ],
   "last_generated": "2026-02-02"
 }
