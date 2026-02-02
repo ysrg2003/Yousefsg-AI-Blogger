@@ -32,27 +32,29 @@ def fix_article_content(current_html, audit_report, topic, original_research, it
     
     CONTEXT:
     - Topic: {topic}
-    - Current Date: {today_date} (CRITICAL: Do not write about future tech as if it exists unless proven).
+    - Current Date: {today_date}
     - Original Research: {original_research[:5000]}
     - Flaws to Fix: {json.dumps(flaws)}
     - Instructions: {instructions}
     
-    CURRENT HTML (DO NOT DELETE ASSETS OR LINKS):
+    CURRENT HTML:
     {current_html}
     
     🛑 STRICT PRESERVATION RULES (NON-NEGOTIABLE):
     1. **LINKS ARE SACRED:** You MUST preserve ALL `<a href="...">` tags exactly as they are. Do NOT remove internal links, external citations, or source links.
     2. **MEDIA PRESERVATION:** Keep all `<img>`, `<iframe>`, `<video>`, and `<div class="video-wrapper">` tags EXACTLY as they are.
-    3. **CSS PRESERVATION:** Keep all inline styles (e.g., `style="..."`) and class names.
+    3. **CODE BLOCKS:** Keep all `<pre><code>` blocks untouched.
     4. **TIMELINE FIX:** If the text says "Claude 3 is coming" but it's 2026, change the TEXT to "Claude 3 was released...", but DO NOT delete the section.
     5. **MINIMAL INTERVENTION:** Only edit the specific paragraphs that contain the errors. Leave the rest of the code untouched.
+    6. **CSS PRESERVATION:** Keep all inline styles (e.g., `style="..."`) and class names.
+ 
 
     OUTPUT JSON ONLY:
     {{
         "fixed_html": "The complete HTML code with fixes"
     }}
     """
-    
+        
     try:
         # إعدادات التوليد الصارمة (Temperature 0.1)
         config = types.GenerateContentConfig(
