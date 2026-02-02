@@ -44,12 +44,12 @@ def get_smart_query_by_category(keyword, category, directive, content_type):
     Generates specific queries based on the visual directive AND the content type.
     """
     base = f"{keyword}"
-
-    if content_type == "Guide" or directive == "hunt_for_screenshot":
-        # نجبره على البحث عن لقطات للشاشة + دليل الاستخدام (الصور السياقية)
-        # هذا الاستعلام يبحث عن لقطات واجهة المستخدم (UI) والخطوات
-        return f"{base} step-by-step UI screenshot tutorial process guide"
     
+    if content_type in ["Guide", "Review"] or directive == "hunt_for_screenshot":
+        # نضيف الكلمات السحرية التي تجبر محرك البحث على جلب لقطات شاشة أو مخططات
+        return f'{base} "UI screenshot" "step-by-step" "workflow diagram" "configuration panel" guide'
+
+        
     # OLD CODE (hunt_for_video is removed anyway, this is for clarity)
     if directive == "hunt_for_video":
         return f"{base} official demo walkthrough" # This is now ineffective due to zero-video policy
