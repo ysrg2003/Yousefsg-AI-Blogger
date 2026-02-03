@@ -42,7 +42,7 @@ def audit_live_article(url, target_keyword, iteration=1):
     ===================================================
 
     METADATA:
-    - Target Keyword: "{target_keyword}"
+    - Target Keyword: {target_keyword}
     - Current Date: {today_date} (CRITICAL: Use this date to judge "Timeline Paradoxes").
     - Visual Assets System Check: {visual_report} (If DETECTED, do NOT complain about missing images).
 
