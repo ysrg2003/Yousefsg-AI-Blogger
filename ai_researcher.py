@@ -162,6 +162,8 @@ def smart_hunt(topic, config, mode="general"):
         results = []
         if parsed_data and isinstance(parsed_data, list):
             for item in parsed_data:
+                if not isinstance(item, dict):
+                    continue
                 url = item.get('link') or item.get('url')
                 
                 # === تعديل: فلتر كود برمجي ===
