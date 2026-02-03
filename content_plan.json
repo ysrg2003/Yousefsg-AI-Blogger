@@ -1,13 +1,12 @@
 {
-  "active_cluster": "The borderless contact center: real-time translation for fast-moving teams Mastery Series",
-  "queue": [
-    "DeepL vs. The Competition: Analyzing Real-Time Translation Solutions for the Modern Contact Center"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Google Vertex AI with Gemini 3.0 Mastery Series",
     "Amplified 2026: The Annual State of Voice Report Mastery Series",
     "Veo 3.1 Ingredients to Video: More consistency, creativity and control - Google Blog Mastery Series",
-    "Introducing AI Answer Engine | American Banker Mastery Series"
+    "Introducing AI Answer Engine | American Banker Mastery Series",
+    "The borderless contact center: real-time translation for fast-moving teams Mastery Series"
   ],
   "last_generated": "2026-02-02"
 }
