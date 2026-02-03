@@ -564,7 +564,7 @@ Inside it, create a <ul> list where each list item is a link to the sources prov
 
 Output JSON ONLY (Must contain these specific keys):
 {{
-"finalTitle": "Refined Headline",
+"finalTitle": "Refined Headline (Must be identical to metaTitle)",
 "finalContent": "The complete, polished HTML body (Hook + Body + Verdict + FAQ + Sources)",
 "imageGenPrompt": "CHOOSE ONE OF THESE 3 STYLES based on the article type:
 1. (For App/Software Reviews): 'Close-up POV shot of a human hand holding a modern smartphone showing the [App Name/Icon] interface clearly on screen, blurred cozy home office background, bokeh, 4k, realistic photorealistic, tech review style'.
