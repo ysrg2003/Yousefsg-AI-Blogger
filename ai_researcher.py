@@ -152,7 +152,21 @@ def smart_hunt(topic, config, mode="general"):
     try:
         response = client.models.generate_content(
             model=model_name,
-            contents=f"Find 15 high-authority sources for: '{active_query}'. Ensure links are direct and accessible. Return up to 15 entries.",            config=config_gen
+            contents=f"""
+    TASK: Perform a Google Search to find 15 high-authority sources for: '{active_query}'.
+    
+    CRITICAL OUTPUT RULES:
+    1. Return ONLY a raw JSON list.
+    2. Do NOT use Markdown formatting (no ```json or ```).
+    3. The output must be a list of objects with exactly these keys: "title" and "link".
+    4. Ensure links are direct (no Google redirects).
+    
+    EXAMPLE FORMAT:
+    [
+      {{"title": "Page Title 1", "link": "https://domain.com/article1"}},
+      {{"title": "Page Title 2", "link": "https://domain.com/article2"}}
+    ]
+    """
         )
         
         raw_text = response.text.replace("```json", "").replace("```", "").strip()
