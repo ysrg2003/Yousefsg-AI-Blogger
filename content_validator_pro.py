@@ -36,7 +36,7 @@ class AdvancedContentValidator:
         The Core Protection Mechanism:
         Wraps the API call. If a 429/Quota error occurs, it switches keys and retries.
         """
-        max_retries = 3
+        max_retries = len(key_manager.keys) + 2
         for attempt in range(max_retries):
             client = self._get_client()
             try:
