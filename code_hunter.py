@@ -18,7 +18,7 @@ def find_code_snippet(topic: str, model_name: str) -> str | None:
     1.  **API Specificity (CRITICAL):** If the topic involves Google, AWS, or OpenAI, the code MUST use the actual, correct Python SDK (e.g., `google-genai` or `openai` library calls). **Hypothetical or generic API calls (e.g., `api.example.com`) are FORBIDDEN if an official SDK exists.**
     2.  **Relevance:** The code MUST be directly related to the topic's advanced function (e.g., multimodal chat, function calling, batch processing).
     3.  **Simplicity:** The code should be a clear, self-contained example.
-    4.  **Output HTML:** Must use `<pre><code class=\"language-python\">...</code></pre>`
+    4.  **Output HTML:** Must use a single `<pre><code class=\"language-python\">...</code></pre>`
     5.  **Correctness:** Use modern, idiomatic Python. Add comments explaining the key parts.
     6.  **Source Priority:** First, search for an official code example from documentation.
     7. **DOMAIN SPECIFICITY:** If the topic is about an "Answer Engine" or a "Guide", the code MUST include an explicit example of citation retrieval or limiting the model's knowledge base. If the topic is about "Veo 3.1", the code MUST show how to pass an 'Ingredient Image' URI. The code must be tailored to the core feature.
