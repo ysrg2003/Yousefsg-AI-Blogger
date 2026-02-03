@@ -166,7 +166,7 @@ def smart_hunt(topic, config, mode="general"):
       {{"title": "Page Title 1", "link": "https://domain.com/article1"}},
       {{"title": "Page Title 2", "link": "https://domain.com/article2"}}
     ]
-    """
+    """, config=config_gen
         )
         
         raw_text = response.text.replace("```json", "").replace("```", "").strip()
