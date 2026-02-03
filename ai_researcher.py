@@ -8,10 +8,17 @@
 import json
 import re
 import time
+import random
+import requests
+from io import BytesIO
+from PIL import Image
 from google import genai
 from google.genai import types
-from config import log
+from config import log, USER_AGENTS
 from api_manager import key_manager
+# استيراد الوظائف الضرورية من معالج الصور
+from image_processor import apply_smart_privacy_blur, upload_to_github_cdn
+
 
 # Strict blacklist of domains to avoid for authoritative research
 LOW_QUALITY_DOMAINS = [
