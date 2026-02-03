@@ -711,8 +711,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         <meta name="description" content={meta_description}>
         <meta property="og:title" content={meta_title}>
         <meta property="og:description" content={meta_description}>
+        """
         # [CRITICAL STEP 2]: بناء كود Schema JSON-LD
-        schema_tags_to_inject = """
+        schema_tags_to_inject = ""
         if schema_data:
             try:
                 # 1. تحديث الـ Placeholders في الـ Schema
