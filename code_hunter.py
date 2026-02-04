@@ -16,10 +16,16 @@ def find_code_snippet(topic: str, model_name: str) -> str | None:
     # We ask the AI to specifically look for documentation or PyPI packages.
     check_prompt = f"""
     ROLE: Senior Developer & Library Auditor.
-    TASK: Verify if a PUBLIC Python SDK or API library exists for the topic: "{topic}".
+    TASK: Verify if a PUBLIC Python SDK or API library exists for the topic: {topic}.
+
+    ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
     
     INSTRUCTIONS:
-    1. Search for "pypi {topic}" or "{topic} python sdk" or "{topic} api documentation".
+    1. Search for pypi {topic} or {topic} python sdk or {topic} api documentation.
     2. STRICT RULE: Do NOT invent a library. If 'Fieldguide' is a SaaS with no public python package, you MUST return false.
     3. Only return true if there is a documented way to interact with it via code (Requests, LangChain, Official SDK).
     
@@ -57,6 +63,12 @@ def find_code_snippet(topic: str, model_name: str) -> str | None:
     generation_prompt = f"""
     ROLE: Senior Developer.
     TASK: Write a REAL, WORKING Python code snippet for: {topic}.
+
+    ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
     
     CONTEXT: You have verified that the library '{lib_name}' exists.
     
