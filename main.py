@@ -46,6 +46,8 @@ import trend_watcher
 import truth_verifier
 import chart_generator
 import code_hunter  # <--- NEW: Code Snippet Hunter
+import image_enricher
+from urllib.parse import urlparse
 
 
 def is_source_viable(url, min_text_length=600):
@@ -169,25 +171,32 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         log("   🕵️‍♂️ Starting Omni-Hunt...")
         collected_sources = []
 
-        # [A] PRIORITY 0: THE OFFICIAL SOURCE (From Verification Phase)
-        if official_source_url:
-            log(f"   👑 Fetching Official Source Content: {official_source_url}")
-            try:
-                # Scrape the official link we found earlier
-                o_url, o_title, o_text, o_img, o_media = scraper.resolve_and_scrape(official_source_url)
-                if o_text:
-                    collected_sources.append({
-                        "title": o_title or "Official Announcement",
-                        "url": o_url,
-                        "text": f"OFFICIAL SOURCE OF TRUTH (HIGHEST PRIORITY):\n{o_text}",
-                        "source_image": o_img,
-                        "domain": "OFFICIAL_SOURCE",
-                        "media": o_media
-                    })
-                    if o_img: img_url = o_img
-            except Exception as e:
-                log(f"   ⚠️ Failed to scrape official source: {e}")
+        official_media_assets = [] 
+	    official_domain = None
+	    # [A] PRIORITY 0: THE OFFICIAL SOURCE (From Verification Phase)
+	    if official_source_url:
+	        log(f"   👑 Fetching Official Source Content: {official_source_url}")
+	        official_domain = urlparse(official_source_url).netloc
+	        try:
+	            # لاحظ: نستقبل المتغير الخامس o_media
+	            o_url, o_title, o_text, o_img, o_media = scraper.resolve_and_scrape(official_source_url)
+	            if o_text:
+	                collected_sources.append({
+	                    "title": o_title or "Official Announcement",
+	                    "url": o_url,
+	                    "text": f"OFFICIAL SOURCE OF TRUTH:\n{o_text}",
+	                    "source_image": o_img,
+	                    "domain": "OFFICIAL_SOURCE",
+	                    "media": o_media
+	                })
+	                if o_img: img_url = o_img
+	                if o_media: official_media_assets = o_media # حفظ الصور الرسمية
+	                log(f"      📸 Extracted {len(o_media)} images from official source.")
+	        except Exception as e:
+	            log(f"   ⚠️ Failed to scrape official source: {e}")
 
+        
+        
         # [B] PRIMARY MECHANISM: STRICT GOOGLE NEWS RESOLVER
         try:
             log("   🚀 Executing Primary Mechanism (Strict RSS + Selenium Resolver)...")
