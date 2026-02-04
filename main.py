@@ -171,29 +171,29 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         log("   🕵️‍♂️ Starting Omni-Hunt...")
         collected_sources = []
 
-        official_media_assets = [] 
-	official_domain = None
-	    # [A] PRIORITY 0: THE OFFICIAL SOURCE (From Verification Phase)
-	    if official_source_url:
-	        log(f"   👑 Fetching Official Source Content: {official_source_url}")
-	        official_domain = urlparse(official_source_url).netloc
-	        try:
-	            # لاحظ: نستقبل المتغير الخامس o_media
-	            o_url, o_title, o_text, o_img, o_media = scraper.resolve_and_scrape(official_source_url)
-	            if o_text:
-	                collected_sources.append({
-	                    "title": o_title or "Official Announcement",
-	                    "url": o_url,
-	                    "text": f"OFFICIAL SOURCE OF TRUTH:\n{o_text}",
-	                    "source_image": o_img,
-	                    "domain": "OFFICIAL_SOURCE",
-	                    "media": o_media
-	                })
-	                if o_img: img_url = o_img
-	                if o_media: official_media_assets = o_media # حفظ الصور الرسمية
-	                log(f"      📸 Extracted {len(o_media)} images from official source.")
-	        except Exception as e:
-	            log(f"   ⚠️ Failed to scrape official source: {e}")
+        official_media_assets = []
+        official_domain = None
+        # [A] PRIORITY 0: THE OFFICIAL SOURCE (From Verification Phase)
+        if official_source_url:
+            log(f"   👑 Fetching Official Source Content: {official_source_url}")
+            official_domain = urlparse(official_source_url).netloc
+            try:
+                # لاحظ: نستقبل المتغير الخامس o_media
+                o_url, o_title, o_text, o_img, o_media = scraper.resolve_and_scrape(official_source_url)
+                if o_text:
+                    collected_sources.append({
+                        "title": o_title or "Official Announcement",
+                        "url": o_url,
+                        "text": f"OFFICIAL SOURCE OF TRUTH:\n{o_text}",
+                        "source_image": o_img,
+                        "domain": "OFFICIAL_SOURCE",
+                        "media": o_media
+                    })
+                    if o_img: img_url = o_img
+                    if o_media: official_media_assets = o_media # حفظ الصور الرسمية
+                    log(f"      📸 Extracted {len(o_media)} images from official source.")
+            except Exception as e:
+                log(f"   ⚠️ Failed to scrape official source: {e}")
 
         
         
@@ -687,26 +687,26 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     </div>
     """
         full_body_html = full_body_html + author_box
-		# --- IMAGE ENRICHMENT STAGE (The Professional Editor) ---
-	    try:
-	        log("\n--- Starting Image Enrichment Stage ---")
-	        article_meta = {
-	            "official_domain": official_domain,
-	            "target_keyword": target_keyword
-	        }
-	        # نمرر الـ HTML، العنوان، الميتا، والصور الرسمية
-	        full_body_html = image_enricher.enrich_article_html(
-	            full_body_html, 
-	            final_title, 
-	            article_meta, 
-	            direct_images=official_media_assets 
-	        )
-	        log("--- Image Enrichment Complete ---\n")
-	    except Exception as e:
-	        log(f"   ⚠️ Image enrichment process failed: {e}")
-	        import traceback
-	        traceback.print_exc()
-	    # --- END ENRICHMENT ---7
+        # --- IMAGE ENRICHMENT STAGE (The Professional Editor) ---
+        try:
+            log("\n--- Starting Image Enrichment Stage ---")
+            article_meta = {
+                "official_domain": official_domain,
+                "target_keyword": target_keyword
+            }
+            # نمرر الـ HTML، العنوان، الميتا، والصور الرسمية
+            full_body_html = image_enricher.enrich_article_html(
+                full_body_html, 
+                final_title, 
+                article_meta, 
+                direct_images=official_media_assets 
+            )
+            log("--- Image Enrichment Complete ---\n")
+        except Exception as e:
+            log(f"   ⚠️ Image enrichment process failed: {e}")
+            import traceback
+            traceback.print_exc()
+        # --- END ENRICHMENT ---7
 
         # CRITICAL: استخراج الـ SEO Metadata من النتيجة النهائية للـ AI
         seo_metadata = json_c.get('seo', {})
