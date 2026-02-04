@@ -20,7 +20,12 @@ def _get_core_keywords_from_ai(long_title: str) -> Optional[str]:
         prompt = f"""
         ROLE: Search Engine Specialist.
         TASK: Extract the primary entity (Product Name or Technology) from this title.
-        TITLE: "{long_title}"
+        ---
+        mandatory requirement: 
+        ---
+        1. use a grounding with Google search 
+        2. use URL context 
+        TITLE: {long_title}
         OUTPUT JSON: {{ "core_keywords": "Search Phrase" }}
         """
         result = generate_step_strict("gemini-2.5-flash", prompt, "Core Keyword Extraction", ["core_keywords"])
@@ -56,8 +61,12 @@ def generate_graduated_search_plan(long_title: str) -> List[str]:
         ROLE: Expert Reddit Researcher.
         TASK: Create 3 distinct search queries to find discussions about the following article title on Reddit.
         
-        ARTICLE TITLE: "{long_title}"
-        
+        ARTICLE TITLE: {long_title}
+            ---
+            mandatory requirement: 
+            ---
+            1. use a grounding with Google search 
+            2. use URL context 
         REQUIREMENTS:
         1. **Query 1 (Specific):** Focus on the specific version, update, or feature mentioned. (e.g., "Stable Video Diffusion 1.1" or "GPT-4o voice mode").
         2. **Query 2 (Contextual):** Focus on the problem or comparison. (e.g., "SVD vs Runway" or "GPT-4o latency").
