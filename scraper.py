@@ -1,6 +1,6 @@
 # FILE: scraper.py
-# ROLE: Advanced Web Scraper & Visual Hunter.
-# FEATURES: AI-Guided Media Hunt, Selenium Fallback, Smart Anti-Detection.
+# ROLE: Advanced Web Scraper & Visual Hunter (Scroll & Capture Edition).
+# FEATURES: AI-Guided Media Hunt, Selenium Fallback, Smart Anti-Detection, Lazy-Load Scrolling.
 
 import re
 import time
@@ -32,7 +32,8 @@ NEWS_DOMAINS_BLACKLIST = [
 MEDIA_LINK_BLACKLIST = [
     "googletagmanager", "google-analytics", "doubleclick", "pixel", 
     "adsystem", "adnxs", "script", "tracker", "analytics", "fb.com/tr",
-    "1x1", "spacer", "blank", "tracking"
+    "1x1", "spacer", "blank", "tracking", "icon", "logo", "avatar", "profile",
+    "footer", "header", "button"
 ]
 
 # ==============================================================================
@@ -59,8 +60,6 @@ def get_smart_query_by_category(keyword, category, directive, content_type):
     # المنطق الافتراضي
     return f"{base} official visual evidence"
 
-# ... وتأكد من تحديث استدعاء هذه الدالة في main.py لتمرير content_type الجديد
-
 def is_official_looking_url(url, keyword):
     try:
         domain = urllib.parse.urlparse(url).netloc.lower()
@@ -80,73 +79,101 @@ def extract_element_context(element):
         if text: context.append(text)
     return " | ".join(context) if context else "No description available"
 
-def extract_media_from_soup(soup, base_url, directive):
-    candidates = []
+def scroll_page(driver):
+    """
+    Scrolls down the page slowly to trigger lazy-loaded images.
+    """
+    log("      📜 Scrolling down to trigger lazy-loading...")
+    try:
+        last_height = driver.execute_script("return document.body.scrollHeight")
+        # نقسم الصفحة إلى 4 أجزاء وننزل تدريجياً
+        for i in range(1, 5):
+            driver.execute_script(f"window.scrollTo(0, document.body.scrollHeight * {i/4});")
+            time.sleep(1.5) # انتظار تحميل الصور
+            
+        # العودة للأعلى قليلاً لضمان الثبات
+        driver.execute_script("window.scrollTo(0, 0);")
+    except Exception as e:
+        log(f"      ⚠️ Scroll failed: {e}")
+
+def extract_assets_from_soup(soup, base_url):
+    """
+    Extracts images AND code snippets with their surrounding text context.
+    """
+    assets = []
     positive_signals = ["demo", "step", "showcase", "tutorial", "interface", "dashboard", "generated", "result", "how to", "workflow", "reveal", "trailer", "robot", "prototype", "screenshot", "UI"]
     negative_signals = ["logo", "icon", "background", "banner", "loader", "spinner", "avatar", "profile", "footer", "ad", "advertisement", "promo", "pixel", "tracker"]
-
-    # 1. Search for Videos (STRICT YOUTUBE FIX - تم التعليق عليه للامتثال لعدم جلب فيديو)
-    # for frame in soup.find_all(['iframe', 'a']):
-    #    src = frame.get('src') or frame.get('href')
-    #    if not src: continue
-    #    
-    #    # تطبيع الرابط
-    #    if src.startswith('//'): src = 'https:' + src
-    #    if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
-
-    #    # استخراج ID اليوتيوب بدقة باستخدام Regex
-    #    youtube_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', src)
-    #    
-    #    if youtube_match:
-    #        video_id = youtube_match.group(1)
-    #        # نعيد بناء الرابط ليكون embed مضمون
-    #        clean_embed = f"https://www.youtube.com/embed/{video_id}"
-    #        
-    #        context = extract_element_context(frame).lower()
-    #        score = sum(1 for sig in positive_signals if sig in context)
-    #        
-    #        candidates.append({
-    #            "type": "embed", 
-    #            "url": clean_embed, 
-    #            "description": context or "Video demonstration", 
-    #            "score": score + 5 # نعطيه أولوية عالية لأنه فيديو حقيقي
-    #        })
-
-    # 2. Search for Images (Images Logic)
+    
+    # A. EXTRACT IMAGES
     for img in soup.find_all('img', src=True):
         src = img['src']
         if not src: continue
         
+        # Resolve relative URLs
         if src.startswith('//'): src = 'https:' + src
-        if src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
+        elif src.startswith('/'): src = urllib.parse.urljoin(base_url, src)
+        elif not src.startswith('http'): continue
         
+        # Blacklist Filtering
         if any(bad in src.lower() for bad in MEDIA_LINK_BLACKLIST): continue
         if src.endswith('.svg') or src.endswith('.ico'): continue
-
+        
+        # Context Extraction
         context = extract_element_context(img).lower()
-        if any(bad in context or bad in src for bad in negative_signals): continue
-        
-        # استبعاد الصور الصغيرة (أيقونات)
+        if any(bad in context or bad in src.lower() for bad in negative_signals): continue
+
+        # Size Filtering (Skip small icons/trackers)
         try:
-            if 'width' in img.attrs and int(img['width']) < 400: continue
+            if 'width' in img.attrs and int(img['width']) < 300: continue
+            if 'height' in img.attrs and int(img['height']) < 200: continue
         except: pass
-
-        if src.lower().endswith('.gif'):
-            candidates.append({"type": "gif", "url": src, "description": context, "score": sum(1 for sig in positive_signals if sig in context) + 2})
         
-        elif directive == "hunt_for_screenshot":
-            if any(ext in src.lower() for ext in ['.png', '.jpg', '.jpeg', '.webp']):
-                if "icon" not in src.lower() and "logo" not in src.lower():
-                    score = sum(1 for sig in positive_signals if sig in context)
-                    if score > 0: 
-                        candidates.append({"type": "image", "url": src, "description": context, "score": score})
+        # Score calculation
+        score = sum(1 for sig in positive_signals if sig in context)
+        
+        # فقط الصور التي لها سياق مفيد أو درجة عالية
+        if len(context) > 10 or score > 0: 
+            assets.append({
+                "type": "image",
+                "url": src,
+                "description": context[:300], # نختصر الوصف
+                "source_url": base_url,
+                "score": score
+            })
 
-    return candidates
+    # B. EXTRACT CODE SNIPPETS
+    for code_block in soup.find_all(['pre', 'code']):
+        code_text = code_block.get_text(strip=True)
+        # تجاهل الأكواد القصيرة جداً (كلمة واحدة) أو الطويلة جداً
+        if len(code_text) < 50 or len(code_text) > 3000: continue
+        
+        # نحاول معرفة اللغة
+        lang_class = code_block.get('class', [])
+        language = "code"
+        if isinstance(lang_class, list):
+            for c in lang_class:
+                if 'py' in c or 'python' in c: language = "python"
+                elif 'js' in c or 'javascript' in c: language = "javascript"
+                elif 'bash' in c or 'shell' in c: language = "bash"
+                elif 'html' in c: language = "html"
+                elif 'css' in c: language = "css"
+        
+        assets.append({
+            "type": "code",
+            "content": code_text,
+            "language": language,
+            "description": f"Code snippet from {base_url}",
+            "source_url": base_url,
+            "score": 5 # Base score for code
+        })
+        
+    return assets
+
 # ==============================================================================
 # 3. THE SMART HUNTER (AI + SELENIUM)
 # ==============================================================================
 
-def smart_media_hunt(target_keyword, category, directive,content_type="Review"):
+def smart_media_hunt(target_keyword, category, directive, content_type="Review"):
     """
     Hybrid Hunt:
     1. Uses AI Researcher to find direct visual links (Fast/Smart).
@@ -191,7 +218,7 @@ def smart_media_hunt(target_keyword, category, directive,content_type="Review"):
 
     # --- STRATEGY B: SELENIUM SNIPER (Google Images Direct - The Robust Fallback) ---
     log("         🕵️‍♂️ Switching to Selenium Sniper (Google Images Direct) for deep visual search...")
-    search_query = get_smart_query_by_category(target_keyword, category, directive,content_type)
+    search_query = get_smart_query_by_category(target_keyword, category, directive, content_type)
     
     chrome_options = Options()
     chrome_options.page_load_strategy = 'eager'
@@ -245,13 +272,16 @@ def smart_media_hunt(target_keyword, category, directive,content_type="Review"):
     unique_media = list({m['url']: m for m in all_media}.values())
     return unique_media
 
-# FILE: scraper.py
+# ==============================================================================
+# 4. RESOLVE AND SCRAPE (FULL PIPELINE)
+# ==============================================================================
 
-def resolve_and_scrape(google_url):
+def resolve_and_scrape(target_url):
     """
-    يقوم بفتح الصفحة، استخراج النص، واستخراج جميع الصور الصالحة (المصدر الرسمي).
+    Full extraction pipeline: Scrolls, scrapes text, and gathers visual/code assets.
+    Returns: final_url, final_title, extracted_text, og_image, assets_list
     """
-    log(f"      📰 Omni-Scraper: Extracting content & images from {google_url[:50]}...")
+    log(f"      🕵️‍♂️ Deep Scraping: {target_url[:60]}...")
     
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
@@ -265,69 +295,57 @@ def resolve_and_scrape(google_url):
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.set_page_load_timeout(60)
         
-        driver.get(google_url)
+        driver.get(target_url)
         
-        # انتظار التحميل ومعالجة التحويلات
-        final_url = google_url
+        # 1. Handle Redirects (Wait for final URL) & Google Consent
         start_wait = time.time()
+        final_url = target_url
         while time.time() - start_wait < 15: 
             current = driver.current_url
             if "news.google.com" not in current and "google.com" not in current:
                 final_url = current
                 break
             time.sleep(1)
-
-        final_title = driver.title
+        
+        # 2. Scroll to load images (Lazy Loading)
+        scroll_page(driver)
+        
+        # 3. Get Content
         page_source = driver.page_source
-        soup = BeautifulSoup(page_source, 'html.parser')
-
-        # --- استخراج الصور (Official Images Extraction) ---
-        found_media = []
+        final_title = driver.title
         
-        # 1. صورة الهيدر (OG Image)
-        og_image = (soup.find('meta', property='og:image') or {}).get('content')
-        if og_image:
-            found_media.append({
-                "url": og_image,
-                "description": "Official Hero Image / Main Interface",
-                "source": "Official Site",
-                "type": "official"
-            })
-
-        # 2. صور المقال (Body Images)
-        for img in soup.find_all('img', src=True):
-            src = img['src']
-            if not src.startswith('http'): 
-                src = urllib.parse.urljoin(final_url, src)
-            
-            # فلترة الأيقونات والشعارات والصور الصغيرة
-            if any(x in src.lower() for x in ['logo', 'icon', 'avatar', 'pixel', 'tracker', '.svg', 'footer']): continue
-            
-            # فحص الأبعاد (تقريبي بناءً على السمات)
-            width = img.get('width')
-            if width and width.isdigit() and int(width) < 400: continue
-            
-            alt = img.get('alt', 'Official Screenshot or Diagram')
-            if len(alt) < 5: alt = "Detailed interface view"
-
-            found_media.append({
-                "url": src,
-                "description": alt,
-                "source": "Official Site",
-                "type": "official"
-            })
-        # ------------------------------------------------
-        
+        # 4. Extract Text (using Trafilatura for quality)
         extracted_text = trafilatura.extract(page_source, include_comments=False, favor_precision=True)
         
-        if extracted_text and len(extracted_text) > 600:
-            # نعيد found_media كعنصر خامس
-            return final_url, final_title, extracted_text, og_image, found_media
-
-        return None, None, None, None, []
+        # 5. Extract Assets (Images & Code) using BS4
+        soup = BeautifulSoup(page_source, 'html.parser')
         
+        # Find OG Image (Hero Image Candidate)
+        og_image = (soup.find('meta', property='og:image') or {}).get('content')
+        
+        # Extract all other assets
+        assets = extract_assets_from_soup(soup, final_url)
+        
+        # Add OG Image to assets if unique and exists
+        if og_image:
+             # Check for relative URL in OG Image
+             if og_image.startswith('/'):
+                 og_image = urllib.parse.urljoin(final_url, og_image)
+             
+             if not any(a['url'] == og_image for a in assets if a['type'] == 'image'):
+                assets.insert(0, {
+                    "type": "image",
+                    "url": og_image,
+                    "description": "Main Featured Image / OpenGraph Image",
+                    "source_url": final_url,
+                    "is_hero": True,
+                    "score": 15 # Highest score for Hero
+                })
+
+        return final_url, final_title, extracted_text, og_image, assets
+
     except Exception as e:
-        log(f"      ❌ Scraper Error: {e}")
+        log(f"      ❌ Scraper Error on {target_url}: {e}")
         return None, None, None, None, []
     finally:
         if driver: driver.quit()
