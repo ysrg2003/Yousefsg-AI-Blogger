@@ -7,7 +7,7 @@ from api_manager import generate_step_strict
 
 # البرومبت المتقدم الذي طلبته، تم وضعه هنا كنص ثابت
 PROMPT_DEEP_DIVE = """
-use grounding with Google search and URL context, get your response just from grounding with Google search,get {topic} official resources name and its direct link, mention the page name with its direct link , mention the latest official resources and documents and at least 4 official document and 3 researches and 3 persons experience with their prov ,but they must be Very high value and from high value source or website.
+use grounding with Google search and URL context, get your response just from grounding with Google search,get {topic} official resources name and its direct link, mention the page name with its direct link , mention the latest official resources and documents and at least 4 official document and 3 researches and 3 persons experience  and 3 independent_critiques with their prov ,but they must be Very high value and from high value source or website.
 
 CRITICAL OUTPUT INSTRUCTION: You MUST return a single valid JSON object. Do not add any text before or after the JSON.
 
@@ -27,7 +27,13 @@ The JSON structure MUST be:
       "url": "The direct link to the study"
     }}
   ],
-  "personal_experiences": [ ... ],
+  "personal_experiences": [
+    {{
+      "person_name": "Name of the expert (e.g., Casey Neistat, Dr. Jim Fan)",
+      "proof": "A brief description of their proof (e.g., YouTube video, X/Twitter thread)",
+      "url": "The direct link to the proof"
+    }}
+  ],
 "independent_critiques": [
   {
     "source_name": "Name of the independent publication (e.g., a competitor's blog, an industry analysis site)",
