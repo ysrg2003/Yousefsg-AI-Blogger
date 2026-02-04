@@ -612,6 +612,15 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         final_title = json_c['finalTitle']
         full_body_html = humanizer_payload['finalContent']
 
+        if json_c.get('schemaMarkup') and json_c['schemaMarkup'].get('OUTPUT'):
+            log("   🧬 Injecting JSON-LD Schema into final HTML...")
+            # 2. استخراج كائن الـ JSON-LD
+            schema_data = json_c['schemaMarkup']['OUTPUT']
+            # 3. إنشاء وسم السكربت
+            schema_script = f'<script type="application/ld+json">{json.dumps(schema_data)}</script>'
+            # 4. إلحاق السكربت بنهاية المحتوى
+            full_body_html += schema_script
+
         if img_url:
             img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{final_title}" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" /></a></div>'
             full_body_html = img_html + full_body_html
