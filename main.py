@@ -406,8 +406,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         code_snippet_html = None
         try:
+            
             # Only hunt for code if it's a software/AI/Dev topic
-            if any(x in category.lower() + target_keyword.lower() for x in ['ai', 'code', 'python', 'api', 'model', 'bot', 'script', 'dev', 'software', 'tool']):
+            if not is_b2b and any(x in category.lower() + target_keyword.lower() for x in ['ai', 'code', 'python', 'api', 'model', 'bot', 'script', 'dev', 'software', 'tool']):
                 code_snippet_html = code_hunter.find_code_snippet(target_keyword, model_name)
         except Exception as e:
             log(f"   ⚠️ Code Snippet Hunt Error: {e}")
