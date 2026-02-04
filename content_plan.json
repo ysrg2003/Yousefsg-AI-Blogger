@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Fieldguide Raises $75M Series C from Goldman Sachs to Help Audit and Advisory Firms Grow with Agentic AI Mastery Series",
+  "queue": [
+    "Implementing Agentic AI: A Hands-On Guide to Leveraging Fieldguide for Audit & Advisory Growth",
+    "Fieldguide's Agentic AI vs. The Competition: Analyzing the Future of Audit & Advisory Technology"
+  ],
   "completed": [
     "Google Vertex AI with Gemini 3.0 Mastery Series",
     "Amplified 2026: The Annual State of Voice Report Mastery Series",
@@ -8,5 +11,5 @@
     "Introducing AI Answer Engine | American Banker Mastery Series",
     "The borderless contact center: real-time translation for fast-moving teams Mastery Series"
   ],
-  "last_generated": "2026-02-02"
+  "last_generated": "2026-02-04"
 }
