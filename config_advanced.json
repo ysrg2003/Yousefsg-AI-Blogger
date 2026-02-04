@@ -16,6 +16,15 @@
       "chart_data_priority": ["Estimated ROI", "Setup Time", "Ease of Use", "Profit Potential"]
     }
   },
+  "author_profile": {
+    "name": "Yousef S.",
+    "title": "AI Automation Specialist & Tech Editor",
+    "bio": "Specializing in enterprise AI implementation and ROI analysis. With over 5 years of experience in deploying conversational AI, Yousef provides hands-on insights into what works in the real world.",
+    "profile_image_url": "https://blogger.googleusercontent.com/img/a/AVvXsEiB6B0pK8PhY0j0JrrYCSG_QykTjsbxbbdePdNP_nRT_39FW4SGPPqTrAjendimEUZdipHUiYJfvHVjTBH7Eoz8vEjzzCTeRcDlIcDrxDnUhRJFJv4V7QHtileqO4wF-GH39vq_JAe4UrSxNkfjfi1fDS9_T4mPmwEC71VH9RJSEuSFrNb2ZRQedyA61iQ=s1017-rw",
+    "linkedin_url": "https://www.linkedin.com/in/your-profile-here/",
+    "twitter_url": "https://x.com/latestaime",
+    "reddit_url": "https://www.reddit.com/user/Yousefsg/"
+  },
   "settings": {
     "model_name": "gemini-2.5-flash",
     "discovery_protocol": "intent_based",
