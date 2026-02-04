@@ -1,80 +1,85 @@
 # FILE: live_auditor.py
-# ROLE: Strict Google Quality Rater (Actual Live Access)
-# DESCRIPTION: Visits the URL via Scraper, verifies content, and judges E-E-A-T & SEO potential.
-# UPDATED: Dynamic Date Injection.
+# ROLE: Level 10 Google Search Quality Rater (The Merciless General)
+# VERSION: 5.0 - Strategic E-E-A-T Audit with Hyper-Specific Remedy Commands
 
 import json
 import datetime
 from config import log
 from api_manager import generate_step_strict
-import scraper
 
 def audit_live_article(url, target_keyword, iteration=1):
-    log(f"   ⚖️ [Live Auditor] Round {iteration} | 🚀 ACTUALLY Visiting: {url}...")
+    log(f"   ⚖️ [Investigative Auditor] Round {iteration} | 🚀 PHYSICAL AUDIT: '{url}' vs. Page 1 Competitors...")
     
-    # 1. الوصول الفعلي للمقال (Actual Access)
-    # نستخدم السكرابر لجلب النص + الوسائط التي يراها الزائر الحقيقي
-    # resolve_and_scrape returns: (url, title, text, image, media_list)
-    _, _, page_text, _, media_found = scraper.resolve_and_scrape(url)
-    
-    if not page_text or len(page_text) < 500:
-        log("      ⚠️ Auditor Alert: Could not scrape the live page (Content blocked or empty).")
-        return None
-
-    # 2. فحص النظام للأصول (System Check)
-    # نساعد الذكاء الاصطناعي: نخبره أننا وجدنا صوراً وفيديو برمجياً، لكي لا يظلم المقال
-    has_visuals = len(media_found) > 0
-    visual_report = f"✅ DETECTED ({len(media_found)} assets found by Scraper)" if has_visuals else "❌ NOT DETECTED"
-
-    # 3. التاريخ الديناميكي (Dynamic Date)
     today_date = str(datetime.date.today())
 
-    # 4. البرومبت الصارم (The Strict Veteran Expert Prompt)
     prompt = f"""
-    ROLE: Strict Veteran Google Search Quality Rater (E-E-A-T Expert).
-    TASK: Deep Dive Audit of a LIVE Article (Actual Access).
-
-    I have performed an ACTUAL VISIT to the URL: {url}
+    MANDATORY INSTRUCTION: USE GOOGLE SEARCH & INTERNAL REASONING.
     
-    Here is the RAW CONTENT I extracted from the page:
-    ===================================================
-    {page_text[:20000]}
-    ===================================================
+    TASK: You are Google's Chief Content Inspector. Your ONLY mission is to get this article to Page 1 for "{target_keyword}".
+    
+    Article URL Under Audit: {url}
+    Target Keyword: "{target_keyword}"
+    Current Date: {today_date}
 
-    METADATA:
-    - Target Keyword: {target_keyword}
-    - Current Date: {today_date} (CRITICAL: Use this date to judge "Timeline Paradoxes").
-    - Visual Assets System Check: {visual_report} (If DETECTED, do NOT complain about missing images).
+    ---
+    🧠 PHASE 1: INTERNAL REASONING (The Strategic Assessment)
+    ---
+    <thought>
+    1.  **Initial Scan:** What is the article's current E-E-A-T strength based on its content? (Experience, Expertise, Authoritativeness, Trustworthiness).
+    2.  **Competitive Search:** I will perform a Google Search for "{target_keyword}" and identify the Top 3 organic (non-ad) results.
+    3.  **Competitor E-E-A-T Dissection (CRITICAL):** For EACH of the Top 3 competitors, I will identify their SPECIFIC E-E-A-T advantages that my article currently lacks.
+        -   **Experience:** Do they show first-hand use? A unique case study? A screenshot of a rare bug?
+        -   **Expertise:** Do they cite academic papers, specific industry reports, or present advanced technical analysis (e.g., specific code optimization techniques)?
+        -   **Authoritativeness:** Do they link to many high-authority sources? Are they recognized leaders in the field?
+        -   **Trustworthiness:** Do they present unbiased data? Real user testimonials? Clear disclosures?
+    4.  **Identify EXACT GAPS in MY Article:** Based on the competitor analysis, where exactly does my article fail? I need to pinpoint the section (H2) or even the specific claim that needs strengthening.
+    5.  **Formulate PRECISE REMEDY COMMANDS:** For each identified gap, I will write an actionable, step-by-step command for the "Surgeon Agent" to execute. This command MUST include:
+        -   The type of evidence needed (e.g., "personal anecdote", "quantitative data", "user testimonial").
+        -   A highly specific search query to find that evidence.
+        -   Instructions on WHERE to insert/modify the HTML (e.g., "after H2 'Performance'").
+    </thought>
 
-    YOUR MISSION (AS A STRICT GOOGLE EXPERT):
-    1. **EXPLORE & ANALYZE:** Read the content above thoroughly. Do not hallucinate. Judge what is actually there.
-    2. **TIMELINE CHECK (CRITICAL):** Today is {today_date}. Does the article speak about old tech as if it's new? Or does it hallucinate future tech? It MUST be consistent with the text provided.
-    3. **SEO PREDICTION:** Will this rank on Page 1? Or is it "AI Slop"?
-    4. **LINK CHECK:** Does the text mention sources? (Assume links exist if the text cites names like "According to OpenAI").
+    ---
+    ✍️ PHASE 2: OUTPUT (The Audit Report)
+    ---
+    Provide your audit report in a strict JSON format.
 
     OUTPUT JSON ONLY:
     {{
-        "quality_score": 0.0 to 10.0,
-        "verdict": "Pass/Fail",
-        "critical_flaws": ["List ONLY factual/logic/timeline errors. Be specific."],
-        "remedy_instructions": "Step-by-step guide to fix the logic/timeline errors.",
-        "seo_opinion": "Your honest expert opinion on its ranking potential and how to solve and improve."
+        "quality_score": 0.0 to 10.0, // Overall score
+        "is_page_one_ready": true/false, // Based on Page 1 standard
+        "critical_weaknesses": [ // List of problems
+            {{
+                "location": "H2: Getting Started", // The exact section/header where the problem exists
+                "exact_problem": "Lack of tangible first-hand user experience/tutorial. It's too generic.", // Specific E-E-A-T deficiency
+                "competitor_advantage": "The top result (example.com/guide) features a step-by-step guide with actual developer screenshots and personal tips.", // What makes competitor better
+                "remedy_command": "SEARCH: 'Fieldguide API developer experience Reddit' OR 'Fieldguide setup common issues forum'. EXTRACT: 2-3 genuine user experiences/tips. INTEGRATE: as a new paragraph after the 'Getting Started' H2, citing the source URL. EMPHASIZE: practical advice."
+            }},
+            {{
+                "location": "Paragraph after H2: Performance & 'Real World' Benchmarks", // Another example
+                "exact_problem": "Missing specific quantitative benchmark data comparing latency to competitors.",
+                "competitor_advantage": "Competitor (analytics.com) shows a clear chart of Fieldguide vs. similar tools with latency in milliseconds.",
+                "remedy_command": "SEARCH: 'Fieldguide vs [competitor] latency benchmarks' OR 'Fieldguide API response time'. EXTRACT: 1-2 specific latency numbers or comparative data points. INTEGRATE: into the existing paragraph, bolding the numbers and linking to the source. IF NO NUMBERS: State that official benchmarks are scarce, but industry average is X."
+            }}
+            // Add more weakness objects as needed
+        ],
+        "seo_roadmap": "Overall strategic recommendations for ranking. Be aggressive.",
+        "top_competitors": [
+            {{"title": "Competitor 1 Title", "url": "https://competitor1.com"}},
+            {{"title": "Competitor 2 Title", "url": "https://competitor2.com"}}
+        ]
     }}
     """
 
     try:
-        # نستخدم generate_step_strict لضمان الحصول على JSON نظيف
-        result = generate_step_strict("gemini-2.5-flash", prompt, "Live Audit", required_keys=["quality_score", "critical_flaws"])
-        
-        score = result.get('quality_score', 0)
-        verdict = result.get('verdict', 'Fail')
-        seo_op = result.get('seo_opinion', 'No opinion')
-        
-        log(f"      📝 Audit Score: {score}/10 | Verdict: {verdict}")
-        log(f"      🔮 SEO Expert Opinion: {seo_op[:100]}...")
-        
+        result = generate_step_strict(
+            "gemini-2.0-flash-thinking-exp-01-21", # استخدام موديل التفكير
+            prompt, 
+            "Deep Investigative Audit", 
+            required_keys=["critical_weaknesses", "quality_score"],
+            use_google_search=True # يجب أن يستخدم البحث
+        )
         return result
-        
     except Exception as e:
         log(f"      ❌ Auditor Error: {e}")
         return None
