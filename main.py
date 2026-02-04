@@ -1,4 +1,4 @@
-import os
+   import os
 import json
 import time
 import requests
@@ -82,7 +82,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     reddit_context = ""
     chart_html_snippet = ""
     code_snippet_html = None
-    valid_visuals = []
+    
+    # القائمة الرئيسية لجميع الأصول (صور + كود) التي سيتم جمعها
+    all_collected_assets = [] 
 
     try:
         # ======================================================================
@@ -120,6 +122,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 model_name, intent_prompt, "Intent Analysis", ["content_type", "visual_strategy"]
             )
             content_type = intent_analysis.get("content_type", "News Analysis")
+            visual_strategy = intent_analysis.get("visual_strategy", "hunt_for_screenshot")
             is_b2b = intent_analysis.get("is_enterprise_b2b", False)
             log(f"   🎯 Intent: {content_type} | B2B Mode: {is_b2b}")
             if is_b2b:
@@ -128,6 +131,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         except Exception as e:
             log(f"   ⚠️ Intent Analysis Failed: {e}. Defaulting to Safe Mode.")
             content_type = "News Analysis"
+            visual_strategy = "generate_infographic"
             is_b2b = True
 
         # ======================================================================
@@ -139,89 +143,101 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 return False
 
         # ======================================================================
-        # 3. ADVANCED DEEP DIVE & OMNI-HUNT RESEARCH
+        # 3. ADVANCED DEEP DIVE & OMNI-HUNT RESEARCH (THE HARVEST)
         # ======================================================================
-        log("   🕵️‍♂️ [Phase 1: Research] Initiating Deep Dive Protocol...")
+        log("   🕵️‍♂️ [Phase 1: Research] Initiating Deep Dive & Asset Harvest...")
         collected_sources = []
-        official_media_assets = []
         official_domain = None
 
+        # A. Get Sources List
+        sources_to_scrape = []
         try:
             deep_dive_results = deep_dive_researcher.conduct_deep_dive(target_keyword, model_name)
             if deep_dive_results:
-                all_high_value_sources = (
-                    deep_dive_results.get("official_sources", []) +
-                    deep_dive_results.get("research_studies", []) +
-                    deep_dive_results.get("personal_experiences", [])
-                )
-                
-                # NEW: Process independent critiques for E-A-T
+                sources_to_scrape.extend(deep_dive_results.get("official_sources", []))
+                sources_to_scrape.extend(deep_dive_results.get("research_studies", []))
+                sources_to_scrape.extend(deep_dive_results.get("personal_experiences", []))
+                # Process independent critiques for E-A-T
                 independent_critiques = deep_dive_results.get("independent_critiques", [])
-                
-                all_sources_to_scrape = all_high_value_sources + independent_critiques
-
-                for item in all_sources_to_scrape:
-                    url = item.get('url')
-                    if not url or any(s.get('url') == url for s in collected_sources):
-                        continue
-            
-                    log(f"      ↳ Scraping high-value source: {url[:60]}...")
-                    try:
-                        s_url, s_title, s_text, s_img, s_media = scraper.resolve_and_scrape(url)
-                        if s_text:
-                            source_type = "SOURCE"
-                            if item in deep_dive_results.get("official_sources", []): source_type = "OFFICIAL SOURCE"
-                            elif item in deep_dive_results.get("research_studies", []): source_type = "RESEARCH STUDY"
-                            elif item in deep_dive_results.get("personal_experiences", []): source_type = "EXPERT EXPERIENCE"
-                            elif item in independent_critiques: source_type = "INDEPENDENT_CRITIQUE" # Mark critiques
-                            
-                            collected_sources.append({
-                                "title": s_title or item.get('page_name') or "Source",
-                                "url": s_url,
-                                "text": f"[{source_type}]\n{s_text}",
-                                "source_image": s_img, "domain": urllib.parse.urlparse(s_url).netloc, "media": s_media
-                            })
-                            if not img_url and s_img: img_url = s_img
-                            if source_type == "OFFICIAL SOURCE" and s_media: official_media_assets.extend(s_media)
-                    except Exception as e:
-                        log(f"         ⚠️ Failed to scrape source {url}: {e}")
+                sources_to_scrape.extend(independent_critiques)
         except Exception as e:
             log(f"   ⚠️ Deep Dive Module Error: {e}")
+            sources_to_scrape = []
 
-        if official_source_url and not any(s['url'] == official_source_url for s in collected_sources):
-            log(f"   👑 Fetching Official Source Content: {official_source_url}")
-            official_domain = urlparse(official_source_url).netloc
+        # Add Official Source URL if exists and not already in list
+        if official_source_url:
+             # Check if already present to avoid duplication
+             if not any(s.get('url') == official_source_url for s in sources_to_scrape):
+                 sources_to_scrape.insert(0, {"url": official_source_url, "page_name": "Official Source"})
+             official_domain = urlparse(official_source_url).netloc
+
+        # Fallback RSS if sources are low
+        if len(sources_to_scrape) < 2:
+            rss_items = news_fetcher.get_strict_rss(smart_query, category)
+            for item in rss_items[:4]:
+                sources_to_scrape.append({"url": item['link'], "page_name": item['title']})
+
+        # B. SCRAPE LOOP (WITH ASSET EXTRACTION)
+        processed_urls = set()
+        
+        for src_item in sources_to_scrape:
+            url = src_item.get('url') or src_item.get('link')
+            if not url or url in processed_urls: continue
+            processed_urls.add(url)
+
             try:
-                o_url, o_title, o_text, o_img, o_media = scraper.resolve_and_scrape(official_source_url)
-                if o_text:
-                    collected_sources.insert(0, {
-                        "title": o_title or "Official Announcement", "url": o_url, "text": f"OFFICIAL SOURCE OF TRUTH:\n{o_text}",
-                        "source_image": o_img, "domain": "OFFICIAL_SOURCE", "media": o_media
+                # Scraper returns 'extracted_assets' as the 5th element
+                s_url, s_title, s_text, s_og_img, extracted_assets = scraper.resolve_and_scrape(url)
+                
+                if s_text:
+                    # Identify source type for context
+                    s_type = "SOURCE"
+                    if official_source_url and url == official_source_url: 
+                        s_type = "OFFICIAL SOURCE"
+                    # Check if it was marked as a critique in the deep dive results
+                    elif deep_dive_results and any(c.get('url') == url for c in deep_dive_results.get("independent_critiques", [])):
+                        s_type = "INDEPENDENT CRITIQUE"
+                    
+                    collected_sources.append({
+                        "title": s_title or src_item.get('page_name') or "Source",
+                        "url": s_url,
+                        "text": f"[{s_type}]\n{s_text}",
+                        "domain": urllib.parse.urlparse(s_url).netloc
                     })
-                    if not img_url and o_img: img_url = o_img
-                    if o_media: official_media_assets.extend(o_media)
-                    log(f"      📸 Extracted {len(o_media)} images from official source.")
-            except Exception as e:
-                log(f"   ⚠️ Failed to scrape official source: {e}")
 
-        if len(collected_sources) < 2:
-            log(f"   ⚠️ Low sources ({len(collected_sources)}). Activating Fallback RSS...")
-            try:
-                legacy_items = news_fetcher.get_real_news_rss(smart_query, category)
-                for item in legacy_items:
-                    if len(collected_sources) >= 4: break
-                    if any(s['url'] == item['link'] for s in collected_sources): continue
-                    f_url, f_title, text, f_image, media = scraper.resolve_and_scrape(item['link'])
-                    if text:
-                        collected_sources.append({"title": f_title or item['title'], "url": f_url, "text": text, "source_image": f_image, "domain": urllib.parse.urlparse(f_url).netloc, "media": media})
-                        if not img_url and f_image: img_url = f_image
-            except Exception as e: log(f"      ⚠️ Legacy RSS Error: {e}")
+                    # Add extracted assets to the big pool
+                    if extracted_assets:
+                        log(f"      📸 Found {len(extracted_assets)} assets in {url[:30]}...")
+                        all_collected_assets.extend(extracted_assets)
+                    
+                    # Grab Hero Image candidate from Official Source
+                    if s_type == "OFFICIAL SOURCE" and s_og_img and not img_url:
+                        img_url = s_og_img
+
+            except Exception as e:
+                log(f"         ⚠️ Scrape failed for {url}: {e}")
 
         if not collected_sources:
-            log(f"   ❌ CRITICAL FAILURE: No sources found. Aborting.")
-            return False
-        
+             log("   ❌ CRITICAL: No sources found. Aborting.")
+             return False
+
         log(f"   ✅ Research Complete. Found {len(collected_sources)} sources.")
+
+        # ======================================================================
+        # 4. REDDIT INTEL (Additional Assets & Context)
+        # ======================================================================
+        try:
+            reddit_context, reddit_media = reddit_manager.get_community_intel(smart_query)
+            # Add Reddit media to our asset pool
+            for media in reddit_media:
+                all_collected_assets.append({
+                    "type": "image",
+                    "url": media['url'],
+                    "description": media['description'],
+                    "source_url": "Reddit",
+                    "score": media.get('score', 5)
+                })
+        except: pass
 
         # ======================================================================
         # 4.5. NEW: COMPETITOR ANALYSIS
@@ -238,80 +254,91 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             log(f"      ⚠️ Competitor analysis failed: {e}")
 
         # ======================================================================
-        # 5, 6, 7. GATHER ALL ASSETS *BEFORE* BLUEPRINT CREATION
+        # 5. ASSET CURATION & PREPARATION (Before Blueprint)
         # ======================================================================
-        log("   🎨 [Asset Gathering] Collecting all potential visual and data assets...")
-
-        # --- 5. DATA VISUALIZATION ---
+        log("   🎨 [Asset Curation] Filtering and Preparing Assets for AI...")
+        
+        # Deduplicate assets by URL
+        unique_assets_map = {a.get('url', a.get('content')): a for a in all_collected_assets}
+        unique_assets = list(unique_assets_map.values())
+        
+        # Prepare context list for the Architect
+        # We limit to top 15 images to avoid token overflow
+        visual_context_for_writer = []
+        asset_map = {} # Maps ID to Asset Data
+        
+        # Prioritize: Hero > Code > High Score Images
+        sorted_assets = sorted(unique_assets, key=lambda x: (x.get('is_hero', False), x.get('type') == 'code', x.get('score', 0)), reverse=True)
+        
+        valid_asset_count = 0
+        valid_visuals = [] # Keep track for final assembly
+        
+        for asset in sorted_assets:
+            if valid_asset_count >= 15: break
+            
+            # Check URL accessibility for images (crucial step)
+            if asset['type'] == 'image':
+                if not is_url_accessible(asset['url']): continue
+                valid_visuals.append(asset)
+                
+            # Assign ID
+            asset_id = f"[[ASSET_{valid_asset_count+1}]]"
+            
+            description = asset.get('description', '')
+            if asset['type'] == 'code':
+                description = f"CODE SNIPPET ({asset.get('language')}): {asset.get('content')[:100]}..."
+                code_snippet_html = True # Flag that we have code
+                
+            visual_context_for_writer.append(f"{asset_id}: ({asset['type']}) {description}")
+            
+            # Store for later replacement
+            asset_map[asset_id] = asset
+            valid_asset_count += 1
+            
+        # Add generated chart if applicable
         all_text_blob_for_assets = "\n".join([s['text'] for s in collected_sources])[:20000]
         try:
             if "benchmark" in target_keyword.lower() or "vs" in target_keyword.lower() or "price" in target_keyword.lower():
-                # (Logic for chart generation remains the same)
-                chart_prompt = PROMPT_D_TEMPLATE.format(target_keyword=target_keyword, text_blob=all_text_blob_for_assets) # Assuming a prompt for this
-                chart_data = api_manager.generate_step_strict(model_name, chart_prompt, "Data Extraction for Chart")
+                chart_prompt = f"TASK: Extract numerical data for a comparison chart from:\n{all_text_blob_for_assets}\nOUTPUT JSON: {{'chart_title': '...', 'data_points': {{'Entity1': 10, 'Entity2': 20}}}}" # Simplified prompt for brevity here
+                # In real implementation use PROMPT_D_TEMPLATE or dedicated chart prompt logic
+                chart_data = api_manager.generate_step_strict(model_name, chart_prompt, "Data Extraction for Chart", ["data_points"])
+                
                 if chart_data and chart_data.get('data_points') and len(chart_data['data_points']) >= 2:
                     chart_url = chart_generator.create_chart_from_data(chart_data['data_points'], chart_data.get('chart_title', 'Comparison'))
                     if chart_url:
                         log(f"      ✅ Chart Generated & Uploaded: {chart_url}")
-                        chart_html_snippet = f'''<figure...><img src="{chart_url}"...></figure>'''
+                        chart_id = "[[GENERATED_CHART]]"
+                        visual_context_for_writer.append(f"{chart_id}: A data visualization chart comparing key metrics.")
+                        asset_map[chart_id] = {"type": "chart", "url": chart_url, "description": chart_data.get('chart_title', 'Comparison Chart')}
+                        chart_html_snippet = True
         except Exception as e:
             log(f"      ⚠️ Chart Generation skipped: {e}")
-        
-        # --- 6. VISUAL HUNT & REDDIT INTEL ---
-        reddit_media = []
-        try:
-            reddit_context, reddit_media = reddit_manager.get_community_intel(smart_query)
-        except Exception as e:
-            log(f"   ⚠️ Reddit Hunt Error: {e}")
-
-        # --- 7. CODE SNIPPET HUNT ---
-        try:
-            if not is_b2b and any(x in category.lower() + target_keyword.lower() for x in ['ai', 'code', 'python', 'api', 'model']):
-                code_snippet_html = code_hunter.find_code_snippet(target_keyword, model_name)
-        except Exception as e:
-            log(f"   ⚠️ Code Snippet Hunt Error: {e}")
 
         # ======================================================================
-        # 8. BUILD DATA BUNDLE & ARCHITECT BLUEPRINT (NOW DATA-DRIVEN)
+        # 6. ARCHITECT BLUEPRINT
         # ======================================================================
         log("   🧠 Assembling data bundle for The Architect...")
-
-        # --- A. ASSEMBLE TEXT DATA (with competitor info) ---
+        
+        # Combine text sources
         competitor_text = ""
         if competitor_data:
             competitor_text = "\n\n--- COMPETITOR ANALYSIS ---\n" + json.dumps(competitor_data)
+            
+        combined_text = "\n\n".join([s['text'][:8000] for s in collected_sources]) + competitor_text
         
-        combined_text = "\n\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources]) + competitor_text
-
-        # --- B. ASSEMBLE *AVAILABLE* VISUAL CONTEXT ---
-        all_media = official_media_assets + reddit_media
-        unique_media = list({m['url']: m for m in all_media if m.get('url')}.values())
-        valid_visuals = [media for media in unique_media if is_url_accessible(media.get('url'))][:5] # Limit to 5
-        
-        visual_context_for_writer = []
-        for i, visual in enumerate(valid_visuals):
-            visual_context_for_writer.append(f"[[VISUAL_EVIDENCE_{i+1}]]: {visual.get('description', 'Visual evidence')}")
-        
-        if code_snippet_html:
-            visual_context_for_writer.append("[[CODE_SNIPPET_1]]: A practical Python code example for developers.")
-        if chart_html_snippet:
-            visual_context_for_writer.append("[[GENERATED_CHART]]: A data visualization chart comparing key metrics.")
-
-        # --- C. CALL THE ARCHITECT ---
         blueprint = content_architect.create_article_blueprint(
-            target_keyword, content_type, combined_text, reddit_context, "\n".join(visual_context_for_writer), model_name
+            target_keyword, content_type, combined_text, reddit_context, 
+            "\n".join(visual_context_for_writer), model_name
         )
 
         if not blueprint or not blueprint.get("article_blueprint"):
             log("   ❌ CRITICAL FAILURE: Blueprint creation failed. Aborting pipeline.")
             return False
 
-        # ... (The rest of the pipeline from step 9 onwards remains largely the same, but with the corrected logic for asset replacement and schema injection)
-
         # ======================================================================
-        # 9. THE ARTISAN PHASE (WRITING FROM BLUEPRINT)
+        # 7. ARTISAN WRITER
         # ======================================================================
-        log("   ✍️ [The Artisan] Executing the blueprint to write the article...")
+        log("   ✍️ [The Artisan] Writing the article...")
         artisan_prompt = PROMPT_B_TEMPLATE.format(
             blueprint_json=json.dumps(blueprint),
             raw_data_bundle=json.dumps({"research": combined_text[:15000], "reddit": reddit_context[:5000]})
@@ -321,69 +348,99 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         draft_body_html = json_b.get('article_body', '')
 
         # ======================================================================
-        # 10. SYNTHESIS & ASSET PROCESSING
+        # 8. FINAL ASSEMBLY & ASSET REPLACEMENT
         # ======================================================================
-        log("   ✍️ Synthesizing Content & Validating Assets...")
-        if not img_url: # Find a fallback featured image
-            for s in collected_sources:
-                if s.get('source_image') and is_url_accessible(s.get('source_image')):
-                    img_url = s['source_image']
-                    break
-        if img_url:
-            featured_img_cdn_url = image_processor.upload_external_image(img_url, f"featured-img-{target_keyword}")
-            img_url = featured_img_cdn_url or img_url
+        log("   🔗 Inserting Real Assets into HTML...")
+        
+        final_body_html = draft_body_html
+        
+        # Replace asset placeholders with actual HTML
+        for asset_id, asset in asset_map.items():
+            if asset_id not in final_body_html: continue # AI didn't use it
+            
+            replacement_html = ""
+            if asset['type'] == 'image':
+                # Upload to GitHub/ImgBB to ensure permanence
+                final_img_url = image_processor.upload_external_image(asset['url'], f"asset-{target_keyword[:10]}") or asset['url']
+                replacement_html = f'''
+                <figure style="margin: 30px auto; text-align: center;">
+                    <img src="{final_img_url}" alt="{asset['description']}" style="width: 100%; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                    <figcaption style="font-size: 13px; color: #555; margin-top: 8px; font-style: italic;">📸 {asset['description']}</figcaption>
+                </figure>
+                '''
+                # Update Hero Image if not set
+                if not img_url: img_url = final_img_url
+                
+            elif asset['type'] == 'code':
+                replacement_html = f'''
+                <div style="background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; margin: 20px 0;">
+                    <pre><code class="language-{asset.get('language', 'text')}">{asset.get('content')}</code></pre>
+                </div>
+                '''
+            elif asset['type'] == 'chart':
+                replacement_html = f'''
+                <figure style="margin: 30px auto; text-align: center;">
+                    <img src="{asset['url']}" alt="{asset['description']}" style="width: 100%; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                    <figcaption style="font-size: 13px; color: #555; margin-top: 8px; font-style: italic;">📊 {asset['description']}</figcaption>
+                </figure>
+                '''
+                
+            final_body_html = final_body_html.replace(asset_id, replacement_html)
+
+        # Cleanup unused placeholders
+        final_body_html = re.sub(r'\[\[ASSET_\d+\]\]', '', final_body_html)
 
         # ======================================================================
-        # 11. VIDEO PRODUCTION & UPLOAD
+        # 11. VIDEO PRODUCTION & UPLOAD (Moved here for flow)
         # ======================================================================
         log("   🎬 Video Production & Upload...")
         summ = re.sub('<[^<]+?>', '', draft_body_html)[:1000]
         try:
             vs_payload = api_manager.generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script")
-            if vs_payload.get('video_script'):
+            script_json = vs_payload.get('video_script', [])
+
+            if script_json:
                 ts = int(time.time())
-                main_video_path = video_renderer.VideoRenderer(output_dir="output").render_video(vs_payload['video_script'], title, f"main_{ts}.mp4")
+                main_video_path = video_renderer.VideoRenderer(output_dir="output").render_video(script_json, title, f"main_{ts}.mp4")
                 if main_video_path:
                     vid_main_id, vid_main_url = youtube_manager.upload_video_to_youtube(main_video_path, title, "AI Analysis", [t.strip() for t in category.split()])
-                short_video_path = video_renderer.VideoRenderer(output_dir="output", width=1080, height=1920).render_video(vs_payload['video_script'], title, f"short_{ts}.mp4")
+                
+                short_video_path = video_renderer.VideoRenderer(output_dir="output", width=1080, height=1920).render_video(script_json, title, f"short_{ts}.mp4")
                 if short_video_path:
                     local_fb_video = short_video_path
                     vid_short_id, _ = youtube_manager.upload_video_to_youtube(short_video_path, f"{title[:50]} #Shorts", "Quick Look", ["shorts", category])
         except Exception as e:
             log(f"   ⚠️ Video Production Failed: {e}")
 
-        # ======================================================================
-        # 12. FINAL ASSEMBLY
-        # ======================================================================
-        log("   🔗 Assembling Final HTML...")
-        final_body_html = draft_body_html
-        asset_map = {}
-        for i, visual in enumerate(valid_visuals):
-            tag = f"[[VISUAL_EVIDENCE_{i+1}]]"
-            cdn_url = image_processor.upload_external_image(visual['url'], f"visual-evidence-{i}-{target_keyword}")
-            if cdn_url:
-                asset_map[tag] = f'''<figure...><img src="{cdn_url}" alt="{visual['description']}"...></figure>'''
-        if code_snippet_html: asset_map["[[CODE_SNIPPET_1]]"] = code_snippet_html
-        if chart_html_snippet: asset_map["[[GENERATED_CHART]]"] = chart_html_snippet
-        for tag, html_code in asset_map.items():
-            final_body_html = final_body_html.replace(tag, html_code)
-        if vid_main_url:
-            video_html = f'<h3>Watch the Video Summary</h3><div class="video-wrapper"...><iframe src="{vid_main_url}"...></iframe></div>'
-            final_body_html = video_html + final_body_html
+        if vid_main_url and vid_main_url.startswith("https://"):
+            video_html = f'<h3>Watch the Video Summary</h3><div class="video-wrapper" style="position:relative;padding-bottom:56.25%;"><iframe src="{vid_main_url}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{title}"></iframe></div>'
+            if "[[TOC_PLACEHOLDER]]" in final_body_html:
+                final_body_html = final_body_html.replace("[[TOC_PLACEHOLDER]]", "[[TOC_PLACEHOLDER]]" + video_html)
+            else:
+                final_body_html = video_html + final_body_html
 
-        sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
+        # ======================================================================
+        # SEO POLISH & HUMANIZER
+        # ======================================================================
+        sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources]
         kg_links = history_manager.get_relevant_kg_for_linking(title, category)
         seo_payload = {"draft_content": {"headline": title, "article_body": final_body_html}, "sources_data": sources_data}
         json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(seo_payload), knowledge_graph=kg_links), "SEO Polish", ["finalTitle", "finalContent", "seo", "schemaMarkup"])
 
+        # Fallback Image Generation
         if not img_url and json_c.get('imageGenPrompt'):
+            log("   🎨 No real image found. Falling back to AI Image Generation...")
             img_url = image_processor.generate_and_upload_image(json_c['imageGenPrompt'], json_c.get('imageOverlayText', ''))
 
         humanizer_payload = api_manager.generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(content_input=json_c['finalContent']), "Humanizer", ["finalContent"])
         final_title = json_c['finalTitle']
         full_body_html = humanizer_payload['finalContent']
 
-        # --- SCHEMA & AUTHOR BOX INJECTION ---
+        # ======================================================================
+        # INJECTIONS: SCHEMA, HERO IMAGE, AUTHOR BOX
+        # ======================================================================
+        
+        # 1. Schema Injection
         published_url_placeholder = f"https://www.latestai.me/{datetime.date.today().year}/{datetime.date.today().month:02d}/temp-slug.html"
         if json_c.get('schemaMarkup') and json_c['schemaMarkup'].get('OUTPUT'):
             log("   🧬 Injecting JSON-LD Schema into final HTML...")
@@ -395,10 +452,13 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             schema_script = f'<script type="application/ld+json">{json.dumps(schema_data, indent=2)}</script>'
             full_body_html += schema_script
         
+        # 2. Hero Image Injection
         if img_url:
-            img_html = f'<div class="separator"...><a href="{img_url}"...><img src="{img_url}" alt="{final_title}" .../></a></div>'
+            img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{final_title}" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" /></a></div>'
             full_body_html = img_html + full_body_html
 
+        # 3. Dynamic Author Box Injection
+        log("   👤 Building dynamic author box...")
         author_info = config.get("author_profile", {})
         if author_info:
             author_box = f'''
@@ -423,7 +483,10 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             '''
             full_body_html += author_box
             
-        # ... The rest of the publishing logic ...
+        # ======================================================================
+        # 13. PUBLISH & POST-PROCESS
+        # ======================================================================
+        log(f"   🚀 [Publishing] Final Title: {final_title}")
         pub_result = publisher.publish_post(final_title, full_body_html, [category])
         published_url, post_id = (pub_result if isinstance(pub_result, tuple) else (pub_result, None))
 
@@ -431,25 +494,44 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             log("   ❌ CRITICAL FAILURE: Could not publish the initial draft.")
             return False
             
-        # Update schema with the final URL and update the post
+        # Update schema with the final URL
         if "schema_script" in locals() and published_url_placeholder in full_body_html:
             log("   ✏️ Updating post with final URL in Schema...")
             final_html_with_schema_url = full_body_html.replace(published_url_placeholder, published_url)
             publisher.update_existing_post(post_id, final_title, final_html_with_schema_url)
             full_body_html = final_html_with_schema_url # Update for quality loop
 
-        # ======================================================================
-        # 13. QUALITY IMPROVEMENT LOOP & DISTRIBUTION
-        # ======================================================================
-        # (The quality loop and distribution logic remains the same)
-        quality_score, attempts, MAX_RETRIES = 0, 0, 1 # Set MAX_RETRIES to 1 to enable one loop
+        # QUALITY IMPROVEMENT LOOP
+        quality_score, attempts, MAX_RETRIES = 0, 0, 1
         while quality_score < 9.0 and attempts < MAX_RETRIES:
             attempts += 1
             log(f"   🔄 [Deep Quality Loop] Audit Round {attempts}...")
-            # ... (rest of the loop)
+            audit_report = live_auditor.audit_live_article(published_url, target_keyword, iteration=attempts)
+            if not audit_report: break
+            quality_score = float(audit_report.get('quality_score', 0))
+            if quality_score >= 9.5: break
+            
+            fixed_html = remedy.fix_article_content(full_body_html, audit_report, target_keyword, iteration=attempts)
+            if fixed_html and len(fixed_html) > 2000:
+                 if publisher.update_existing_post(post_id, final_title, fixed_html):
+                     full_body_html = fixed_html
+                     log(f"      ✅ Surgery Successful. Article updated.")
 
+        # FINAL DISTRIBUTION
         history_manager.update_kg(final_title, published_url, category, post_id)
-        # ... (rest of the distribution logic)
+        try: indexer.submit_url(published_url)
+        except: pass
+        
+        try:
+            fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=final_title), "FB Hook", ["FB_Hook"])
+            fb_caption = fb_dat.get('FB_Hook', final_title)
+            yt_update_text = f"👇 Read the full technical analysis:\n{published_url}"
+            if vid_main_id: youtube_manager.update_video_description(vid_main_id, yt_update_text)
+            if vid_short_id: youtube_manager.update_video_description(vid_short_id, yt_update_text)
+            if img_url: social_manager.distribute_content(fb_caption, published_url, img_url)
+            if local_fb_video: social_manager.post_reel_to_facebook(local_fb_video, fb_caption, published_url)
+        except Exception as e:
+            log(f"   ⚠️ Social Distribution Error: {e}")
 
         return True
 
