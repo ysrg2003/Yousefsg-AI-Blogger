@@ -45,8 +45,8 @@ def fix_article_content(current_html, audit_report, topic, original_research, it
         ROLE: Elite Research Assistant.
         TASK: Find and extract SPECIFIC, VERIFIABLE evidence based on the search query.
         
-        SEARCH QUERY: "{search_query}"
-        EVIDENCE TYPE NEEDED: "{extract_type}"
+        SEARCH QUERY: {search_query}
+        EVIDENCE TYPE NEEDED: {extract_type}
         ARTICLE TOPIC: {topic}
         
         INSTRUCTIONS:
@@ -60,12 +60,12 @@ def fix_article_content(current_html, audit_report, topic, original_research, it
             "found_evidence": true/false,
             "evidence_text": "Extracted paragraph(s) of proof.",
             "evidence_url": "https://www.source.com/path",
-            "search_used": "{search_query}"
+            "search_used": {search_query}
         }}
         """
         try:
             evidence_result = generate_step_strict(
-                "gemini-2.0-flash-thinking-exp-01-21", 
+                "gemini-2.5-flash", 
                 evidence_finder_prompt, 
                 f"Finding Evidence for '{location}'", 
                 required_keys=["found_evidence", "evidence_text"], 
@@ -129,7 +129,7 @@ def fix_article_content(current_html, audit_report, topic, original_research, it
             integration_prompt, 
             "Evidence Integration Surgery", 
             required_keys=["fixed_html"],
-            use_google_search=False # لا يحتاج للبحث في هذه المرحلة
+            use_google_search=True # لا يحتاج للبحث في هذه المرحلة
         )
         return result.get('fixed_html')
 
