@@ -399,18 +399,23 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                         except: continue
 
                     if len(safe_data) >= 2:
-                        # --- MODIFIED: Pass source text and get HTML directly ---
-                        chart_html_snippet = chart_generator.create_chart_from_data(
-                            safe_data,
-                            chart_data.get('chart_title', 'Performance Comparison'),
-                            source_text=f"Data analysis based on official benchmarks for {target_keyword}."
-                        )
-
-                        if chart_html_snippet:
-                            log(f"      ✅ Chart Generated Successfully.")
-        except Exception as e:
-            log(f"      ⚠️ Chart Generation skipped: {e}")
-
+						# The function returns a URL, not HTML. Let's store it correctly.
+						chart_url = chart_generator.create_chart_from_data(
+						    safe_data,
+						    chart_data.get('chart_title', 'Performance Comparison')
+						)
+						
+						if chart_url:
+						    log(f"      ✅ Chart Generated & Uploaded: {chart_url}")
+						    # Now, we build the HTML snippet ourselves using the returned URL
+						    chart_html_snippet = f'''
+						    <figure style="margin: 30px auto; text-align: center;">
+						        <img src="{chart_url}" alt="{chart_data.get('chart_title', 'Performance Comparison')}" style="width: 100%; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+						        <figcaption style="font-size: 13px; color: #555; margin-top: 8px; font-style: italic;">📊 Data analysis based on research for {target_keyword}</figcaption>
+						    </figure>
+						    '''
+					
+                        
         # ======================================================================
         # 6. VISUAL HUNT & REDDIT INTEL
         # ======================================================================
