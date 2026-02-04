@@ -24,6 +24,12 @@ def audit_live_article(url, target_keyword, iteration=1):
     Target Keyword: {target_keyword}
 
     ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
+
+    ---
     🧠 PHASE 1: JUDGEMENT PROTOCOL (Internal Reasoning)
     ---
     <thought>
