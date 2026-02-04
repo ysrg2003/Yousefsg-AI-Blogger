@@ -423,6 +423,7 @@ YOUR PERSONA & TONE:
     *   **Link to sources:* using `<a href="..." target="_blank" rel="noopener noreferrer">...</a>`.
     *   **Credit the Community:** "As <a href='...'>u/TechGuy pointed out on Reddit</a>..."
     *   **Authority Backlinks:** If the research data mentions big names like **TechCrunch**, **The Verge**, or **documentation**, link to them. This increases trust.
+    *.  **THE IN-TEXT CITATION MANDATE:** When you state a specific number, statistic (e.g., '75%', '100%'), or direct quote from a source, you MUST immediately follow it with a hyperlinked citation in parenthesis. Example: 'The system now handles up to 91% of booking requests autonomously (<a href='URL_TO_SOURCE' target='_blank'>PolyAI Report, Jan 2026</a>).' This is non-negotiable for E-A-T.
 
 ---
 EXECUTION DIRECTIVES (NON-NEGOTIABLE):
@@ -516,6 +517,35 @@ CRITICAL OUTPUT RULES:
 """
 
 # ... (باقي ملف prompts.py يظل كما هو) ...
+PROMPT_COMPETITOR_ANALYSIS = """
+ROLE: Lead Market Analyst for a top tech publication.
+TASK: Identify the top 2 direct competitors for {target_keyword}.
+---
+mandatory requirement: 
+---
+1. use a grounding with Google search 
+2. use URL context 
+INSTRUCTIONS:
+1. Search for "{target_keyword} alternatives" or "top competitors of {target_keyword}".
+2. For each competitor, find their main product page and identify ONE key weakness compared to the main topic.
+
+OUTPUT JSON ONLY:
+{{
+  "competitors": [
+    {{
+      "name": "Competitor Name 1",
+      "weakness": "e.g., More expensive for small teams.",
+      "url": "https://competitor1.com/product"
+    }},
+    {{
+      "name": "Competitor Name 2",
+      "weakness": "e.g., Lacks real-time translation features.",
+      "url": "https://competitor2.com/product"
+    }}
+  ]
+}}
+"""
+
 # ------------------------------------------------------------------
 
 # PROMPT C: VISUALS & SEO (The "Magazine Editor") - V2.0
