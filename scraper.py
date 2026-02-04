@@ -245,11 +245,13 @@ def smart_media_hunt(target_keyword, category, directive,content_type="Review"):
     unique_media = list({m['url']: m for m in all_media}.values())
     return unique_media
 
+# FILE: scraper.py
+
 def resolve_and_scrape(google_url):
     """
-    Resolves redirects (e.g. Google News links) and scrapes text + media.
+    يقوم بفتح الصفحة، استخراج النص، واستخراج جميع الصور الصالحة (المصدر الرسمي).
     """
-    log(f"      📰 Omni-Scraper: Extracting content from {google_url[:50]}...")
+    log(f"      📰 Omni-Scraper: Extracting content & images from {google_url[:50]}...")
     
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
@@ -265,7 +267,7 @@ def resolve_and_scrape(google_url):
         
         driver.get(google_url)
         
-        # Handle Google News Redirects
+        # انتظار التحميل ومعالجة التحويلات
         final_url = google_url
         start_wait = time.time()
         while time.time() - start_wait < 15: 
@@ -279,15 +281,47 @@ def resolve_and_scrape(google_url):
         page_source = driver.page_source
         soup = BeautifulSoup(page_source, 'html.parser')
 
-        # No video hunt here (avoids redundancy and focus on core task)
-        found_media = [] 
-
-        og_image = (soup.find('meta', property='og:image') or {}).get('content')
+        # --- استخراج الصور (Official Images Extraction) ---
+        found_media = []
         
-        # Extract Main Text
+        # 1. صورة الهيدر (OG Image)
+        og_image = (soup.find('meta', property='og:image') or {}).get('content')
+        if og_image:
+            found_media.append({
+                "url": og_image,
+                "description": "Official Hero Image / Main Interface",
+                "source": "Official Site",
+                "type": "official"
+            })
+
+        # 2. صور المقال (Body Images)
+        for img in soup.find_all('img', src=True):
+            src = img['src']
+            if not src.startswith('http'): 
+                src = urllib.parse.urljoin(final_url, src)
+            
+            # فلترة الأيقونات والشعارات والصور الصغيرة
+            if any(x in src.lower() for x in ['logo', 'icon', 'avatar', 'pixel', 'tracker', '.svg', 'footer']): continue
+            
+            # فحص الأبعاد (تقريبي بناءً على السمات)
+            width = img.get('width')
+            if width and width.isdigit() and int(width) < 400: continue
+            
+            alt = img.get('alt', 'Official Screenshot or Diagram')
+            if len(alt) < 5: alt = "Detailed interface view"
+
+            found_media.append({
+                "url": src,
+                "description": alt,
+                "source": "Official Site",
+                "type": "official"
+            })
+        # ------------------------------------------------
+        
         extracted_text = trafilatura.extract(page_source, include_comments=False, favor_precision=True)
         
         if extracted_text and len(extracted_text) > 600:
+            # نعيد found_media كعنصر خامس
             return final_url, final_title, extracted_text, og_image, found_media
 
         return None, None, None, None, []
