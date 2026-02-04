@@ -21,12 +21,13 @@ def find_code_snippet(topic: str, model_name: str) -> str | None:
     4.  **Output HTML:** Must use a single `<pre><code class=\"language-python\">...</code></pre>`
     5.  **Correctness:** Use modern, idiomatic Python. Add comments explaining the key parts.
     6.  **Source Priority:** First, search for an official code example from documentation.
-    7. **DOMAIN SPECIFICITY:** If the topic is about an "Answer Engine" or a "Guide", the code MUST include an explicit example of citation retrieval or limiting the model's knowledge base. If the topic is about "Veo 3.1", the code MUST show how to pass an 'Ingredient Image' URI. The code must be tailored to the core feature.
+    7.  **DOMAIN SPECIFICITY:** If the topic is about an "Answer Engine" or a "Guide", the code MUST include an explicit example of citation retrieval or limiting the model's knowledge base. If the topic is about "Veo 3.1", the code MUST show how to pass an 'Ingredient Image' URI. The code must be tailored to the core feature.
+    8.  **reality and acutal exist:** the code must be actual existing not from your imagines,it must provided by the official documents or website 
 
     OUTPUT JSON ONLY:
     {{
       "code_found": true/false,
-      "snippet_html": "<pre><code class=\\"language-python\\"># Your Python code here...\\nprint('Hello, World!')</code></pre>",
+      "snippet_html": "<pre><code class=\"language-python\"># Your Python code here...\\nprint('Hello, World!')</code></pre>",
       "explanation": "A brief, one-sentence explanation of what this code does."
     }}
     """
