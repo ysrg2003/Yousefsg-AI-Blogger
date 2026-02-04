@@ -178,8 +178,66 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         # 4. OMNI-HUNT (UPDATED: OFFICIAL SOURCE FIRST)
         # ======================================================================
-        log("   🕵️‍♂️ Starting Omni-Hunt...")
-        collected_sources = []
+        # ======================================================================
+		# 4. ADVANCED DEEP DIVE & OMNI-HUNT FALLBACK
+		# ======================================================================
+		log("   🕵️‍♂️ [Phase 1: Research] Initiating Deep Dive Protocol...")
+		collected_sources = []
+		official_media_assets = []
+		official_domain = None
+		
+		# --- STRATEGY A: DEEP DIVE RESEARCHER (PRIMARY) ---
+		deep_dive_results = deep_dive_researcher.conduct_deep_dive(target_keyword, model_name)
+		
+		if deep_dive_results:
+		    # دمج جميع المصادر عالية الجودة في قائمة واحدة
+		    all_high_value_sources = (
+		        deep_dive_results.get("official_sources", []) +
+		        deep_dive_results.get("research_studies", []) +
+		        deep_dive_results.get("personal_experiences", [])
+		    )
+		
+		    for item in all_high_value_sources:
+		        url = item.get('url')
+		        if not url or any(s.get('url') == url for s in collected_sources):
+		            continue
+		
+		        log(f"      ↳ Scraping high-value source: {url[:60]}...")
+		        try:
+		            # استخراج المحتوى والصور من كل رابط عالي الجودة
+		            s_url, s_title, s_text, s_img, s_media = scraper.resolve_and_scrape(url)
+		            if s_text:
+		                source_type = "SOURCE" # Default
+		                if item in deep_dive_results.get("official_sources", []):
+		                    source_type = "OFFICIAL SOURCE"
+		                elif item in deep_dive_results.get("research_studies", []):
+		                    source_type = "RESEARCH STUDY"
+		                elif item in deep_dive_results.get("personal_experiences", []):
+		                    source_type = "EXPERT EXPERIENCE"
+		                
+		                collected_sources.append({
+		                    "title": s_title or item.get('page_name') or "Source",
+		                    "url": s_url,
+		                    # إضافة علامة مميزة لنوع المصدر ليستفيد منها الكاتب
+		                    "text": f"[{source_type}]\n{s_text}", 
+		                    "source_image": s_img,
+		                    "domain": urllib.parse.urlparse(s_url).netloc,
+		                    "media": s_media
+		                })
+		                if not img_url and s_img:
+		                    img_url = s_img
+		                if source_type == "OFFICIAL SOURCE" and s_media:
+		                    official_media_assets.extend(s_media)
+		        except Exception as e:
+		            log(f"         ⚠️ Failed to scrape source {url}: {e}")
+		
+		# --- STRATEGY B: OMNI-HUNT (FALLBACK) ---
+		if len(collected_sources) < 3:
+		    log(f"   ⚠️ Deep Dive provided insufficient sources ({len(collected_sources)}). Activating Omni-Hunt Fallback...")
+		    # (هنا تضع كود الـ Omni-Hunt القديم بالكامل كخطة بديلة)
+		    # ... يبدأ من "log("   🚀 Executing Primary Mechanism...")" وينتهي عند "if len(collected_sources) < 1:"
+		
+		
 
         official_media_assets = []
         official_domain = None
