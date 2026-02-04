@@ -687,6 +687,26 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     </div>
     """
         full_body_html = full_body_html + author_box
+		# --- IMAGE ENRICHMENT STAGE (The Professional Editor) ---
+	    try:
+	        log("\n--- Starting Image Enrichment Stage ---")
+	        article_meta = {
+	            "official_domain": official_domain,
+	            "target_keyword": target_keyword
+	        }
+	        # نمرر الـ HTML، العنوان، الميتا، والصور الرسمية
+	        full_body_html = image_enricher.enrich_article_html(
+	            full_body_html, 
+	            final_title, 
+	            article_meta, 
+	            direct_images=official_media_assets 
+	        )
+	        log("--- Image Enrichment Complete ---\n")
+	    except Exception as e:
+	        log(f"   ⚠️ Image enrichment process failed: {e}")
+	        import traceback
+	        traceback.print_exc()
+	    # --- END ENRICHMENT ---7
 
         # CRITICAL: استخراج الـ SEO Metadata من النتيجة النهائية للـ AI
         seo_metadata = json_c.get('seo', {})
