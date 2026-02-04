@@ -795,34 +795,45 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         # 10. QUALITY IMPROVEMENT LOOP
         # ======================================================================
-        quality_score, attempts, MAX_RETRIES = 0, 0, 2
+        # داخل ملف main.py - ابحث عن حلقة Quality Loop وحدثها:
+
+        # ======================================================================
+        # 10. DEEP QUALITY IMPROVEMENT LOOP (The Google Ranker)
+        # ======================================================================
+        quality_score = 0
+        attempts = 0
+        MAX_RETRIES = 2
 
         while quality_score < 9.5 and attempts < MAX_RETRIES:
             attempts += 1
-            log(f"   🔄 [Quality Loop] Audit Round {attempts}...")
+            log(f"   🔄 [Deep Quality Loop] Audit Round {attempts}...")
+            
+            # 1. فحص الرابط الفعلي (Actual URL Audit)
             audit_report = live_auditor.audit_live_article(published_url, target_keyword, iteration=attempts)
-
             if not audit_report: break
 
             quality_score = float(audit_report.get('quality_score', 0))
-            if quality_score >= 9.5: break
+            is_ready = audit_report.get('is_page_one_ready', False)
 
+            if quality_score >= 9.5 and is_ready:
+                log(f"      ✨ Article is Page 1 Ready! Score: {quality_score}")
+                break
+
+            # 2. تنفيذ الجراحة (Remedy Surgery)
+            log(f"      🚑 Score {quality_score}/10 is not enough. Launching Surgeon Agent...")
             fixed_html = remedy.fix_article_content(full_body_html, audit_report, target_keyword, combined_text, iteration=attempts)
-            if fixed_html and len(fixed_html) > 1000:
-                # === شبكة أمان: فحص عدد الروابط ===
-                orig_links = full_body_html.count("<a href")
-                new_links = fixed_html.count("<a href")
-
-                if orig_links > 0 and new_links < (orig_links * 0.7):
-                    log(f"   ❌ REMEDY FAILED: Destroyed {orig_links - new_links} links. Discarding changes.")
-                    break # توقف عن محاولات الإصلاح
-
+            
+            if fixed_html and len(fixed_html) > 2000:
+                # تحديث المقال على بلوجر بالمحتوى المعزز بالأدلة
                 if publisher.update_existing_post(post_id, title, fixed_html):
                     full_body_html = fixed_html
-                    time.sleep(10)
+                    log(f"      ✅ Surgery Successful. Article updated with new evidence.")
+                    time.sleep(15) # انتظار الفهرسة
                 else: break
-            else: break
-
+            else:
+                log("      ⚠️ Surgeon failed to return improved content. Ending loop.")
+                break
+        
         # ======================================================================
         # 11. DISTRIBUTION
         # ======================================================================
