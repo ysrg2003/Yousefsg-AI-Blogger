@@ -413,6 +413,47 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         except Exception as e:
             log(f"   ⚠️ Code Snippet Hunt Error: {e}")
 
+        
+        
+        # في ملف main.py، داخل دالة run_pipeline
+
+# ... (بعد تجميع كل البيانات: combined_text, reddit_context, visual_context_for_writer) ...
+
+        # ======================================================================
+        # 8. THE ARCHITECT PHASE (STRATEGIC BLUEPRINT CREATION)
+        # ======================================================================
+        import content_architect # استدعاء العقل الجديد
+        
+        blueprint = content_architect.create_article_blueprint(
+            target_keyword,
+            combined_text,
+            reddit_context,
+            "\n".join(visual_context_for_writer),
+            model_name
+        )
+
+        if not blueprint or not blueprint.get("article_blueprint"):
+            log("   ❌ CRITICAL FAILURE: Blueprint creation failed. Aborting pipeline.")
+            return False
+
+        # ======================================================================
+        # 9. THE ARTISAN PHASE (WRITING FROM BLUEPRINT)
+        # ======================================================================
+        log("   ✍️ [The Artisan] Executing the blueprint to write the article...")
+        
+        # لم نعد نرسل البيانات الخام، بل نرسل "المخطط"
+        json_b = api_manager.generate_step_strict(
+            model_name, 
+            PROMPT_B_TEMPLATE.format(blueprint_json=json.dumps(blueprint)), 
+            "Artisan Writer", 
+            ["headline", "article_body"]
+        )
+
+        # نستخرج العنوان من المخطط لضمان الاتساق
+        title = blueprint.get("final_title", json_b['headline'])
+        draft_body_html = json_b['article_body']
+
+# ... (باقي الكود يستمر كما هو، حيث يقوم بتجميع الفيديو والنشر وحلقة الجودة) ...
         # ======================================================================
         # 8. SYNTHESIS & ASSET PROCESSING
         # ======================================================================
