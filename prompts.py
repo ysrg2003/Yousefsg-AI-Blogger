@@ -28,6 +28,12 @@ History (Already Published Articles): {history}
 
 Task: Identify ONE specific, high-potential entity or product that is trending right now and aligns with high CPC monetization.
 
+    ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
+
 --- 🎯 CORE DIRECTIVES ---
 
 1. THE RECENCY & VERSIONING PROTOCOL (CRITICAL FOR CREDIBILITY):
@@ -130,9 +136,13 @@ TASK: Analyze the topic and decide the SINGLE BEST type of visual evidence to ma
 INPUT TOPIC: "{target_keyword}"
 INPUT CATEGORY: "{category}"
 
-VISUAL STRATEGY OPTIONS (Choose ONE):
+    ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
 
-1. "hunt_for_video": Best for tangible products, robots, or AI video generators where visual proof of quality/motion is essential.
+VISUAL STRATEGY OPTIONS (Choose ONE):
 
 
 2. "hunt_for_screenshot": Best for software UI, apps, websites with new features, or step-by-step tutorials.
@@ -198,6 +208,12 @@ If History says "AI comes to Notepad", and RSS says "Microsoft updates Windows A
 
 
 3. ONE STORY PER TOPIC: We only need one article per major event.
+
+    ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
 
 
 
@@ -275,6 +291,12 @@ RAW DATA BUNDLE:
 - Research Data (News, blogs): {research_data}
 - Reddit Community Intel: {reddit_context}
 - Available Visuals & Code Assets: {visual_context}
+
+    ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
 
 ---
 🧠 PHASE 1: DEEP STRATEGIC ANALYSIS (Internal Reasoning)
