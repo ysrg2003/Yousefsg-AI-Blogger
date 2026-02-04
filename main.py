@@ -419,6 +419,10 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
 # ... (بعد تجميع كل البيانات: combined_text, reddit_context, visual_context_for_writer) ...
 
+        # في ملف main.py، داخل دالة run_pipeline
+
+# ... (بعد تجميع كل البيانات: combined_text, reddit_context, visual_context_for_writer) ...
+
         # ======================================================================
         # 8. THE ARCHITECT PHASE (STRATEGIC BLUEPRINT CREATION)
         # ======================================================================
@@ -426,6 +430,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         
         blueprint = content_architect.create_article_blueprint(
             target_keyword,
+            content_type, # تمرير نية المستخدم للمهندس
             combined_text,
             reddit_context,
             "\n".join(visual_context_for_writer),
@@ -441,10 +446,18 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         log("   ✍️ [The Artisan] Executing the blueprint to write the article...")
         
-        # لم نعد نرسل البيانات الخام، بل نرسل "المخطط"
+        # نرسل "المخطط" + البيانات الخام للعامل
+        artisan_prompt = PROMPT_B_TEMPLATE.format(
+            blueprint_json=json.dumps(blueprint),
+            raw_data_bundle=json.dumps({
+                "research": combined_text[:10000],
+                "reddit": reddit_context[:5000]
+            })
+        )
+        
         json_b = api_manager.generate_step_strict(
             model_name, 
-            PROMPT_B_TEMPLATE.format(blueprint_json=json.dumps(blueprint)), 
+            artisan_prompt, 
             "Artisan Writer", 
             ["headline", "article_body"]
         )
@@ -453,7 +466,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         title = blueprint.get("final_title", json_b['headline'])
         draft_body_html = json_b['article_body']
 
-# ... (باقي الكود يستمر كما هو، حيث يقوم بتجميع الفيديو والنشر وحلقة الجودة) ...
+# ... (باقي الكود يستمر كما هو) ...
+        
         # ======================================================================
         # 8. SYNTHESIS & ASSET PROCESSING
         # ======================================================================
