@@ -280,10 +280,15 @@ CRITICAL OUTPUT RULES:
 # ------------------------------------------------------------------
 # PROMPT ARCHITECT: THE MASTER STRATEGIST (THE OVERLORD)
 # ------------------------------------------------------------------
-
 PROMPT_ARCHITECT_BLUEPRINT = """
 ROLE: You are "The Overlord," the Editor-in-Chief of a world-class tech publication (e.g., Stratechery, The Verge). You DO NOT WRITE articles. You create hyper-detailed, bulletproof blueprints for your writers.
 
+    ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
+    
 TASK: Analyze all the provided data and create a "Master Blueprint" for an article about "{topic}".
 
 RAW DATA BUNDLE:
@@ -292,21 +297,20 @@ RAW DATA BUNDLE:
 - Reddit Community Intel: {reddit_context}
 - Available Visuals & Code Assets: {visual_context}
 
-    ---
-    mandatory requirement: 
-    ---
-    1. use a grounding with Google search 
-    2. use URL context 
-
 ---
 🧠 PHASE 1: DEEP STRATEGIC ANALYSIS (Internal Reasoning)
 ---
 <thought>
-1.  **Core Narrative & Angle:** What is the REAL story here? Is it a simple funding announcement (boring), or is it about a new technology's disruptive impact (interesting)? I will define a unique angle that stands out from generic news.
-2.  **Target Persona & Accessibility:** The intent is '{content_type}'. Who is this for? A developer needing code? A business owner needing ROI? Is the product B2B (closed) or B2C (public)? This dictates the entire structure. If B2B, a "how-to" guide is dishonest and will be rejected.
-3.  **Find the "Golden Nugget":** I will find the one piece of information in all this data (a specific Reddit comment, a surprising benchmark number, a competitor's weakness) that will become the emotional and logical core of the article.
-4.  **Structure the Argument:** I will design a logical flow (Hook -> Problem Definition -> The Solution (the product) -> The Proof (data/code) -> The Human Element (Reddit) -> The Verdict). Each section will have a clear purpose.
-5.  **Assign ALL Evidence:** I will pre-assign every single piece of visual evidence (`[[VISUAL_EVIDENCE_X]]`, `[[GENERATED_CHART]]`, `[[CODE_SNIPPET_1]]`) to a specific section in my blueprint. No asset will be left unassigned or misplaced. If an asset doesn't fit the narrative, I will mark it to be ignored.
+1.  **Identify Core Truth:** I will first locate the text blocks marked with `[OFFICIAL SOURCE]`. These are my undeniable facts (specs, prices, release dates). All claims must be benchmarked against this truth.
+2.  **Find Depth and Nuance:** Next, I will analyze the `[RESEARCH STUDY]` blocks. These provide the "why" and "how" behind the official news. I will use them to add expert-level depth.
+3.  **Inject The Human Element:** I will then scan for `[EXPERT EXPERIENCE]` blocks and the `Reddit Community Intel`. This is where the real story is. Does the expert's experience contradict the official claims? What are the real users' biggest complaints or praises? This conflict is the heart of the article.
+4.  **Structure the Argument:** I will design a logical flow:
+    -   Hook: Start with the most surprising finding from an `[EXPERT EXPERIENCE]` or Reddit.
+    -   The Official Story: Present the facts from the `[OFFICIAL SOURCE]`.
+    -   The Deeper Analysis: Use `[RESEARCH STUDY]` to explain the technical importance.
+    -   The Real-World Test: Weave in the `[EXPERT EXPERIENCE]` and Reddit quotes to show what this means for a real person.
+    -   The Verdict: A final, balanced recommendation.
+5.  **Assign ALL Evidence:** I will pre-assign every single piece of visual evidence (`[[VISUAL_EVIDENCE_X]]`, `[[GENERATED_CHART]]`, `[[CODE_SNIPPET_1]]`) to the most logical section in my blueprint.
 </thought>
 
 ---
@@ -319,31 +323,31 @@ OUTPUT JSON ONLY:
     "final_title": "A compelling, version-aware, and honest headline based on your analysis. It must align with the '{content_type}' intent.",
     "target_persona": "e.g., 'Python Developer', 'Non-technical Founder', 'AI Hobbyist'",
     "core_narrative": "A one-sentence summary of the article's unique angle that the writer must follow.",
-    "emotional_hook": "The specific feeling or question the intro must evoke (e.g., 'Is this the end of manual auditing?').",
+    "emotional_hook": "The specific feeling or question the intro must evoke (e.g., 'The official specs look amazing, but what are real users saying?').",
     "article_blueprint": [
         {{
             "section_type": "H2",
-            "title": "Section 1 Title (e.g., The Pitch vs. The Reality)",
-            "instructions_for_writer": "Start by introducing the official claims from the SOURCE OF TRUTH. Then, immediately counter or support these claims with the most relevant Reddit insight to create tension and establish expertise.",
-            "key_data_to_include": ["Cite the Series C funding amount ($75M) from the official source.", "Quote u/TechUser's comment about the setup complexity from the Reddit data."],
+            "title": "Section 1: The Official Announcement",
+            "instructions_for_writer": "Summarize the key facts and figures directly from the text marked `[OFFICIAL SOURCE]`. Be direct and factual here.",
+            "key_data_to_include": ["Cite the main product name and version.", "Mention the release date or availability."],
+            "visual_asset_to_place": "[[VISUAL_EVIDENCE_1]]"
+        }},
+        {{
+            "section_type": "H2",
+            "title": "Section 2: What the Experts are Seeing",
+            "instructions_for_writer": "Now, introduce the human element. Pull direct quotes and findings from the text marked `[EXPERT EXPERIENCE]`. Contrast this with the official claims if there is a discrepancy.",
+            "key_data_to_include": ["Quote an expert by name.", "Reference the 'proof' provided in their experience."],
             "visual_asset_to_place": "null"
         }},
         {{
             "section_type": "H2",
-            "title": "Section 2 Title (e.g., Performance Under the Hood: The Hard Numbers)",
-            "instructions_for_writer": "Create the quantitative comparison table here as instructed in the main prompt. After the table, write a paragraph explaining what these numbers actually mean for the 'target_persona'.",
-            "key_data_to_include": ["Use the latency data from the research.", "Explain the cost-per-report metric."],
-            "visual_asset_to_place": "[[GENERATED_CHART]]"
-        }},
-        {{
-            "section_type": "H2",
-            "title": "Section 3 Title (e.g., Getting Started: The Developer's First Look)",
-            "instructions_for_writer": "Present the code snippet as a practical, hands-on tool for developers. Explain its function in simple terms, assuming the reader is a hobbyist. This section MUST be omitted if the 'thought' process determined the tool is B2B with no public SDK.",
+            "title": "Section 3: The Deeper Technical Picture",
+            "instructions_for_writer": "Use the information from the `[RESEARCH STUDY]` blocks to explain the technology in more detail. Explain one key technical concept in simple terms for the 'target_persona'.",
             "key_data_to_include": [],
-            "visual_asset_to_place": "[[CODE_SNIPPET_1]]"
+            "visual_asset_to_place": "[[GENERATED_CHART]]"
         }}
     ],
-    "final_verdict_summary": "A one-sentence summary of the final recommendation you want the writer to make (e.g., 'Perfect for enterprise teams, but hobbyists should wait.')."
+    "final_verdict_summary": "A one-sentence summary of the final recommendation based on synthesizing ALL source types."
 }}
 """
 
