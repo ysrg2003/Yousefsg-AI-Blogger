@@ -1,53 +1,93 @@
 # FILE: code_hunter.py
-# ROLE: Finds practical, verifiable code snippets to enhance E-E-A-T.
+# ROLE: Finds practical, verified code snippets. 
+# STRICT UPDATE: Anti-Hallucination Protocol. Verifies SDK existence before generation.
 
 from config import log
 from api_manager import generate_step_strict
 
 def find_code_snippet(topic: str, model_name: str) -> str | None:
     """
-    Searches for a relevant Python code snippet for a given technical topic.
+    Searches for a RELEVANT and VERIFIED code snippet.
+    Now includes a pre-check to ensure the library actually exists.
     """
-    log(f"   💻 [Code Hunter] Searching for a practical code snippet for: '{topic}'")
+    log(f"   💻 [Code Hunter] Initiating Strict Search for: '{topic}'")
     
-    # تصحيح الخطأ هنا: إزالة الشرطات المائلة العكسية قبل علامات التنصيص
-    prompt = f"""
-    ROLE: Senior Developer & Technical Writer.
-    Find or generate a single, practical Python code snippet that demonstrates the core API usage for the topic: {topic}. 
-    STRICT REQUIREMENTS:
-    1.  **API Specificity (CRITICAL):** If the topic involves Google, AWS, or OpenAI, the code MUST use the actual, correct Python SDK (e.g., `google-genai` or `openai` library calls). **Hypothetical or generic API calls (e.g., `api.example.com`) are FORBIDDEN if an official SDK exists.**
-    2.  **Relevance:** The code MUST be directly related to the topic's advanced function (e.g., multimodal chat, function calling, batch processing).
-    3.  **Simplicity:** The code should be a clear, self-contained example.
-    4.  **Output HTML:** Must use a single `<pre><code class=\"language-python\">...</code></pre>`
-    5.  **Correctness:** Use modern, idiomatic Python. Add comments explaining the key parts.
-    6.  **Source Priority:** First, search for an official code example from documentation.
-    7.  **DOMAIN SPECIFICITY:** If the topic is about an "Answer Engine" or a "Guide", the code MUST include an explicit example of citation retrieval or limiting the model's knowledge base. If the topic is about "Veo 3.1", the code MUST show how to pass an 'Ingredient Image' URI. The code must be tailored to the core feature.
-    8.  **reality and acutal exist:** the code must be actual existing not from your imagines,it must provided by the official documents or website 
-
+    # 1. PHASE 1: EXISTENCE CHECK (The Firewall)
+    # We ask the AI to specifically look for documentation or PyPI packages.
+    check_prompt = f"""
+    ROLE: Senior Developer & Library Auditor.
+    TASK: Verify if a PUBLIC Python SDK or API library exists for the topic: "{topic}".
+    
+    INSTRUCTIONS:
+    1. Search for "pypi {topic}" or "{topic} python sdk" or "{topic} api documentation".
+    2. STRICT RULE: Do NOT invent a library. If 'Fieldguide' is a SaaS with no public python package, you MUST return false.
+    3. Only return true if there is a documented way to interact with it via code (Requests, LangChain, Official SDK).
+    
     OUTPUT JSON ONLY:
     {{
-      "code_found": true/false,
-      "snippet_html": "<pre><code class=\"language-python\"># Your Python code here...\\nprint('Hello, World!')</code></pre>",
-      "explanation": "A brief, one-sentence explanation of what this code does."
+        "exists": true/false,
+        "library_name": "name of the real library (e.g. 'google-genai' or 'openai')",
+        "documentation_url": "link to docs or pypi"
+    }}
+    """
+    
+    try:
+        # We enforce Google Search here to verify reality
+        check_result = generate_step_strict(
+            model_name, 
+            check_prompt, 
+            "Code Existence Check",
+            required_keys=["exists"],
+            use_google_search=True 
+        )
+        
+        if not check_result.get("exists"):
+            log(f"      ⛔ Code Hunter: No public API/SDK found for '{topic}'. Skipping code generation to prevent hallucination.")
+            return None
+            
+        lib_name = check_result.get("library_name", "standard_library")
+        doc_url = check_result.get("documentation_url", "Official Docs")
+        log(f"      ✅ Verified Library: {lib_name} ({doc_url})")
+
+    except Exception as e:
+        log(f"      ⚠️ Code Existence Check Failed: {e}")
+        return None
+
+    # 2. PHASE 2: GENERATION (Only if verified)
+    generation_prompt = f"""
+    ROLE: Senior Developer.
+    TASK: Write a REAL, WORKING Python code snippet for: {topic}.
+    
+    CONTEXT: You have verified that the library '{lib_name}' exists.
+    
+    STRICT REQUIREMENTS:
+    1.  **Use the ACTUAL library syntax.** Do not hallucinate methods like `.generate_awesome_stuff()`. Use real endpoints.
+    2.  **Authentication:** Show where the API Key goes (e.g., `api_key="YOUR_KEY"`).
+    3.  **Comments:** Explain what the code does briefly.
+    4.  **Output HTML:** Must use a single `<pre><code class=\"language-python\">...</code></pre>` block.
+    
+    OUTPUT JSON ONLY:
+    {{
+      "code_found": true,
+      "snippet_html": "<pre><code class=\\"language-python\\">import {lib_name}\\n# Real code here...</code></pre>"
     }}
     """
     
     try:
         response = generate_step_strict(
             model_name, 
-            prompt, 
-            "Code Snippet Hunter",
-            required_keys=["code_found", "snippet_html"],
-            use_google_search=True # Essential for finding official examples
+            generation_prompt, 
+            "Code Generation",
+            required_keys=["snippet_html"],
+            use_google_search=True # Keep search on to find correct syntax
         )
         
-        if response and response.get("code_found"):
-            log("      ✅ Found a relevant code snippet.")
+        if response and response.get("snippet_html"):
+            log("      ✅ Generated verified code snippet.")
             return response.get("snippet_html")
         else:
-            log("      ⚠️ No suitable code snippet was found for this topic.")
             return None
             
     except Exception as e:
-        log(f"      ❌ Code Hunter crashed: {e}")
+        log(f"      ❌ Code Generation Crashed: {e}")
         return None
