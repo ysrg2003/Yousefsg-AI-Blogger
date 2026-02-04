@@ -502,7 +502,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             full_body_html = final_html_with_schema_url # Update for quality loop
 
         # QUALITY IMPROVEMENT LOOP
-        quality_score, attempts, MAX_RETRIES = 0, 0, 1
+        quality_score, attempts, MAX_RETRIES = 0, 0, 0
         while quality_score < 9.0 and attempts < MAX_RETRIES:
             attempts += 1
             log(f"   🔄 [Deep Quality Loop] Audit Round {attempts}...")
