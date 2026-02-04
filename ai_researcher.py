@@ -42,6 +42,12 @@ def generate_search_plan(topic, client, model_name):
     prompt = f"""
     TASK: You are a Search Engine Specialist.
     INPUT TOPIC: {topic}
+
+    ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
     
     ACTION: Break this long, descriptive topic down into 3 short, effective Google Search Queries.
     
@@ -141,7 +147,14 @@ def smart_hunt(topic, config, mode="general"):
 
     # === تعديل: تعليمات صارمة لمنع الروابط الوسيطة ===
     sys_instruction = """
-    You are a Research Engine. 
+    You are a Research Engine.
+
+    ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
+
     MANDATORY RULE FOR LINKS:
     1. You MUST return the ORIGINAL, PUBLIC URL (e.g., 'wired.com/article', 'youtube.com/watch').
     2. You are STRICTLY FORBIDDEN from returning 'google.com/search', 'vertexaisearch', or any redirect/proxy links.
@@ -161,6 +174,12 @@ def smart_hunt(topic, config, mode="general"):
             model=model_name,
             contents=f"""
     TASK: Perform a Google Search to find 15 high-authority sources for: '{active_query}'.
+
+    ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
     
     CRITICAL OUTPUT RULES:
     1. Return ONLY a raw JSON list.
