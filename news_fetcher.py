@@ -149,6 +149,11 @@ def ai_vet_sources(items, model_name):
         prompt = f"""
         ROLE: Senior Tech Editor & Media Auditor.
         TASK: Evaluate these websites for credibility in covering AI & Tech news.
+        ---
+        mandatory requirement: 
+        ---
+        1. use a grounding with Google search 
+        2. use URL context 
         
         CANDIDATE DOMAINS: {unknown_domains}
         
