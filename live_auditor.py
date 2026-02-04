@@ -15,10 +15,10 @@ def audit_live_article(url, target_keyword, iteration=1):
     prompt = f"""
     MANDATORY INSTRUCTION: USE GOOGLE SEARCH & INTERNAL REASONING.
     
-    TASK: You are Google's Chief Content Inspector. Your ONLY mission is to get this article to Page 1 for "{target_keyword}".
+    TASK: You are Google's Chief Content Inspector. Your ONLY mission is to get this article to Page 1 for {target_keyword}.
     
     Article URL Under Audit: {url}
-    Target Keyword: "{target_keyword}"
+    Target Keyword: {target_keyword}
     Current Date: {today_date}
 
     ---
@@ -26,7 +26,7 @@ def audit_live_article(url, target_keyword, iteration=1):
     ---
     <thought>
     1.  **Initial Scan:** What is the article's current E-E-A-T strength based on its content? (Experience, Expertise, Authoritativeness, Trustworthiness).
-    2.  **Competitive Search:** I will perform a Google Search for "{target_keyword}" and identify the Top 3 organic (non-ad) results.
+    2.  **Competitive Search:** I will perform a Google Search for {target_keyword} and identify the Top 3 organic (non-ad) results.
     3.  **Competitor E-E-A-T Dissection (CRITICAL):** For EACH of the Top 3 competitors, I will identify their SPECIFIC E-E-A-T advantages that my article currently lacks.
         -   **Experience:** Do they show first-hand use? A unique case study? A screenshot of a rare bug?
         -   **Expertise:** Do they cite academic papers, specific industry reports, or present advanced technical analysis (e.g., specific code optimization techniques)?
@@ -73,7 +73,7 @@ def audit_live_article(url, target_keyword, iteration=1):
 
     try:
         result = generate_step_strict(
-            "gemini-2.0-flash-thinking-exp-01-21", # استخدام موديل التفكير
+            "gemini-2.5-flash", # استخدام موديل التفكير
             prompt, 
             "Deep Investigative Audit", 
             required_keys=["critical_weaknesses", "quality_score"],
