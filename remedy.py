@@ -54,6 +54,12 @@ def fix_article_content(current_html, audit_report, topic, iteration=1):
     {json.dumps(orders, indent=2)}
 
     ---
+    mandatory requirement: 
+    ---
+    1. use a grounding with Google search 
+    2. use URL context 
+
+    ---
     EXECUTION PROTOCOL:
     ---
     1.  **READ EACH ORDER:** For each `order_id` in the `SURGICAL ORDERS` list:
