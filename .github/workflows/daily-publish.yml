@@ -3,7 +3,7 @@ name: Daily Article Publishing
 on:
   schedule:
     # توقيت افتراضي (36 دقيقة بعد 12 ظهراً بتوقيت UTC) - يمكنك تعديله لاحقاً
-    - cron: '48 21 * * *' 
+    - cron: '5 23 * * *' 
   workflow_dispatch: # يسمح بتشغيل الـ workflow يدوياً من واجهة GitHub
 
 permissions:

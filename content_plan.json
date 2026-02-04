@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "PolyAI x Fogo de Chão - Selma AI: The new team member restaurants are asking for Mastery Series",
+  "queue": [
+    "Mastering Selma AI: A Step-by-Step Guide to Implementing PolyAI's Conversational AI for Enhanced Restaurant Customer Service",
+    "Selma AI vs. The Competition: PolyAI's Fogo de Chão Success and the Future of Conversational AI in Hospitality"
+  ],
   "completed": [
     "Google Vertex AI with Gemini 3.0 Mastery Series",
     "Amplified 2026: The Annual State of Voice Report Mastery Series",
