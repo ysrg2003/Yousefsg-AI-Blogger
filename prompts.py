@@ -83,24 +83,40 @@ CRITICAL OUTPUT RULES:
 # ------------------------------------------------------------------
 # PROMPT: ARTICLE INTENT ANALYZER (V3.0)
 # ------------------------------------------------------------------
+
 PROMPT_ARTICLE_INTENT = """
-ROLE: Senior Content Strategist & Intent Analyst.
-TASK: Analyze the keyword and category to determine the user's PRIMARY intent.
+ROLE: Senior Content Strategist & Product Analyst.
+TASK: Analyze the keyword/topic to determine User Intent AND Product Accessibility.
 
 INPUT TOPIC: "{target_keyword}"
 INPUT CATEGORY: "{category}"
 
+CRITICAL ANALYSIS (Mental Sandbox):
+1. **Is this a B2B Enterprise Tool?** (e.g., Fieldguide, Salesforce, Palantir).
+   -> If YES: The intent CANNOT be "Guide" or "Hands-on" because ordinary users cannot access it. It must be "News Analysis" or "Overview".
+   -> Code/Download links usually don't exist.
+
+2. **Is this a B2C Tool?** (e.g., ChatGPT, Midjourney, Python Library).
+   -> If YES: "Guide" and "Review" are valid.
+
 OUTPUT REQUIREMENTS:
-1. **content_type**: Choose ONE of: "Guide" (How-to, Tutorial, Steps), "Review" (Honest Verdict, Features, Deep Dive), or "Comparison" (Vs, Better than, Alternative).
-2. **visual_strategy**: Choose the BEST default visual for that intent (e.g., Guide needs 'hunt_for_screenshot'; Review needs 'generate_chart').
+1. **content_type**:
+   - "News Analysis" (For funding news, B2B updates, Enterprise tools).
+   - "Guide" (ONLY if it's a public tool/library anyone can try NOW).
+   - "Review" (If it's public).
+   - "Comparison" (If two entities are mentioned).
+
+2. **visual_strategy**:
+   - If B2B/News: "hunt_for_screenshot" (Official press kit images only) or "generate_infographic".
+   - If Guide: "hunt_for_screenshot" (Step-by-step).
 
 OUTPUT PURE JSON ONLY:
 {{
-"content_type": "The chosen primary intent (e.g., Guide)",
-"visual_strategy": "The chosen best visual strategy (e.g., hunt_for_screenshot)"
+"content_type": "News Analysis", 
+"visual_strategy": "hunt_for_screenshot",
+"is_enterprise_b2b": true/false
 }}
 """
-
 # ------------------------------------------------------------------
 
 # PROMPT 0.5: THE CREATIVE DIRECTOR (VISUAL STRATEGY) - V2.0
