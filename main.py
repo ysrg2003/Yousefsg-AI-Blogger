@@ -309,6 +309,55 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
         log(f"   ✅ Research Complete. Found {len(collected_sources)} sources.")
 
+        
+    # ======================================================================
+	# 8. BUILD DATA BUNDLE & ARCHITECT BLUEPRINT
+	# ======================================================================
+	log("   🧠 Assembling data bundle for The Architect...")
+	
+	# --- A. ASSEMBLE TEXT DATA ---
+	# This combines all research and Reddit discussions into one text block
+	combined_text = "\n".join([f"SOURCE: {s['url']}\n{s['text'][:8000]}" for s in collected_sources])
+	if reddit_context:
+	    combined_text += "\n\n--- REDDIT COMMUNITY INTEL ---\n" + reddit_context
+	
+	# --- B. ASSEMBLE VISUAL CONTEXT ---
+	# This creates a simple list of descriptions for the visuals available
+	visual_context_for_writer = []
+	# (The asset processing loop from later will be moved here)
+	asset_map = {}
+	available_tags = []
+	
+	for i, visual in enumerate(valid_visuals):
+	    tag = f"[[VISUAL_EVIDENCE_{i+1}]]"
+	    # We only create context for the writer here, not the full HTML yet
+	    available_tags.append(tag)
+	    visual_context_for_writer.append(f"{tag}: {visual['description']}")
+	
+	if code_snippet_html:
+	    tag = "[[CODE_SNIPPET_1]]"
+	    available_tags.append(tag)
+	    visual_context_for_writer.append(f"{tag}: A practical Python code example for developers.")
+	
+	if chart_html_snippet:
+	    tag = "[[GENERATED_CHART]]"
+	    available_tags.append(tag)
+	    visual_context_for_writer.append(f"{tag}: A data visualization chart comparing key metrics.")
+	
+	# --- C. CALL THE ARCHITECT ---
+	import content_architect
+	blueprint = content_architect.create_article_blueprint(
+	    target_keyword,
+	    content_type,
+	    combined_text,
+	    reddit_context,
+	    "\n".join(visual_context_for_writer),
+	    model_name
+	)
+	
+	if not blueprint or not blueprint.get("article_blueprint"):
+	    log("   ❌ CRITICAL FAILURE: Blueprint creation failed. Aborting pipeline.")
+	    return False
         # ======================================================================
         # 5. DATA VISUALIZATION (UPDATED FOR E-E-A-T)
         # ======================================================================
