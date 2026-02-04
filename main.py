@@ -125,26 +125,32 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
 
         # ... (بعد الحصول على target_keyword)
-
         # 1. NEW: AI Intent Analysis Step (V2.0)
-        log("   🧠 [Strategy] Analyzing Topic Intent for Content Type...")
+        log("   🧠 [Strategy] Analyzing Topic Intent & Accessibility...")
         intent_prompt = PROMPT_ARTICLE_INTENT.format(target_keyword=target_keyword, category=category)
         try:
-            # سيتم استدعاء برومبت جديد يحدد النية المطلوبة (Review, Guide, Comparison)
             intent_analysis = api_manager.generate_step_strict(
                 model_name, intent_prompt, "Intent Analysis", ["content_type", "visual_strategy"]
             )
-            # نستخدم النتائج كمتغيرات توجيهية
-            content_type = intent_analysis.get("content_type", "Review")
-            visual_strategy = intent_analysis.get("visual_strategy", "generate_comparison_table")
-            log(f"   🎯 Detected Intent: {content_type} | Visual Strategy: {visual_strategy}")
-
-            # التعديل الحاسم: نحتاج إلى تمرير content_type إلى كل الدوال اللاحقة
+            content_type = intent_analysis.get("content_type", "News Analysis")
+            visual_strategy = intent_analysis.get("visual_strategy", "hunt_for_screenshot")
+            is_b2b = intent_analysis.get("is_enterprise_b2b", False) # متغير جديد
+            
+            log(f"   🎯 Intent: {content_type} | B2B Mode: {is_b2b} | Strategy: {visual_strategy}")
+            
+            # --- تعديل جذري: منع الكود للمنتجات المغلقة ---
+            if is_b2b:
+                log("      🔒 Enterprise Topic detected. Disabling Code Hunter to prevent hallucinations.")
+                # نغير نوع المحتوى إجبارياً إذا كان الكاتب قد أخطأ
+                if content_type == "Guide": content_type = "News Analysis"
+                
         except Exception as e:
-            log(f"   ⚠️ Intent Analysis Failed: {e}. Defaulting to Review/Comparison.")
-            content_type = "Review"
-            visual_strategy = "generate_comparison_table"
+            log(f"   ⚠️ Intent Analysis Failed: {e}. Defaulting to Safe Mode.")
+            content_type = "News Analysis"
+            visual_strategy = "generate_infographic" # أأمن خيار
+            is_b2b = True # نفترض الأسوأ للحماية
 
+        
         # ... (استبدال الخطوة القديمة 3 بهذه المتغيرات الجديدة)
         # ======================================================================
         # 2. SEMANTIC GUARD (ANTI-DUPLICATION)
