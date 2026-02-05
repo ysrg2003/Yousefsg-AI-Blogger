@@ -1,4 +1,4 @@
-   import os
+import os
 import json
 import time
 import requests
@@ -80,8 +80,6 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     vid_short_id = None
     local_fb_video = None
     reddit_context = ""
-    chart_html_snippet = ""
-    code_snippet_html = None
     
     # القائمة الرئيسية لجميع الأصول (صور + كود) التي سيتم جمعها
     all_collected_assets = [] 
@@ -119,17 +117,19 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         intent_prompt = PROMPT_ARTICLE_INTENT.format(target_keyword=target_keyword, category=category)
         try:
             intent_analysis = api_manager.generate_step_strict(
-                model_name, intent_prompt, "Intent Analysis", ["content_type", "visual_strategy"]
+                model_name, intent_prompt, "Intent Analysis", ["content_type", "visual_strategy", "is_enterprise_b2b"]
             )
             content_type = intent_analysis.get("content_type", "News Analysis")
+            visual_strategy = intent_analysis.get("visual_strategy", "hunt_for_screenshot") # Not used directly anymore but for logging
             is_b2b = intent_analysis.get("is_enterprise_b2b", False)
             log(f"   🎯 Intent: {content_type} | B2B Mode: {is_b2b}")
             if is_b2b:
                 log("      🔒 Enterprise Topic detected. Disabling Code Hunter to prevent hallucinations.")
-                if content_type == "Guide": content_type = "News Analysis"
+                if content_type == "Guide": content_type = "News Analysis" # Override if AI mistakenly made it a Guide for B2B
         except Exception as e:
             log(f"   ⚠️ Intent Analysis Failed: {e}. Defaulting to Safe Mode.")
             content_type = "News Analysis"
+            visual_strategy = "generate_infographic"
             is_b2b = True
 
         # ======================================================================
@@ -160,8 +160,10 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         except Exception as e:
             log(f"   ⚠️ Deep Dive Module Error: {e}")
 
-        if official_source_url and not any(s.get('url') == official_source_url for s in sources_to_scrape):
-             sources_to_scrape.insert(0, {"url": official_source_url, "page_name": "Official Source"})
+        # Add Official Source URL if exists and not already in list
+        if official_source_url:
+             if not any(s.get('url') == official_source_url for s in sources_to_scrape):
+                 sources_to_scrape.insert(0, {"url": official_source_url, "page_name": "Official Source"})
              official_domain = urlparse(official_source_url).netloc
 
         if len(sources_to_scrape) < 2:
@@ -232,36 +234,53 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         visual_context_for_writer = []
         asset_map = {}
         
+        # Prioritize: Hero > Code > High Score Images
         sorted_assets = sorted(unique_assets, key=lambda x: (x.get('is_hero', False), x.get('type') == 'code', x.get('score', 0)), reverse=True)
         
         valid_asset_count = 0
+        
         for asset in sorted_assets:
-            if valid_asset_count >= 15: break
-            if asset['type'] == 'image' and not is_url_accessible(asset['url']): continue
+            if valid_asset_count >= 15: break # Limit total assets to 15 for AI context window
+            
+            # Check URL accessibility for images (crucial step)
+            if asset['type'] == 'image':
+                if not is_url_accessible(asset['url']): continue
                 
             asset_id = f"[[ASSET_{valid_asset_count+1}]]"
             description = asset.get('description', '')
             if asset['type'] == 'code':
                 description = f"CODE SNIPPET ({asset.get('language')}): {asset.get('content')[:100]}..."
-            
+                
             visual_context_for_writer.append(f"{asset_id}: ({asset['type']}) {description}")
             asset_map[asset_id] = asset
             valid_asset_count += 1
             
+        # Add generated chart if applicable
         all_text_blob_for_assets = "\n".join([s['text'] for s in collected_sources])[:20000]
-        should_run_chart = ("benchmark" in target_keyword.lower() or "vs" in target_keyword.lower() or category == "AI Money Engines" or content_type == "Guide")
+        
+        # Determine if chart should run (expanded logic)
+        should_run_chart = (
+            "benchmark" in target_keyword.lower() or 
+            "vs" in target_keyword.lower() or 
+            "price" in target_keyword.lower() or # Added this back for explicit detection
+            category == "AI Money Engines" or     # If category is Money Engines
+            content_type == "Guide"               # If content is a Guide
+        )
+
         if should_run_chart:
             log("   📊 [Chart Generator] Analyzing data for potential visualization...")
             try:
-                chart_prompt = f"TASK: Extract numerical data for a comparison chart related to {target_keyword} from:\n{all_text_blob_for_assets}\nOUTPUT JSON: {{'chart_title': '...', 'data_points': {{'Entity1': 10, 'Entity2': 20}}}}"
+                # Use a general prompt for chart data extraction
+                chart_prompt = f"TASK: Extract numerical data for a comparison chart related to {target_keyword} from the following text (focus on ROI, Cost, Efficiency, Setup Time, Performance, Score, Price per Unit):\nTEXT: {all_text_blob_for_assets}\nOUTPUT JSON: {{'chart_title': 'A relevant comparison chart title', 'data_points': {{'Entity1': 10.5, 'Entity2': 20.3}}}}\nOR return null if no sufficient data."
                 chart_data = api_manager.generate_step_strict(model_name, chart_prompt, "Data Extraction for Chart", ["data_points"])
+                
                 if chart_data and chart_data.get('data_points') and len(chart_data['data_points']) >= 2:
-                    chart_url = chart_generator.create_chart_from_data(chart_data['data_points'], chart_data.get('chart_title', 'Comparison'))
+                    chart_url = chart_generator.create_chart_from_data(chart_data['data_points'], chart_data.get('chart_title', f'{target_keyword} Comparison'))
                     if chart_url:
                         log(f"      ✅ Chart Generated & Uploaded: {chart_url}")
                         chart_id = "[[GENERATED_CHART]]"
                         visual_context_for_writer.append(f"{chart_id}: A data visualization chart comparing key metrics.")
-                        asset_map[chart_id] = {"type": "chart", "url": chart_url, "description": chart_data.get('chart_title', 'Comparison Chart')}
+                        asset_map[chart_id] = {"type": "chart", "url": chart_url, "description": chart_data.get('chart_title', 'Comparison Chart'), "score": 20} # High score for charts
             except Exception as e:
                 log(f"      ⚠️ Chart Generation skipped: {e}")
 
@@ -271,7 +290,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         log("   🧠 Assembling data bundle for The Architect...")
         competitor_text = ""
         if competitor_data:
-            competitor_text = "\n\n--- COMPETITOR ANALYSIS ---\n" + json.dumps(competitor_data)
+            competitor_text = "\n\n--- COMPETITOR ANALYSIS ---\n" + json.dumps(competitor_data, ensure_ascii=False) # Ensure non-ASCII chars are handled
         combined_text = "\n\n".join([s['text'][:8000] for s in collected_sources]) + competitor_text
         
         blueprint = content_architect.create_article_blueprint(
@@ -287,8 +306,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         log("   ✍️ [The Artisan] Writing the article...")
         artisan_prompt = PROMPT_B_TEMPLATE.format(
-            blueprint_json=json.dumps(blueprint),
-            raw_data_bundle=json.dumps({"research": combined_text[:15000], "reddit": reddit_context[:5000]})
+            blueprint_json=json.dumps(blueprint, ensure_ascii=False), # ensure_ascii=False for proper Arabic handling
+            raw_data_bundle=json.dumps({"research": combined_text[:15000], "reddit": reddit_context[:5000]}, ensure_ascii=False)
         )
         json_b = api_manager.generate_step_strict(model_name, artisan_prompt, "Artisan Writer", ["headline", "article_body"])
         title = blueprint.get("final_title", json_b.get('headline', target_keyword))
@@ -300,24 +319,38 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         log("   🔗 Inserting Real Assets into HTML...")
         final_body_html = draft_body_html
         for asset_id, asset in asset_map.items():
-            if asset_id not in final_body_html: continue
+            # CRITICAL: Ensure the asset_id actually exists in the AI-generated HTML
+            if asset_id not in final_body_html:
+                log(f"      ℹ️ Asset {asset_id} not used by AI in blueprint. Skipping replacement.")
+                continue # Skip if AI didn't place the placeholder
+
             replacement_html = ""
             if asset['type'] == 'image':
-                final_img_url = image_processor.upload_external_image(asset['url'], f"asset-{target_keyword[:10]}") or asset['url']
+                final_img_url = image_processor.upload_external_image(asset['url'], f"asset-{target_keyword[:20].replace(' ', '-')}") # Shorter, safer filename
+                if not final_img_url:
+                    log(f"      ❌ Failed to upload image for {asset_id}. Trying original URL.")
+                    final_img_url = asset['url'] # Fallback to original if upload fails
+                
                 replacement_html = f'''<figure style="margin: 30px auto; text-align: center;"><img src="{final_img_url}" alt="{asset['description']}" style="width: 100%; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.08);"><figcaption style="font-size: 13px; color: #555; margin-top: 8px; font-style: italic;">📸 {asset['description']}</figcaption></figure>'''
-                if not img_url: img_url = final_img_url
+                if not img_url: img_url = final_img_url # Set hero image if not already set
+
             elif asset['type'] == 'code':
                 replacement_html = f'''<div style="background: #2d2d2d; color: #f8f8f2; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-family: 'Courier New', Courier, monospace;"><pre><code class="language-{asset.get('language', 'text')}">{asset.get('content')}</code></pre></div>'''
+            
             elif asset['type'] == 'chart':
                 replacement_html = f'''<figure style="margin: 30px auto; text-align: center;"><img src="{asset['url']}" alt="{asset['description']}" style="width: 100%; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.08);"><figcaption style="font-size: 13px; color: #555; margin-top: 8px; font-style: italic;">📊 {asset['description']}</figcaption></figure>'''
+            
             final_body_html = final_body_html.replace(asset_id, replacement_html)
+        
+        # Cleanup any remaining unused placeholders that AI didn't use or we didn't replace
         final_body_html = re.sub(r'\[\[ASSET_\d+\]\]', '', final_body_html)
+        final_body_html = re.sub(r'\[\[GENERATED_CHART\]\]', '', final_body_html) # Also clean chart placeholder if not used
 
         # ======================================================================
         # 11. VIDEO PRODUCTION & UPLOAD
         # ======================================================================
         log("   🎬 Video Production & Upload...")
-        summ = re.sub('<[^<]+?>', '', draft_body_html)[:1000]
+        summ = re.sub('<[^<]+?>', '', draft_body_html)[:1000] # Use cleaned draft_body_html
         try:
             vs_payload = api_manager.generate_step_strict(model_name, PROMPT_VIDEO_SCRIPT.format(title=title, text_summary=summ), "Video Script")
             script_json = vs_payload.get('video_script', [])
@@ -346,33 +379,75 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
         kg_links = history_manager.get_relevant_kg_for_linking(title, category)
         seo_payload = {"draft_content": {"headline": title, "article_body": final_body_html}, "sources_data": sources_data}
-        json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(seo_payload), knowledge_graph=kg_links), "SEO Polish", ["finalTitle", "finalContent", "seo", "schemaMarkup"])
+        json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(seo_payload, ensure_ascii=False), knowledge_graph=kg_links), "SEO Polish", ["finalTitle", "finalContent", "seo", "schemaMarkup"])
 
         if not img_url and json_c.get('imageGenPrompt'):
+            log("   🎨 No real image found. Falling back to AI Image Generation...")
             img_url = image_processor.generate_and_upload_image(json_c['imageGenPrompt'], json_c.get('imageOverlayText', ''))
 
         humanizer_payload = api_manager.generate_step_strict(model_name, PROMPT_D_TEMPLATE.format(content_input=json_c['finalContent']), "Humanizer", ["finalContent"])
         final_title = json_c['finalTitle']
         full_body_html = humanizer_payload['finalContent']
 
+        # 1.5. NEW: Inject H1 Title with Dynamic URL Link (using placeholder initially)
         published_url_placeholder = f"https://www.latestai.me/{datetime.date.today().year}/{datetime.date.today().month:02d}/temp-slug.html"
+        linked_h1_title_html = f'''
+        <h1 style="font-size: 2.2em; color: #2c3e50; text-align: center; margin-bottom: 25px; font-weight: bold; line-height: 1.3;">
+            <a href="{published_url_placeholder}" target="_blank" rel="bookmark" style="text-decoration: none; color: inherit;">
+                {final_title}
+            </a>
+        </h1>
+        '''
+        # Inject H1 at the top of the body or replace existing one
+        soup_for_h1 = BeautifulSoup(full_body_html, 'html.parser')
+        existing_h1_tag = soup_for_h1.find('h1')
+        if existing_h1_tag:
+            existing_h1_tag.replace_with(BeautifulSoup(linked_h1_title_html, 'html.parser'))
+            full_body_html = str(soup_for_h1)
+        else:
+            full_body_html = linked_h1_title_html + full_body_html
+
+
+        # 1. Schema Injection
         if json_c.get('schemaMarkup') and json_c['schemaMarkup'].get('OUTPUT'):
             log("   🧬 Injecting JSON-LD Schema into final HTML...")
             schema_data = json_c['schemaMarkup']['OUTPUT']
             schema_data['headline'] = final_title
             schema_data['datePublished'] = datetime.date.today().isoformat()
             if img_url: schema_data['image'] = img_url
-            if 'mainEntityOfPage' in schema_data: schema_data['mainEntityOfPage']['@id'] = published_url_placeholder
-            schema_script = f'<script type="application/ld+json">{json.dumps(schema_data, indent=2)}</script>'
+            if 'mainEntityOfPage' in schema_data: schema_data['mainEntityOfPage']['@id'] = published_url_placeholder # Use placeholder here
+            schema_script = f'<script type="application/ld+json">{json.dumps(schema_data, indent=2, ensure_ascii=False)}</script>'
             full_body_html += schema_script
         
+        # 2. Hero Image Injection
         if img_url:
             img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{final_title}" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" /></a></div>'
             full_body_html = img_html + full_body_html
 
+        # 3. Dynamic Author Box Injection
+        log("   👤 Building dynamic author box...")
         author_info = config.get("author_profile", {})
         if author_info:
-            author_box = f'''<div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);"><div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:25px;"><img src="{author_info.get('profile_image_url', '')}" style="width:90px; height:90px; border-radius:50%; object-fit:cover; border:4px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,0.1);" alt="{author_info.get('name', 'Author')}"><div style="flex:1;"><h4 style="margin:0; font-size:22px; color:#2c3e50; font-weight:800;">{author_info.get('name', '')} | Latest AI</h4><span style="font-size:12px; background:#e8f6ef; color:#2ecc71; padding:4px 10px; border-radius:6px; font-weight:bold;">{author_info.get('title', 'Tech Editor')}</span><p style="margin:15px 0; color:#555; line-height:1.7;">{author_info.get('bio', '')}</p><div style="display:flex; gap:15px; flex-wrap:wrap; margin-top:15px;"><a href="{author_info.get('linkedin_url', '#')}" target="_blank" title="LinkedIn"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384014.png" width="24"></a><a href="{author_info.get('twitter_url', '#')}" target="_blank" title="X (Twitter)"><img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24"></a><a href="{author_info.get('reddit_url', '#')}" target="_blank" title="Reddit"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="24"></a><a href="https://www.latestai.me" target="_blank" title="Website"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24"></a><a href="https://m.youtube.com/@0latestai" target="_blank" title="YouTube"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24"></a></div></div></div></div>'''
+            author_box = f'''
+            <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                <div style="display:flex; align-items:flex-start; flex-wrap:wrap; gap:25px;">
+                    <img src="{author_info.get('profile_image_url', '')}"
+                         style="width:90px; height:90px; border-radius:50%; object-fit:cover; border:4px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,0.1);" alt="{author_info.get('name', 'Author')}">
+                    <div style="flex:1;">
+                        <h4 style="margin:0; font-size:22px; color:#2c3e50; font-weight:800;">{author_info.get('name', '')} | Latest AI</h4>
+                        <span style="font-size:12px; background:#e8f6ef; color:#2ecc71; padding:4px 10px; border-radius:6px; font-weight:bold;">{author_info.get('title', 'Tech Editor')}</span>
+                        <p style="margin:15px 0; color:#555; line-height:1.7;">{author_info.get('bio', '')}</p>
+                        <div style="display:flex; gap:15px; flex-wrap:wrap; margin-top:15px;">
+                            <a href="{author_info.get('linkedin_url', '#')}" target="_blank" title="LinkedIn"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384014.png" width="24"></a>
+                            <a href="{author_info.get('twitter_url', '#')}" target="_blank" title="X (Twitter)"><img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24"></a>
+                            <a href="{author_info.get('reddit_url', '#')}" target="_blank" title="Reddit"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="24"></a>
+                            <a href="https://www.latestai.me" target="_blank" title="Website"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24"></a>
+                            <a href="https://m.youtube.com/@0latestai" target="_blank" title="YouTube"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24"></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            '''
             full_body_html += author_box
             
         # ======================================================================
@@ -387,15 +462,43 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             log("   ❌ CRITICAL FAILURE: Could not publish the initial draft.")
             return False
             
-        if "schema_script" in locals() and published_url_placeholder in full_body_html:
-            log("   ✏️ Updating post with final URL in Schema...")
-            final_html_with_schema_url = full_body_html.replace(published_url_placeholder, published_url)
-            publisher.update_existing_post(post_id, final_title, final_html_with_schema_url)
-            full_body_html = final_html_with_schema_url
-        
+        # Update schema and H1 with the final URL, then update the post
+        if ("schema_script" in locals() and published_url_placeholder in full_body_html) or (linked_h1_title_html in full_body_html):
+            log("   ✏️ Updating post with final URL in Schema and H1...")
+            final_html_with_correct_urls = full_body_html.replace(published_url_placeholder, published_url)
+            publisher.update_existing_post(post_id, final_title, final_html_with_correct_urls)
+            full_body_html = final_html_with_correct_urls # Update for quality loop
+
+        # QUALITY IMPROVEMENT LOOP
+        quality_score, attempts, MAX_RETRIES = 0, 0, 1 # Enabled 1 loop
+        while quality_score < 9.0 and attempts < MAX_RETRIES:
+            attempts += 1
+            log(f"   🔄 [Deep Quality Loop] Audit Round {attempts}...")
+            audit_report = live_auditor.audit_live_article(published_url, target_keyword, iteration=attempts)
+            if not audit_report: break
+            quality_score = float(audit_report.get('quality_score', 0))
+            if quality_score >= 9.5: # If quality is very high, break early
+                log(f"      ✨ Article is Page 1 Ready! Score: {quality_score}")
+                break
+            
+            log(f"      🚑 Score {quality_score}/10 is not enough. Launching Surgeon Agent...")
+            fixed_html = remedy.fix_article_content(full_body_html, audit_report, target_keyword, iteration=attempts)
+            if fixed_html and len(fixed_html) > 2000:
+                 if publisher.update_existing_post(post_id, final_title, fixed_html):
+                     full_body_html = fixed_html # Use updated HTML for next loop/final actions
+                     log(f"      ✅ Surgery Successful. Article updated.")
+                 else:
+                     log("      ⚠️ Failed to update post after surgery. Ending quality loop.")
+                     break
+            else:
+                log("      ⚠️ Surgeon failed to return improved content or returned too little. Ending quality loop.")
+                break
+
+        # FINAL DISTRIBUTION
         history_manager.update_kg(final_title, published_url, category, post_id)
         try: indexer.submit_url(published_url)
         except: pass
+        
         try:
             fb_dat = api_manager.generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=final_title), "FB Hook", ["FB_Hook"])
             fb_caption = fb_dat.get('FB_Hook', final_title)
