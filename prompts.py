@@ -324,29 +324,60 @@ OUTPUT JSON ONLY:
     "target_persona": "e.g., 'Python Developer', 'Non-technical Founder', 'AI Hobbyist'",
     "core_narrative": "A one-sentence summary of the article's unique angle that the writer must follow.",
     "emotional_hook": "The specific feeling or question the intro must evoke (e.g., 'The official specs look amazing, but what are real users saying?').",
+    // ... (داخل PROMPT_ARCHITECT_BLUEPRINT)
+
     "article_blueprint": [
         {{
             "section_type": "H2",
-            "title": "Section 1: The Official Announcement",
-            "instructions_for_writer": "Summarize the key facts and figures directly from the text marked `[OFFICIAL SOURCE]`. Be direct and factual here.",
+            "title": "Quick Overview: The Official Pitch vs. The Reality",
+            "instructions_for_writer": "Summarize the official announcement (Source of Truth) but contrast it immediately with the user experience (Reddit/Expert Experience).",
             "key_data_to_include": ["Cite the main product name and version.", "Mention the release date or availability."],
-            "visual_asset_to_place": "[[VISUAL_EVIDENCE_1]]"
+            "visual_asset_to_place": "[[ASSET_1]]" // <-- صورة رسمية للمنتج (المطلوب #1)
         }},
         {{
             "section_type": "H2",
-            "title": "Section 2: What the Experts are Seeing",
-            "instructions_for_writer": "Now, introduce the human element. Pull direct quotes and findings from the text marked `[EXPERT EXPERIENCE]`. Contrast this with the official claims if there is a discrepancy.",
-            "key_data_to_include": ["Quote an expert by name.", "Reference the 'proof' provided in their experience."],
-            "visual_asset_to_place": "null"
+            "title": "Technical Deep Dive: How the New API Works",
+            "instructions_for_writer": "Explain the API or core technology in simple, technical terms. Use the code asset to show practical implementation.",
+            "key_data_to_include": ["Use one hard number/statistic from research."],
+            "visual_asset_to_place": "[[ASSET_2]]" // <-- مكان إلزامي للكود البرمجي (المطلوب #2)
+        }},
+        {{
+            "section_type": "H3",
+            "title": "Real-World Success: Implementation & Proof",
+            "instructions_for_writer": "Detail one successful case study or a major feature from the official source. Focus on *how* العمل تم بنجاح.",
+            "key_data_to_include": ["Quote a positive result (e.g., '90% accuracy')."],
+            "visual_asset_to_place": "[[ASSET_3]]" // <-- صورة آلية العمل/النجاح (#3)
+        }},
+        {{
+            "section_type": "H3",
+            "title": "Performance Snapshot: Screenshots & Interface",
+            "instructions_for_writer": "Describe the user interface (UI) أو واجهة الداشبورد. هذا القسم يجب أن يكون قصيراً ومرئياً.",
+            "key_data_to_include": ["Mention any pricing tiers or key performance metrics."],
+            "visual_asset_to_place": "[[ASSET_4]]" // <-- لقطة شاشة للواجهة (#4)
         }},
         {{
             "section_type": "H2",
-            "title": "Section 3: The Deeper Technical Picture",
-            "instructions_for_writer": "Use the information from the `[RESEARCH STUDY]` blocks to explain the technology in more detail. Explain one key technical concept in simple terms for the 'target_persona'.",
+            "title": "Community Pulse: Criticisms and Workarounds (E-A-T Check)",
+            "instructions_for_writer": "Integrate the raw community opinions (Reddit/Critiques). Focus on the biggest weaknesses/limitations. Use an asset to show a user complaint or bug.",
+            "key_data_to_include": ["Quote one critical comment or user experience."],
+            "visual_asset_to_place": "[[ASSET_5]]" // <-- صورة لقطة شاشة (مشكلة/مراجعة) (#5)
+        }},
+        {{
+            "section_type": "H3",
+            "title": "Alternative Perspectives & Further Proof",
+            "instructions_for_writer": "Introduce an alternative tool أو قم بإضافة دليل إثبات إضافي (مثل جدول مقارنة أو اقتباس جديد).",
+            "key_data_to_include": ["Mention the name and link of a direct competitor (if available)."],
+            "visual_asset_to_place": "[[ASSET_6]]" // <-- صورة آلية عمل/إثبات أخرى (#6)
+        }},
+        {{
+            "section_type": "H3",
+            "title": "Practical Tip & Final Recommendation",
+            "instructions_for_writer": "Provide نصيحة عملية نهائية للقارئ. هذا القسم يجب أن يكون بصيغة 'ماذا تفعل الآن؟'.",
             "key_data_to_include": [],
-            "visual_asset_to_place": "[[GENERATED_CHART]]"
+            "visual_asset_to_place": "[[ASSET_7]]" // <-- صورة أو إثبات آخر (#7)
         }}
     ],
+    // ... (باقي كود الـ JSON)
     "final_verdict_summary": "A one-sentence summary of the final recommendation based on synthesizing ALL source types."
 }}
 """
