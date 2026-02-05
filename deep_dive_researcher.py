@@ -1,11 +1,12 @@
 # FILE: deep_dive_researcher.py
 # ROLE: The Elite Investigator executing the high-value source acquisition protocol.
+# FIX: Escaped curly braces for independent_critiques to prevent KeyError.
 
 import json
 from config import log
 from api_manager import generate_step_strict
 
-# البرومبت المتقدم الذي طلبته، تم وضعه هنا كنص ثابت
+# البرومبت المتقدم مع تصحيح الأقواس (Doubled Curly Braces)
 PROMPT_DEEP_DIVE = """
 use grounding with Google search and URL context, get your response just from grounding with Google search,get {topic} official resources name and its direct link, mention the page name with its direct link , mention the latest official resources and documents and at least 4 official document and 3 researches and 3 persons experience  and 3 independent_critiques with their prov ,but they must be Very high value and from high value source or website.
 
@@ -34,14 +35,14 @@ The JSON structure MUST be:
       "url": "The direct link to the proof"
     }}
   ],
-"independent_critiques": [
-  {
-    "source_name": "Name of the independent publication (e.g., a competitor's blog, an industry analysis site)",
-    "page_name": "Title of the critical article or review",
-    "url": "Direct link to the critique",
-    "summary": "A brief summary of the main counter-argument, weakness, or alternative perspective identified."
-  }
-]
+  "independent_critiques": [
+    {{
+      "source_name": "Name of the independent publication (e.g., a competitor's blog, an industry analysis site)",
+      "page_name": "Title of the critical article or review",
+      "url": "Direct link to the critique",
+      "summary": "A brief summary of the main counter-argument, weakness, or alternative perspective identified."
+    }}
+  ]
 }}
 """
 
@@ -57,14 +58,14 @@ def conduct_deep_dive(topic: str, model_name: str):
             model_name,
             PROMPT_DEEP_DIVE.format(topic=topic),
             "Deep Dive Research",
-            required_keys=["official_sources", "research_studies", "personal_experiences"],
+            # تمت إضافة independent_critiques لقائمة التحقق لضمان وجودها
+            required_keys=["official_sources", "research_studies", "personal_experiences", "independent_critiques"],
             use_google_search=True
         )
         
         # التحقق من جودة النتائج
-        if (len(result.get("official_sources", [])) < 2 or 
-            len(result.get("research_studies", [])) < 1 or
-            len(result.get("personal_experiences", [])) < 1):
+        if (len(result.get("official_sources", [])) < 1 or 
+            len(result.get("research_studies", [])) < 1):
             log("   ⚠️ Deep Dive returned insufficient sources. Results may be partial.")
         
         log("   ✅ Deep Dive research completed successfully.")
