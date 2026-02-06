@@ -1,8 +1,11 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Introducing Claude Opus 4.6 Mastery Series",
+  "queue": [
+    "Mastering Claude Opus 4.6: A Hands-On Guide to Unlocking Its Advanced Features",
+    "Claude Opus 4.6 in the AI Arena: A Comparative Analysis Against Leading Competitors"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series"
   ],
-  "last_generated": "2026-02-04"
+  "last_generated": "2026-02-05"
 }
