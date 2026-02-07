@@ -1,10 +1,9 @@
 {
-  "active_cluster": "Introducing Claude Opus 4.6 Mastery Series",
-  "queue": [
-    "Claude Opus 4.6 in the AI Arena: A Comparative Analysis Against Leading Competitors"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
-    "Changelog | Latest LALAL.AI Updates & Features Mastery Series"
+    "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
+    "Introducing Claude Opus 4.6 Mastery Series"
   ],
   "last_generated": "2026-02-05"
 }
