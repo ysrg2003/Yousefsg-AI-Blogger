@@ -1,12 +1,11 @@
 {
-  "active_cluster": "Bulbul V3 | Sarvam AI Mastery Series",
-  "queue": [
-    "Bulbul V3 in the Global Arena: Sarvam AI's Competitive Edge Against OpenAI, Google, and Legacy Models"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
-    "AI Talking Photo: Add Lifelike Expressions and Speech to Images - Pippit AI Mastery Series"
+    "AI Talking Photo: Add Lifelike Expressions and Speech to Images - Pippit AI Mastery Series",
+    "Bulbul V3 | Sarvam AI Mastery Series"
   ],
   "last_generated": "2026-02-08"
 }
