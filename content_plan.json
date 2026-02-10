@@ -1,11 +1,14 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Introducing Topview 4.0: The First Collaborative All-in-One AI Content Workspace for Brands and Creators Mastery Series",
+  "queue": [
+    "Mastering Topview 4.0: A Hands-On Guide to Collaborative AI Content Creation for Brands & Creators",
+    "Topview 4.0's Industry Impact: A Comparative Analysis of Collaborative AI Content Platforms"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
     "AI Talking Photo: Add Lifelike Expressions and Speech to Images - Pippit AI Mastery Series",
     "Bulbul V3 | Sarvam AI Mastery Series"
   ],
-  "last_generated": "2026-02-08"
+  "last_generated": "2026-02-10"
 }
