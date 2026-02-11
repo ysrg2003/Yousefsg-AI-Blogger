@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "How the voices for ChatGPT were chosen Mastery Series",
+  "queue": [
+    "Optimizing Your AI Experience: A Practical Guide to Leveraging ChatGPT's New Voice Capabilities",
+    "The Sound of Innovation: Comparing OpenAI's Voice Strategy Against Google, Amazon, and the Future of Conversational AI"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -8,5 +11,5 @@
     "Bulbul V3 | Sarvam AI Mastery Series",
     "Introducing Topview 4.0: The First Collaborative All-in-One AI Content Workspace for Brands and Creators Mastery Series"
   ],
-  "last_generated": "2026-02-10"
+  "last_generated": "2026-02-11"
 }
