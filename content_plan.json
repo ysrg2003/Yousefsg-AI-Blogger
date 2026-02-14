@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Features – Noto - NOTO – 360 Fraud and Compliance Mastery Series",
+  "queue": [
+    "Implementing Noto's 360 Fraud & Compliance: A Practical Guide to Leveraging Its Advanced Features for Risk Management",
+    "Noto 360 Fraud & Compliance in the Market: A Competitive Analysis Against Leading Fraud Prevention Platforms"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -9,5 +12,5 @@
     "Introducing Topview 4.0: The First Collaborative All-in-One AI Content Workspace for Brands and Creators Mastery Series",
     "How the voices for ChatGPT were chosen Mastery Series"
   ],
-  "last_generated": "2026-02-11"
+  "last_generated": "2026-02-14"
 }
