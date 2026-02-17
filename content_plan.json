@@ -1,8 +1,6 @@
 {
-  "active_cluster": "Introducing intelliflo IQ: AI-powered advice for the future Mastery Series",
-  "queue": [
-    "intelliflo IQ's Market Position: A Comparative Analysis of AI in the Financial Advisory Landscape"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -10,7 +8,8 @@
     "Bulbul V3 | Sarvam AI Mastery Series",
     "Introducing Topview 4.0: The First Collaborative All-in-One AI Content Workspace for Brands and Creators Mastery Series",
     "How the voices for ChatGPT were chosen Mastery Series",
-    "Features – Noto - NOTO – 360 Fraud and Compliance Mastery Series"
+    "Features – Noto - NOTO – 360 Fraud and Compliance Mastery Series",
+    "Introducing intelliflo IQ: AI-powered advice for the future Mastery Series"
   ],
   "last_generated": "2026-02-16"
 }
