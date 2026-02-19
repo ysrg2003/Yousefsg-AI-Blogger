@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Financial AI Leaders Join Forces: BridgeWise Acquires US-Based Context Analytics to Pioneer End-to-End Wealth-Native Intelligence Mastery Series",
+  "queue": [
+    "Mastering End-to-End Wealth-Native Intelligence: A Hands-On Guide to Leveraging BridgeWise & Context Analytics' Combined Platform",
+    "The New Financial AI Frontier: How BridgeWise & Context Analytics Reshape Wealth Management Against Competitors"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -12,5 +15,5 @@
     "Introducing intelliflo IQ: AI-powered advice for the future Mastery Series",
     "Audion launches Audion AI, the first artificial intelligence (AI) solution designed to deliver outcome-driven audio advertising campaigns that maximise brand performance Mastery Series"
   ],
-  "last_generated": "2026-02-18"
+  "last_generated": "2026-02-19"
 }
