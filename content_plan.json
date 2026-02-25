@@ -1,8 +1,6 @@
 {
-  "active_cluster": "ByteDance Seedream 4.0: Full Review & Features Guide - CapCut Mastery Series",
-  "queue": [
-    "Seedream 4.0's Place in AI Video: Comparing CapCut's Latest Innovation Against Industry Leaders"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -13,7 +11,8 @@
     "Features – Noto - NOTO – 360 Fraud and Compliance Mastery Series",
     "Introducing intelliflo IQ: AI-powered advice for the future Mastery Series",
     "Audion launches Audion AI, the first artificial intelligence (AI) solution designed to deliver outcome-driven audio advertising campaigns that maximise brand performance Mastery Series",
-    "Financial AI Leaders Join Forces: BridgeWise Acquires US-Based Context Analytics to Pioneer End-to-End Wealth-Native Intelligence Mastery Series"
+    "Financial AI Leaders Join Forces: BridgeWise Acquires US-Based Context Analytics to Pioneer End-to-End Wealth-Native Intelligence Mastery Series",
+    "ByteDance Seedream 4.0: Full Review & Features Guide - CapCut Mastery Series"
   ],
   "last_generated": "2026-02-22"
 }
