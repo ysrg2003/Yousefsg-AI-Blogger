@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "FIS Launches 24/7 AI Assistant to Ease Risk Models Management Mastery Series",
+  "queue": [
+    "Mastering Risk Models: A Practical Guide to Leveraging FIS's New AI Assistant Features",
+    "FIS AI Assistant: A Competitive Analysis of Its Impact on Risk Management Technology"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -15,5 +18,5 @@
     "ByteDance Seedream 4.0: Full Review & Features Guide - CapCut Mastery Series",
     "Lyria 3 — Google DeepMind Mastery Series"
   ],
-  "last_generated": "2026-02-25"
+  "last_generated": "2026-02-27"
 }
