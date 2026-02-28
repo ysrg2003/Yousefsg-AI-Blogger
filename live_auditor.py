@@ -4,7 +4,7 @@
 
 import json
 import datetime
-from config import log
+from config import log, EEAT_GUIDELINES
 from api_manager import generate_step_strict
 
 # FILE: live_auditor.py (The Judge Edition)
@@ -74,7 +74,8 @@ def audit_live_article(url, target_keyword, iteration=1):
             prompt, 
             "The Judge: E-E-A-T Verdict", 
             required_keys=["surgical_orders", "quality_score"],
-            use_google_search=True 
+            use_google_search=True,
+            system_instruction=EEAT_GUIDELINES
         )
         return result
     except Exception as e:

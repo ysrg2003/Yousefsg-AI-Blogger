@@ -3,7 +3,7 @@
 # DESCRIPTION: Analyzes all raw data and produces a hyper-detailed, unbreakable article blueprint to guide the writer.
 
 import json
-from config import log
+from config import log, EEAT_GUIDELINES
 from api_manager import generate_step_strict
 from prompts import PROMPT_ARCHITECT_BLUEPRINT # سنستدعي البرومبت من ملف prompts.py
 
@@ -18,7 +18,8 @@ def create_article_blueprint(topic, content_type, research_data, reddit_context,
         content_type=content_type,
         research_data=research_data[:20000], # Giving it more context
         reddit_context=reddit_context[:8000],
-        visual_context=visual_context
+        visual_context=visual_context,
+        eeat_guidelines=json.dumps(EEAT_GUIDELINES)
     )
     
     try:
@@ -47,3 +48,31 @@ def create_article_blueprint(topic, content_type, research_data, reddit_context,
             ],
             "final_verdict_summary": "A balanced summary of the product's potential."
         }
+
+def write_article_from_blueprint(blueprint, raw_data_bundle, collected_assets, model_name, eeat_guidelines, forbidden_phrases, boring_keywords):
+    """
+    Generates the final article HTML from the blueprint and raw data.
+    """
+    log("   ✍️ [The Artisan] Writing article from blueprint...")
+
+    prompt = PROMPT_B_TEMPLATE.format(
+        blueprint_json=json.dumps(blueprint),
+        raw_data_bundle=json.dumps(raw_data_bundle),
+        eeat_guidelines=json.dumps(eeat_guidelines),
+        forbidden_phrases=json.dumps(forbidden_phrases),
+        boring_keywords=json.dumps(boring_keywords)
+    )
+
+    try:
+        article_content = generate_step_strict(
+            model_name,
+            prompt,
+            "Article Writing",
+            required_keys=["finalContent"],
+            system_instruction=eeat_guidelines
+        )
+        log("      ✅ Article content generated successfully.")
+        return article_content.get("finalContent")
+    except Exception as e:
+        log(f"      ❌ CRITICAL: The Artisan failed to write the article: {e}")
+        return "<h1>Error: Article Generation Failed</h1><p>Due to a critical error during the article generation process, we were unable to produce the content. Please try again later or review the system logs for more details.</p>

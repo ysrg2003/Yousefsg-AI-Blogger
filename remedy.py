@@ -3,7 +3,7 @@
 
 import json
 import re
-from config import log
+from config import log, EEAT_GUIDELINES
 from api_manager import generate_step_strict
 
 def fix_article_content(current_html, audit_report, topic, iteration=1):
@@ -84,7 +84,8 @@ def fix_article_content(current_html, audit_report, topic, iteration=1):
             prompt, 
             "The Executioner: Applying Fixes", 
             required_keys=["fixed_html"],
-            use_google_search=True 
+            use_google_search=True,
+            system_instruction=EEAT_GUIDELINES
         )
         
         fixed_sanitized_html = result.get('fixed_html')

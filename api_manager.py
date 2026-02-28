@@ -14,7 +14,7 @@ import puter as puter_sdk
 from google import genai
 from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
-from config import log
+from config import log, EEAT_GUIDELINES
 
 # --- CONFIGURATION ---
 API_HEAT = 30  # Seconds to wait between heavy calls to prevent flooding
@@ -161,7 +161,7 @@ def try_puter_generation(prompt, system_prompt):
 # ==============================================================================
 # ENGINE 2: GOOGLE GEMINI (BACKUP / TIERS 2-5) - UPDATED WITH INTERNET ACCESS
 # ==============================================================================
-def try_gemini_generation(model_name, prompt, system_prompt, use_google_search=False):
+def try_gemini_generation(model_name, prompt, system_prompt, use_google_search=False, system_instruction=None):
     """
     Attempts to generate using a specific Gemini model.
     Handles Key Rotation, Self-Repair, and API Errors.
@@ -188,12 +188,12 @@ def try_gemini_generation(model_name, prompt, system_prompt, use_google_search=F
             current_mime_type = None # Disable strict JSON mode at API level to allow Tools
             # log(f"      📡 [Internet Access] Enabled for {model_slug}")
 
-        generation_config = types.GenerateContentConfig(
-            response_mime_type=current_mime_type, 
-            system_instruction=system_prompt, 
-            temperature=0.3,
-            tools=google_tools
-        )
+            generation_config = types.GenerateContentConfig(
+                response_mime_type=current_mime_type, 
+                system_instruction=system_instruction if system_instruction else system_prompt, 
+                temperature=0.3,
+                tools=google_tools
+            )
         
         # 3. API Execution
         response = client.models.generate_content(
@@ -260,7 +260,7 @@ def try_gemini_generation(model_name, prompt, system_prompt, use_google_search=F
     retry=retry_if_exception_type(Exception), 
     before_sleep=before_sleep_log(logger, logging.DEBUG)
 )
-def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[], use_google_search=False):
+    def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[], use_google_search=False, system_instruction=None):
     """
     The Intelligence Hub.
     Flow: Puter (Tier 1 - Only for Non-Search) -> Gemini Chain (Tiers 2-5).
@@ -274,7 +274,7 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
     # Puter.js currently does NOT support Google Search Tools via this SDK.
     # Therefore, we skip Tier 1 if web search is requested.
     if not use_google_search:
-        result = try_puter_generation(prompt, STRICT_SYSTEM_PROMPT)
+        result = try_puter_generation(prompt, system_instruction if system_instruction else STRICT_SYSTEM_PROMPT)
         if result:
             try:
                 if required_keys: validate_structure(result, required_keys)
@@ -300,7 +300,7 @@ def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[]
 
     # Iterate through the chain until one succeeds or all fail
     for model in models_to_try:
-        gemini_result = try_gemini_generation(model, prompt, STRICT_SYSTEM_PROMPT, use_google_search)
+        gemini_result = try_gemini_generation(model, prompt, STRICT_SYSTEM_PROMPT, use_google_search, system_instruction if system_instruction else STRICT_SYSTEM_PROMPT)
         
         if gemini_result:
             try:

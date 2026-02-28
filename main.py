@@ -13,7 +13,7 @@ import re
 from urllib.parse import urlparse
 
 # --- Core Configurations & Modules ---
-from config import log, FORBIDDEN_PHRASES, ARTICLE_STYLE, BORING_KEYWORDS
+from config import log, FORBIDDEN_PHRASES, ARTICLE_STYLE, BORING_KEYWORDS, EEAT_GUIDELINES
 import api_manager
 import news_fetcher
 import scraper
@@ -104,8 +104,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             log(f"   👉 [Strategy: Legacy Hunt] Scanning Category: {category}")
             recent_history = history_manager.get_recent_titles_string(category=category)
             try:
-                seo_p = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today(), history=recent_history)
-                seo_plan = api_manager.generate_step_strict(model_name, seo_p, "SEO Strategy", ["target_keyword"], use_google_search=True)
+                seo_p = PROMPT_ZERO_SEO.format(category=category, date=datetime.date.today(), history=recent_history, eeat_guidelines=json.dumps(EEAT_GUIDELINES, ensure_ascii=False))
+                seo_plan = api_manager.generate_step_strict(model_name, seo_p, "SEO Strategy", ["target_keyword"], use_google_search=True, system_instruction=EEAT_GUIDELINES)
                 target_keyword = seo_plan.get('target_keyword')
             except Exception as e: return False
 
@@ -117,7 +117,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         intent_prompt = PROMPT_ARTICLE_INTENT.format(target_keyword=target_keyword, category=category)
         try:
             intent_analysis = api_manager.generate_step_strict(
-                model_name, intent_prompt, "Intent Analysis", ["content_type", "visual_strategy", "is_enterprise_b2b"]
+                model_name, intent_prompt, "Intent Analysis", ["content_type", "visual_strategy", "is_enterprise_b2b"], system_instruction=EEAT_GUIDELINES
             )
             content_type = intent_analysis.get("content_type", "News Analysis")
             visual_strategy = intent_analysis.get("visual_strategy", "hunt_for_screenshot") # Not used directly anymore but for logging
@@ -217,7 +217,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         competitor_data = []
         try:
             comp_prompt = PROMPT_COMPETITOR_ANALYSIS.format(target_keyword=target_keyword)
-            comp_result = api_manager.generate_step_strict(model_name, comp_prompt, "Competitor Analysis", ["competitors"], use_google_search=True)
+            comp_result = api_manager.generate_step_strict(model_name, comp_prompt, "Competitor Analysis", ["competitors"], use_google_search=True, system_instruction=EEAT_GUIDELINES)
             if comp_result and comp_result.get("competitors"):
                 competitor_data = comp_result["competitors"]
                 log(f"      ✅ Found competitors: {[c['name'] for c in competitor_data]}")
@@ -307,7 +307,10 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         log("   ✍️ [The Artisan] Writing the article...")
         artisan_prompt = PROMPT_B_TEMPLATE.format(
             blueprint_json=json.dumps(blueprint, ensure_ascii=False), # ensure_ascii=False for proper Arabic handling
-            raw_data_bundle=json.dumps({"research": combined_text[:15000], "reddit": reddit_context[:5000]}, ensure_ascii=False)
+            raw_data_bundle=json.dumps({"research": combined_text[:15000], "reddit": reddit_context[:5000]}, ensure_ascii=False),
+            eeat_guidelines=json.dumps(EEAT_GUIDELINES, ensure_ascii=False),
+            forbidden_phrases=json.dumps(FORBIDDEN_PHRASES, ensure_ascii=False),
+            boring_keywords=json.dumps(BORING_KEYWORDS, ensure_ascii=False)
         )
         json_b = api_manager.generate_step_strict(model_name, artisan_prompt, "Artisan Writer", ["headline", "article_body"])
         title = blueprint.get("final_title", json_b.get('headline', target_keyword))
@@ -379,7 +382,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
         kg_links = history_manager.get_relevant_kg_for_linking(title, category)
         seo_payload = {"draft_content": {"headline": title, "article_body": final_body_html}, "sources_data": sources_data}
-        json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(seo_payload, ensure_ascii=False), knowledge_graph=kg_links), "SEO Polish", ["finalTitle", "finalContent", "seo", "schemaMarkup"])
+        json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(seo_payload, ensure_ascii=False), knowledge_graph=kg_links, eeat_guidelines=json.dumps(EEAT_GUIDELINES, ensure_ascii=False), boring_keywords=json.dumps(BORING_KEYWORDS, ensure_ascii=False)), "SEO Polish", ["finalTitle", "finalContent", "seo", "schemaMarkup"], system_instruction=EEAT_GUIDELINES)
 
         if not img_url and json_c.get('imageGenPrompt'):
             log("   🎨 No real image found. Falling back to AI Image Generation...")

@@ -1,7 +1,3 @@
-# FILE: content_validator_pro.py
-# ROLE: Quality Assurance & Repair
-# UPDATED: Integrated with KeyManager for auto-rotation on 429 errors (The Unstoppable Surgeon).
-
 import re
 import requests
 import logging
@@ -13,13 +9,13 @@ from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_fixed
 from urllib.parse import urlparse
 from api_manager import key_manager  # <--- IMPORT KEY MANAGER
+from config import MIN_UNIQUE_SCORE, MIN_READABILITY_SCORE, MAX_AI_DETECTION_SCORE
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [CORE-SURGEON-3.0] - %(message)s')
 logger = logging.getLogger("CoreSurgeon")
 
 class AdvancedContentValidator:
     def __init__(self, model_name="gemini-2.5-flash"):
-        # REMOVED: self.client = google_client (We now fetch fresh clients dynamically)
         self.model_name = model_name
         self.session = requests.Session()
         self.session.headers.update({
@@ -46,7 +42,6 @@ class AdvancedContentValidator:
                     return client.models.generate_content(model=self.model_name, contents=prompt)
             except Exception as e:
                 error_str = str(e).lower()
-                # Detect Quota Errors
                 if "429" in error_str or "quota" in error_str or "exhausted" in error_str:
                     logger.warning(f"      ⚠️ Validator Quota Error (Key #{key_manager.current_index + 1}). Switching Key...")
                     if key_manager.switch_key():
@@ -56,7 +51,6 @@ class AdvancedContentValidator:
                         logger.error("      ❌ FATAL: All keys exhausted during validation.")
                         raise e
                 else:
-                    # If it's another error (like 500), raise it normally
                     raise e
         return None
 
@@ -144,7 +138,6 @@ class AdvancedContentValidator:
         OUTPUT: JSON dictionary {{ "original_html_string": "corrected_html_string" }}
         """
         try:
-            # UPDATED: Use _safe_generate instead of direct client call
             resp = self._safe_generate(
                 prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.1)
@@ -193,17 +186,14 @@ class AdvancedContentValidator:
     def _generate_element_from_ai(self, element_type, source_text):
         prompt = f"REBUILD TASK: Create a high-quality HTML {element_type} using ONLY facts from: {source_text[:8000]}. Use clean CSS classes. Output ONLY HTML."
         try:
-            # UPDATED: Use _safe_generate
             resp = self._safe_generate(prompt)
             return resp.text.replace("```html", "").replace("```", "").strip()
         except: return None
 
-    
     def restore_link_integrity(self, html_content, sources_metadata):
         soup = BeautifulSoup(html_content, 'html.parser')
         links = soup.find_all('a', href=True)
         
-        # القائمة البيضاء: مواقع نثق بها ولا نفحصها لأنها تحظر البوتات
         TRUSTED_DOMAINS = [
             "reddit.com", "youtube.com", "youtu.be", "twitter.com", "x.com", 
             "facebook.com", "instagram.com", "linkedin.com", "t.co", "discord.com",
@@ -213,31 +203,23 @@ class AdvancedContentValidator:
         for link in links:
             url = link['href']
             
-            # 1. إصلاح الروابط التي تبدأ بـ www (يضيف https لتجنب فتح نفس الصفحة)
             if url.startswith('www.'):
                 url = 'https://' + url
                 link['href'] = url
             
-            # تخطي الروابط الداخلية والهاشتاج
             if any(x in url for x in ["latestai.me", "#", "javascript:", "mailto:"]) or not url.startswith('http'):
                 continue
 
-            # 2. تخطي الفحص لمواقع التواصل الاجتماعي (لتجنب الحظر والخطأ)
             if any(domain in url.lower() for domain in TRUSTED_DOMAINS):
                 continue 
 
-            # 3. فحص الروابط الأخرى فقط
             try:
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-                # نستخدم stream=True لتقليل استهلاك البيانات
                 r = self.session.head(url, headers=headers, timeout=3, allow_redirects=True)
                 
-                # نعتبر الرابط ميتاً فقط في حالة 404 (غير موجود) أو 500 (خطأ خادم)
-                # نتجاهل 403 (Forbidden) و 429 (Too Many Requests) لأنها غالباً حماية ضد البوتات
                 if r.status_code in [404, 500, 502, 503]: 
                     raise Exception("Dead Link")
             except:
-                # إذا فشل الرابط فعلياً، نحاول استبداله بمصدر موثوق
                 parsed = urlparse(url)
                 domain = parsed.netloc.replace('www.', '')
                 replacement = None
@@ -251,11 +233,87 @@ class AdvancedContentValidator:
                     if replacement: 
                         link['href'] = replacement
                     else:
-                        # هام جداً: إذا لم نجد بديلاً، نترك الرابط الأصلي كما هو!
-                        # في السابق كان يتم إفساده، الآن نتركه لأن احتمال أن يكون سليماً عالٍ
                         pass 
 
         return str(soup)
+
+    def _calculate_readability(self, text):
+        words = re.findall(r'\b\w+\b', text.lower())
+        sentences = re.split(r'[.!?]', text)
+        syllables = sum([self._count_syllables(word) for word in words])
+
+        if len(words) == 0 or len(sentences) == 0: return 0
+
+        score = 0.39 * (len(words) / len(sentences)) + 11.8 * (syllables / len(words)) - 15.59
+        return max(0, round(score))
+
+    def _count_syllables(self, word):
+        word = word.lower()
+        count = 0
+        vowels = "aeiouy"
+        if word and word[0] in vowels: count += 1
+        for index in range(1, len(word)): 
+            if word[index] in vowels and word[index - 1] not in vowels: count += 1
+        if word.endswith("e"): count -= 1
+        if count == 0: count += 1
+        return count
+
+    def _check_ai_detection(self, text):
+        ai_keywords = ["as an AI language model", "I cannot", "in conclusion", "therefore", "however"]
+        words = text.split()
+        if not words: return 0.0
+        score = sum(1 for keyword in ai_keywords if keyword in text.lower()) / len(words)
+        return score * 10 
+
+    def _check_uniqueness(self, html_content, full_source_text):
+        soup = BeautifulSoup(html_content, 'html.parser')
+        generated_text = soup.get_text()
+
+        def get_ngrams(text, n=3):
+            words = re.findall(r'\b\w+\b', text.lower())
+            return set(tuple(words[i:i+n]) for i in range(len(words) - n + 1))
+
+        generated_ngrams = get_ngrams(generated_text)
+        source_ngrams = get_ngrams(full_source_text)
+
+        if not generated_ngrams: return 0.0
+        
+        common_ngrams = len(generated_ngrams.intersection(source_ngrams))
+        uniqueness_score = 1.0 - (common_ngrams / len(generated_ngrams))
+        return uniqueness_score
+
+    def _evaluate_eeat(self, html_content, sources_metadata):
+        prompt = f"""
+        TASK: Evaluate the following HTML content for E-E-A-T (Experience, Expertise, Authoritativeness, Trustworthiness).
+        Content: {html_content[:10000]}
+        Sources: {json.dumps(sources_metadata)}
+
+        Focus on:
+        - Does the content show first-hand experience or practical knowledge?
+        - Is the content written by or does it cite experts?
+        - Is the source reputable and recognized as an authority?
+        - Is the content accurate, verifiable, and free from misleading information?
+
+        Output JSON with scores (0-100) for each E-E-A-T factor and an overall confidence score.
+        {{
+            "experience_score": 75,
+            "expertise_score": 80,
+            "authoritativeness_score": 90,
+            "trustworthiness_score": 85,
+            "overall_eeat_confidence": 82,
+            "recommendations": "Add more direct quotes from experts."
+        }}
+        """
+        try:
+            resp = self._safe_generate(
+                prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.2)
+            )
+            json_text = self._clean_json_text(resp.text)
+            return json.loads(json_text)
+        except Exception as e:
+            logger.error(f"      ❌ E-E-A-T Evaluation Failed: {e}")
+            return {"overall_eeat_confidence": 50, "recommendations": "Could not evaluate E-E-A-T."}
 
     def verify_quotes(self, html_content, source_text):
         soup = BeautifulSoup(html_content, 'html.parser')
@@ -275,7 +333,6 @@ class AdvancedContentValidator:
     def _find_real_quote_from_ai(self, source_text):
         prompt = f"EXTRACT VERBATIM QUOTE: Find one powerful, real sentence from this text: {source_text[:5000]}. Return as HTML <blockquote>. Output ONLY HTML."
         try:
-            # UPDATED: Use _safe_generate
             resp = self._safe_generate(prompt)
             return resp.text.replace("```html", "").replace("```", "").strip()
         except: return None
@@ -283,23 +340,29 @@ class AdvancedContentValidator:
     def run_professional_validation(self, html_content, full_source_text, sources_metadata):
         logger.info("🛡️ CORE SURGEON 3.0: COMMENCING FULL RESTORATION...")
         
-        # 1. Fix TOC & Inject IDs
         html = self.inject_ids_and_rebuild_toc(html_content)
-        
-        # 2. STYLE AI SOURCES (New Step)
         html = self.style_ai_generated_sources(html)
-        
-        # 3. Facts (Now Protected by Key Rotation)
         html = self.perform_fact_surgery(html, full_source_text)
-        
-        # 4. Widgets
         html = self.rebuild_damaged_widgets(html, full_source_text)
-        
-        # 5. Quotes
         html = self.verify_quotes(html, full_source_text)
-        
-        # 6. Links
         html = self.restore_link_integrity(html, sources_metadata)
+
+        uniqueness_score = self._check_uniqueness(html, full_source_text)
+        readability_score = self._calculate_readability(BeautifulSoup(html, 'html.parser').get_text())
+        ai_detection_score = self._check_ai_detection(BeautifulSoup(html, 'html.parser').get_text())
+        eeat_evaluation = self._evaluate_eeat(html, sources_metadata)
+
+        logger.info(f"📊 Quality Metrics: Uniqueness: {uniqueness_score:.2f}, Readability (FKGL): {readability_score}, AI Detection: {ai_detection_score:.2f}")
+        logger.info(f"🌟 E-E-A-T Confidence: {eeat_evaluation['overall_eeat_confidence']} - Recommendations: {eeat_evaluation['recommendations']}")
+
+        if uniqueness_score < MIN_UNIQUE_SCORE:
+            logger.warning(f"      ⚠️ Content uniqueness ({uniqueness_score:.2f}) is below threshold ({MIN_UNIQUE_SCORE}). Consider re-writing.")
+        if readability_score < MIN_READABILITY_SCORE:
+            logger.warning(f"      ⚠️ Content readability ({readability_score}) is below threshold ({MIN_READABILITY_SCORE}). Consider simplifying.")
+        if ai_detection_score > MAX_AI_DETECTION_SCORE:
+            logger.warning(f"      ⚠️ AI detection score ({ai_detection_score:.2f}) is above threshold ({MAX_AI_DETECTION_SCORE}). Consider humanizing.")
+        if eeat_evaluation['overall_eeat_confidence'] < 70:
+            logger.warning(f"      ⚠️ Low E-E-A-T confidence ({eeat_evaluation['overall_eeat_confidence']}). Review recommendations: {eeat_evaluation['recommendations']}")
         
         html = re.sub(r'</?(html|body|head|meta|title)>', '', html, flags=re.IGNORECASE)
         html = re.sub(r'>\s+<', '><', html).strip()
