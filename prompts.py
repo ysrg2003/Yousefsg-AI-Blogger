@@ -191,7 +191,7 @@ OUTPUT PURE JSON ONLY:
 
 # ------------------------------------------------------------------
 
-PROMPT_COMPETITOR_ANALYSIS_SMART = """
+PROMPT_COMPETITOR_ANALYSIS = """
 🔎 **Advanced Competitor Analysis for AI Blogging**
 
 Target Keyword: {target_keyword}
