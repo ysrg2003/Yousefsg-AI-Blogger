@@ -1,11 +1,10 @@
 # reddit_manager.py
 # ==============================================================================
-# Reddit Manager - ScraperAPI-enabled (Integration for Yousefsg-AI-Blogger)
-# - Uses old.reddit.com for stable JSON fetching
-# - Outputs www.reddit.com links for posts & comments
-# - Configurable top variables
-# - Optional ScraperAPI proxy (controlled by env)
-# - Exposes get_community_intel(long_keyword) -> (text_context, media_assets)
+# Reddit Manager - Robust Reddit evidence gatherer (ScraperAPI-enabled)
+# - Sanitizes queries for reddit search
+# - Supports ScraperAPI proxy (optional, via SCRAPER_API_KEY)
+# - Logs JSON snippets for debugging when no results
+# - Returns same shape expected by main.py: (text_context, media_assets)
 # ==============================================================================
 
 import os
@@ -18,28 +17,31 @@ from typing import List, Dict, Any, Optional
 import requests
 import urllib3
 
-# Project imports (must exist in your repo)
-from config import log, USER_AGENTS  # config.log used by main.py pipeline
-import ai_strategy
+# Try to import project's config.log and USER_AGENTS; fallback to simple logger
+try:
+    from config import log, USER_AGENTS
+except Exception:
+    def log(msg: str):
+        print(msg)
+    USER_AGENTS = ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117 Safari/537.36"]
 
-# Suppress insecure warnings in environments like Pydroid where verify=False may be used.
+# suppress insecure warnings if verify=False is used anywhere
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # -----------------------------
 # CONFIGURABLE / ENV VARIABLES
 # -----------------------------
-# Default behavior: configurable by editing these constants or via environment variables
-SEARCH_QUERY_DEFAULT = "python learning"
 PAGES_TO_FETCH = int(os.getenv("REDDIT_PAGES_TO_FETCH", "2"))
 POSTS_PER_PAGE = int(os.getenv("REDDIT_POSTS_PER_PAGE", "3"))
 COMMENTS_LIMIT = int(os.getenv("REDDIT_COMMENTS_LIMIT", "100"))
-REQUEST_DELAY = float(os.getenv("REDDIT_REQUEST_DELAY", "2.0"))
+REQUEST_DELAY = float(os.getenv("REDDIT_REQUEST_DELAY", "1.0"))
 USE_SCRAPERAPI = os.getenv("USE_SCRAPERAPI_IF_AVAILABLE", "true").lower() in ("1", "true", "yes")
-SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY", "").strip()  # set this in CI secrets if you want proxy
-# -----------------------------
-
-BASE_FETCH = "https://old.reddit.com"   # used for fetching .json reliably
-OUTPUT_BASE = "https://www.reddit.com"  # links returned to the pipeline
+SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY", "").strip()
+# Which reddit host to fetch (old or www). Some proxies behave differently for each.
+BASE_FETCH = os.getenv("REDDIT_BASE_FETCH", "https://old.reddit.com").rstrip("/")
+OUTPUT_BASE = os.getenv("REDDIT_OUTPUT_BASE", "https://www.reddit.com").rstrip("/")
+# default time window for reddit search (all | year | month | week | day)
+DEFAULT_TIME_WINDOW = os.getenv("REDDIT_TIME_WINDOW", "all")
 
 # Helpers
 def _choose_user_agent() -> str:
@@ -50,13 +52,12 @@ def _choose_user_agent() -> str:
         pass
     return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117 Safari/537.36"
 
-
 class RedditManager:
     def __init__(self, session: Optional[requests.Session] = None, user_agent: Optional[str] = None):
         self.session = session or requests.Session()
         ua = user_agent or _choose_user_agent()
         self.session.headers.update({"User-Agent": ua, "Accept": "application/json"})
-        # Use ScraperAPI only if key present and allowed
+        # Use ScraperAPI only if configured and key present
         self.use_scraper = USE_SCRAPERAPI and bool(SCRAPER_API_KEY)
         self.scraper_key = SCRAPER_API_KEY if self.use_scraper else None
 
@@ -72,15 +73,16 @@ class RedditManager:
         """
         Try in order:
           1) ScraperAPI proxy (if enabled)
-          2) Direct request to old.reddit.com
-        Returns a requests.Response or None.
+          2) Direct request to BASE_FETCH
+        Returns requests.Response or None.
         """
-        # Try proxy first if enabled
+        # prefer proxy if enabled
         if self.use_scraper and self.scraper_key:
             try:
                 encoded = urllib.parse.quote(url, safe="")
+                # try https first (some environments prefer http)
                 proxy_url = f"https://api.scraperapi.com?api_key={self.scraper_key}&url={encoded}&render=true"
-                log(f" [RedditManager] Attempting ScraperAPI proxy for {url[:120]}...")
+                log(f" [RedditManager] Attempting ScraperAPI proxy for {url[:160]}")
                 resp = self.session.get(proxy_url, timeout=timeout, verify=False)
                 log(f" [RedditManager] ScraperAPI status: {resp.status_code} content-type: {resp.headers.get('Content-Type')}")
                 if resp.status_code == 200:
@@ -90,9 +92,24 @@ class RedditManager:
             except Exception as e:
                 log(f" [RedditManager] ScraperAPI request failed: {e}. Falling back to direct.")
 
-        # Direct request fallback
+            # second attempt: try http proxy endpoint (sometimes required)
+            try:
+                encoded = urllib.parse.quote(url, safe="")
+                proxy_url = f"http://api.scraperapi.com?api_key={self.scraper_key}&url={encoded}"
+                log(f" [RedditManager] Attempting ScraperAPI (http) for {url[:160]}")
+                resp = self.session.get(proxy_url, timeout=timeout, verify=False)
+                log(f" [RedditManager] ScraperAPI(http) status: {resp.status_code} content-type: {resp.headers.get('Content-Type')}")
+                if resp.status_code == 200:
+                    return resp
+                else:
+                    log(f" [RedditManager] ScraperAPI(http) returned {resp.status_code}.")
+            except Exception as e:
+                log(f" [RedditManager] ScraperAPI(http) request failed: {e}.")
+            # if proxy fails, fall through to direct below
+
+        # Direct fetch fallback
         try:
-            log(f" [RedditManager] Direct fetch: {url[:120]}")
+            log(f" [RedditManager] Direct fetch: {url[:160]}")
             resp = self.session.get(url, timeout=timeout, verify=False)
             log(f" [RedditManager] Direct fetch status: {resp.status_code} content-type: {resp.headers.get('Content-Type')}")
             if resp.status_code == 200:
@@ -110,22 +127,24 @@ class RedditManager:
             return None
         text = resp.text or ""
         ct = (resp.headers.get("Content-Type") or "").lower()
-        # Quick guard: if JSON-ish try parse
+        # If content-type indicates JSON or the body looks JSON-ish, attempt to parse
         if "application/json" in ct or text.strip().startswith(("{", "[")):
             try:
                 return resp.json()
             except Exception as e:
                 log(f" [RedditManager] JSON parse error: {e}")
-                log(f" [RedditManager] Response snippet: {text[:800]}")
+                # log snippet for debugging
+                log(f" [RedditManager] Response snippet: {text[:1000]}")
                 return None
         else:
-            log(f" [RedditManager] Non-JSON response (content-type={ct}). Snippet: {text[:400]}")
+            # sometimes proxy returns HTML wrapper even for .json endpoints
+            log(f" [RedditManager] Non-JSON response (content-type={ct}). Snippet: {text[:1000]}")
             return None
 
     def _extract_media(self, data: Dict[str, Any]) -> List[str]:
         media: List[str] = []
         url = (data.get("url") or "") or ""
-        if isinstance(url, str) and any(ext in url.lower() for ext in [".jpg", ".jpeg", ".png", ".gif", "v.redd.it", "imgur.com", "i.redd.it"]):
+        if isinstance(url, str) and any(ext in url.lower() for ext in [".jpg", ".jpeg", ".png", ".gif", "v.redd.it", "imgur.com", "i.redd.it", "gallery"]):
             media.append(url)
         text = (data.get("selftext") or data.get("body") or "") or ""
         found = re.findall(r'(https?://[^\s)\]]+\.(?:jpg|jpeg|png|gif|mp4))', text, re.IGNORECASE)
@@ -159,7 +178,7 @@ class RedditManager:
             if not body or body in ("[deleted]", "[removed]"):
                 continue
             cid = d.get("id")
-            # build direct comment link on www.reddit.com
+            # build direct comment link on www.reddit.com (post_permalink includes trailing slash)
             comment_link = f"{OUTPUT_BASE}{post_permalink}{cid}"
             # nested replies
             replies: List[Dict[str, Any]] = []
@@ -179,7 +198,6 @@ class RedditManager:
         return parsed
 
     def _fetch_post_with_comments(self, permalink: str, comments_limit: int = COMMENTS_LIMIT) -> Optional[Dict[str, Any]]:
-        # permalink is like /r/.../comments/<id>/<slug>/
         url = f"{BASE_FETCH}{permalink}.json?limit={comments_limit}"
         j = self._get_json(url)
         if not j or not isinstance(j, list) or len(j) < 2:
@@ -204,19 +222,49 @@ class RedditManager:
             return None
 
     def search(self, query: str, pages: int = PAGES_TO_FETCH, posts_per_page: int = POSTS_PER_PAGE, comments_limit: int = COMMENTS_LIMIT, delay: float = REQUEST_DELAY) -> Dict[str, Any]:
+        """
+        Search reddit using the graduated query provided by ai_strategy.
+        Returns dict: {"query": original_query, "posts": [...]}
+        """
         results: Dict[str, Any] = {"query": query, "posts": []}
         after = None
+
+        # --- sanitize query for reddit search:
+        # remove "site:..." clauses because they're meant for Google and can break reddit search
+        q = re.sub(r'\bsite:\S+\b', '', query, flags=re.IGNORECASE).strip()
+        # remove double quotes to broaden matching (reddit search handles quoted phrases poorly)
+        q = q.replace('"', '').strip()
+        # fallback to default time window
+        time_window = DEFAULT_TIME_WINDOW or "all"
+
         for page in range(max(1, pages)):
-            log(f" [RedditManager] Fetching search page {page+1} for '{query}'")
-            search_url = f"{BASE_FETCH}/search.json?q={urllib.parse.quote(query)}&limit={posts_per_page}&sort=relevance&t=month"
+            log(f" [RedditManager] Fetching search page {page+1} for '{query}' (sanitized: '{q}')")
+            search_url = f"{BASE_FETCH}/search.json?q={urllib.parse.quote_plus(q)}&limit={posts_per_page}&sort=relevance&t={time_window}"
             if after:
                 search_url += f"&after={after}"
+
+            log(f" [RedditManager] Search URL: {search_url[:320]}")
             j = self._get_json(search_url)
+
+            # debug: dump a small snippet of returned JSON for debugging
+            if j is None:
+                log(f" [RedditManager] No JSON returned for search URL.")
+                break
+            else:
+                try:
+                    snippet = json.dumps(j)[:1000]
+                    log(f" [RedditManager] Search JSON snippet: {snippet}")
+                except Exception:
+                    log(" [RedditManager] Could not stringify search JSON snippet.")
+
             if not j or "data" not in j:
                 log(" [RedditManager] Search returned no data or failed.")
                 break
+
             children = j["data"].get("children", [])
             after = j["data"].get("after")
+            if not children:
+                log(" [RedditManager] Search returned zero children for this page.")
             for c in children:
                 perm = c.get("data", {}).get("permalink")
                 if not perm:
@@ -224,8 +272,9 @@ class RedditManager:
                 item = self._fetch_post_with_comments(perm, comments_limit)
                 if item:
                     results["posts"].append(item)
-                # polite pause between post fetches to reduce rate-limit risk
+                # polite pause between post fetches
                 time.sleep(0.3)
+            # polite pause between pages
             time.sleep(max(0.5, delay))
         return results
 
@@ -262,14 +311,22 @@ def generate_writer_brief(data: Dict[str, Any]) -> str:
 # ---- public adapter used by main.py pipeline ----
 def get_community_intel(long_keyword: str):
     """
-    Maintains the same API used by main.py:
+    Maintains same API used by main.py:
     Returns: (text_context: str, media_assets: List[dict])
     """
     log(f"🧠 [Reddit Manager] Initiating Graduated Search for: '{long_keyword}'")
-    search_plan = ai_strategy.generate_graduated_search_plan(long_keyword)
+    search_plan = []
+    try:
+        import ai_strategy
+        search_plan = ai_strategy.generate_graduated_search_plan(long_keyword)
+    except Exception as e:
+        log(f" [RedditManager] ai_strategy import/generate failed: {e}. Falling back to raw keyword.")
+        search_plan = [long_keyword]
+
     rm = RedditManager()
     final_data = None
     used_query = ""
+
     for idx, q in enumerate(search_plan):
         log(f" [Reddit Manager] Attempt {idx+1}/{len(search_plan)} -> '{q}'")
         raw = rm.search(q, pages=PAGES_TO_FETCH, posts_per_page=POSTS_PER_PAGE, comments_limit=COMMENTS_LIMIT, delay=REQUEST_DELAY)
@@ -284,7 +341,7 @@ def get_community_intel(long_keyword: str):
         log(" [Reddit Manager] All search attempts failed. Returning empty result.")
         return "", []
 
-    # generate text context and collect media assets (same shape original pipeline expects)
+    # generate text context and collect media assets
     text_context = generate_writer_brief(final_data)
     media_assets: List[Dict[str, Any]] = []
 
