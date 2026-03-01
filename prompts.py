@@ -165,7 +165,8 @@ VISUAL STRATEGY OPTIONS (Choose ONE):
 7. "generate_timeline": Best for historical events, evolution of a product, or legal cases.
 
 
-8. "generate_infographic": Best for topics with a lot of statistics or data.
+8. "generate_infographic": Best for topics with a lot of sta
+tistics or data.
 
 
 
@@ -190,6 +191,7 @@ OUTPUT PURE JSON ONLY:
 # PROMPT_COMPETITOR_ANALYSIS — يرجع JSON منظّم عن المنافسين المباشرين
 
 # ------------------------------------------------------------------
+
 PROMPT_COMPETITOR_ANALYSIS = """
 Return ONLY a valid JSON object. Do not write explanations, text, or markdown.
 
@@ -203,29 +205,29 @@ Requirements:
 - Do not omit the key under any condition.
 
 JSON Schema:
-{
+{{
   "competitors": [
-    {
+    {{
       "name": "competitor name",
       "website": "website or platform",
       "core_strengths": ["strength1", "strength2"],
       "weaknesses": ["gap1", "gap2"],
       "unique_selling_points": ["usp1", "usp2"],
       "market_position": "short description",
-      "popularity_metrics": {
+      "popularity_metrics": {{
         "traffic": "optional",
         "users": "optional"
-      },
+      }},
       "pricing_or_monetization": "optional",
       "tier": "Tier 1 | Tier 2 | Tier 3"
-    }
+    }}
   ],
-  "summary": {
+  "summary": {{
     "market_trends": "text",
     "opportunities": "text",
     "recommended_focus_areas": "text"
-  }
-}
+  }}
+}}
 
 Pre-Filled Competitors: {competitors}
 
@@ -240,7 +242,6 @@ Important Rules:
 - Do not remove the key "competitors".
 - If data is missing, return empty arrays or null values instead of removing keys.
 """.strip()
-
 
 
 # ------------------------------------------------------------------
