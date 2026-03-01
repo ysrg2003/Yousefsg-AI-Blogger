@@ -1,6 +1,8 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "What's new in Azure OpenAI in Azure AI Foundry Models? (classic) Mastery Series",
+  "queue": [
+    "Strategic Edge: How Azure OpenAI's Latest Foundry Model Updates Reshape the Enterprise AI Landscape"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
