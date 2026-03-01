@@ -5,7 +5,7 @@
 import json
 from config import log, EEAT_GUIDELINES
 from api_manager import generate_step_strict
-from prompts import PROMPT_ARCHITECT_BLUEPRINT # سنستدعي البرومبت من ملف prompts.py
+from prompts import PROMPT_ARCHITECT_BLUEPRINT, PROMPT_B_TEMPLATE  # أضفنا استيراد قالب البرومبت للكتابة
 
 def create_article_blueprint(topic, content_type, research_data, reddit_context, visual_context, model_name):
     """
@@ -72,7 +72,13 @@ def write_article_from_blueprint(blueprint, raw_data_bundle, collected_assets, m
             system_instruction=eeat_guidelines
         )
         log("      ✅ Article content generated successfully.")
-        return article_content.get("finalContent")
+        # article_content متوقع أن يكون dict؛ نرجع finalContent أو النص كـ fallback
+        return article_content.get("finalContent") if isinstance(article_content, dict) else article_content
     except Exception as e:
         log(f"      ❌ CRITICAL: The Artisan failed to write the article: {e}")
-        return "<h1>Error: Article Generation Failed</h1><p>Due to a critical error during the article generation process, we were unable to produce the content. Please try again later or review the system logs for more details.</p>
+        # إرجاع HTML احتياطي مغلق بشكل صحيح
+        return (
+            "<h1>Error: Article Generation Failed</h1>"
+            "<p>Due to a critical error during the article generation process, we were unable to produce the content. "
+            "Please try again later or review the system logs for more details.</p>"
+        )
