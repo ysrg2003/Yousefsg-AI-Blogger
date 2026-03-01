@@ -25,8 +25,8 @@ PUTER_MODEL = "claude-3-5-sonnet"
 # 2. Google Gemini Fallback Chain (Ordered from Strongest/Smartest to Fastest/Cheapest)
 GEMINI_FALLBACK_CHAIN = [
     "gemini-3-flash-preview",   # Best reasoning capabilities
-    "gemini-2.5-flash-lite",  # Best context handling
-    "gemini-2.5-flash",       # Balanced performance
+    "gemini-2.5-flash",  # Best context handling
+    "gemini-2.5-flash-lite",       # Balanced performance
     "gemini-robotics-er-1.5-preview"        # Reliable fallback
 ]
 
@@ -260,7 +260,7 @@ def try_gemini_generation(model_name, prompt, system_prompt, use_google_search=F
     retry=retry_if_exception_type(Exception), 
     before_sleep=before_sleep_log(logger, logging.DEBUG)
 )
-    def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[], use_google_search=False, system_instruction=None):
+def generate_step_strict(initial_model_name, prompt, step_name, required_keys=[], use_google_search=False, system_instruction=None):
     """
     The Intelligence Hub.
     Flow: Puter (Tier 1 - Only for Non-Search) -> Gemini Chain (Tiers 2-5).
