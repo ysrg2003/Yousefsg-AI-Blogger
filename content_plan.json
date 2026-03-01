@@ -1,7 +1,8 @@
 {
-  "active_cluster": "What's new in Azure OpenAI in Azure AI Foundry Models? (classic) Mastery Series",
+  "active_cluster": "Sora 2 is here Mastery Series",
   "queue": [
-    "Strategic Edge: How Azure OpenAI's Latest Foundry Model Updates Reshape the Enterprise AI Landscape"
+    "Mastering Sora 2: A Hands-On Guide to Leveraging OpenAI's Newest AI Video Generation Features",
+    "Sora 2 vs. The Landscape: Comparing OpenAI's Latest AI Video Model Against Competitors and Legacy Versions"
   ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
@@ -20,7 +21,8 @@
     "Orion Announces Denali AI Enterprise Version, Powering a New Era in Advisor Productivity Mastery Series",
     "The new interface era: Voice AI becomes dominant while most enterprises lag behind Mastery Series",
     "Best TTS APIs for Real-Time Voice Agents (2026 Benchmarks) - Inworld AI Mastery Series",
-    "Qwen3-TTS Family is Now Open Sourced: Voice Design, Clone, and Generation! Mastery Series"
+    "Qwen3-TTS Family is Now Open Sourced: Voice Design, Clone, and Generation! Mastery Series",
+    "What's new in Azure OpenAI in Azure AI Foundry Models? (classic) Mastery Series"
   ],
   "last_generated": "2026-03-01"
 }
