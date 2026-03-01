@@ -46,6 +46,53 @@ import image_enricher
 import content_architect
 import deep_dive_researcher
 
+# ----- safety fallbacks & JSON repair helpers (paste after `from prompts import *`) -----
+import json, re
+
+# Fallback PROMPT_D_TEMPLATE if prompts.py didn't define it (prevents NameError)
+if 'PROMPT_D_TEMPLATE' not in globals():
+    PROMPT_D_TEMPLATE = (
+        "CONTEXT: Humanizer fallback. Input HTML in {content_input}.\n\n"
+        "TASK: Return a JSON object with key 'finalContent' containing the humanized HTML.\n\n"
+        "OUTPUT (JSON only): {\"finalContent\": \"<p>unknown</p>\"}"
+    )
+
+def _safe_load_json_from_text(text: Any) -> dict:
+    """
+    Try to parse the first JSON object found inside `text`.
+    Returns a dict (may be empty) and never raises.
+    """
+    try:
+        if isinstance(text, dict):
+            return text
+        if not text or not isinstance(text, str):
+            return {}
+        # try direct load first
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+        # extract first {...} block (non-recursive but practical)
+        m = re.search(r'(\{(?:[^{}]|\{[^{}]*\})*\})', text, re.S)
+        if m:
+            candidate = m.group(1)
+            # common quick repairs
+            candidate = candidate.replace("\r\n", " ").replace("\n", " ")
+            candidate = re.sub(r',\s*}', '}', candidate)
+            candidate = re.sub(r',\s*]', ']', candidate)
+            try:
+                return json.loads(candidate)
+            except Exception:
+                # try replacing single quotes with double (last resort)
+                try:
+                    return json.loads(candidate.replace("'", '"'))
+                except Exception:
+                    return {}
+        return {}
+    except Exception:
+        return {}
+# ---------------------------------------------------------------------------------------
+
 
 # ---------------------------
 # Generic safe execution helpers (fallback + optional retries)
@@ -602,22 +649,59 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         # SEO POLISH, HUMANIZER, AND INJECTIONS (Robust with smart fallback)
         # ======================================================================
-        sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
-        kg_links = history_manager.get_relevant_kg_for_linking(title, category)
-        seo_payload = {"draft_content": {"headline": title, "article_body": final_body_html}, "sources_data": sources_data}
+        placeholders = ["html_content", "original_sources", "knowledge_graph", "eeat_guidelines", "boring_keywords"]
 
+        # Make a work copy
+        _tpl = PROMPT_C_TEMPLATE
+
+        # 1) temporarily replace real placeholders with unique tokens
+        token_map = {}
+        for ph in placeholders:
+            token = f"___PH_{ph}___"
+            token_map[token] = ph
+            _tpl = _tpl.replace("{" + ph + "}", token)
+
+        # 2) escape all remaining { } so .format won't try to interpret them (turn into literal braces)
+        _tpl = _tpl.replace("{", "{{").replace("}", "}}")
+
+        # 3) restore the placeholders tokens back to single-brace placeholders
+        for token, ph in token_map.items():
+            _tpl = _tpl.replace(token, "{" + ph + "}")
+
+        # 4) now safely format with our real values
+        prompt_text = _tpl.format(
+            html_content=final_body_html,
+            original_sources=json.dumps(sources_data, ensure_ascii=False),
+            knowledge_graph=json.dumps(kg_links, ensure_ascii=False),
+            eeat_guidelines=json.dumps(EEAT_GUIDELINES, ensure_ascii=False),
+            boring_keywords=json.dumps(BORING_KEYWORDS, ensure_ascii=False)
+        )
+
+        # 5) Call the API using the prepared prompt_text
+        raw_resp = None
+        json_c = {}
         try:
-            json_c = api_manager.generate_step_strict(
+            resp = api_manager.generate_step_strict(
                 model_name,
-                PROMPT_C_TEMPLATE.format(html_content=final_body_html, original_sources=json.dumps(sources_data, ensure_ascii=False), knowledge_graph=json.dumps(kg_links, ensure_ascii=False), eeat_guidelines=json.dumps(EEAT_GUIDELINES, ensure_ascii=False), boring_keywords=json.dumps(BORING_KEYWORDS, ensure_ascii=False)),
+                prompt_text,
                 "SEO Polish",
                 ["finalTitle", "finalContent", "seo", "schemaMarkup"],
                 system_instruction=EEAT_GUIDELINES
             )
+            if isinstance(resp, dict):
+                json_c = resp
+            else:
+                raw_resp = getattr(api_manager, "last_response", None) or resp
+                json_c = _safe_load_json_from_text(raw_resp) if raw_resp else {}
         except Exception as e:
             log(f"   ⚠️ SEO Polish generate_step_strict failed: {e}")
             _log_raw_api_response_if_available()
-            json_c = {}
+            raw_resp = getattr(api_manager, "last_response", None)
+            json_c = _safe_load_json_from_text(raw_resp) if raw_resp else {}
+            if not isinstance(json_c, dict):
+                json_c = {}
+        # ======================================================================
+
 
         # Ensure & fill SEO keys (smart)
         json_c = ensure_and_fill_missing_keys(model_name, json_c, final_body_html)
