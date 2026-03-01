@@ -351,7 +351,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
         # A. Get Sources List
         sources_to_scrape = []
-        deep_dive_results = safe_execute(deep_dive_researcher.conduct_deep_dive, fallback={}, context="deep_dive_researcher.conduct_deep_dive", retries=1, target_keyword=target_keyword, model_name=model_name)
+        # PASS POSITIONAL ARGS to match underlying signature (query, model_name)
+        deep_dive_results = safe_execute(deep_dive_researcher.conduct_deep_dive, {}, "deep_dive_researcher.conduct_deep_dive", 1, 1.0, target_keyword, model_name)
         if deep_dive_results:
             sources_to_scrape.extend(deep_dive_results.get("official_sources", []))
             sources_to_scrape.extend(deep_dive_results.get("research_studies", []))
@@ -368,7 +369,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             log("   🔍 [Research Expansion] Deep Dive results insufficient. Expanding search with Multi-Perspective Queries...")
             expansion_queries = ai_strategy.generate_multi_perspective_queries(target_keyword)
             for eq in expansion_queries:
-                exp_items = safe_execute(news_fetcher.get_strict_rss, fallback=[], context="news_fetcher.get_strict_rss", retries=1, eq=eq, category=category)
+                # news_fetcher.get_strict_rss(query, category) — pass positional args
+                exp_items = safe_execute(news_fetcher.get_strict_rss, [], "news_fetcher.get_strict_rss", 1, 1.0, eq, category)
                 for item in exp_items[:2]:
                     if not any(s.get('url') == item['link'] for s in sources_to_scrape):
                         sources_to_scrape.append({"url": item['link'], "page_name": item['title']})
@@ -379,7 +381,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             url = src_item.get('url') or src_item.get('link')
             if not url or url in processed_urls: continue
             processed_urls.add(url)
-            res = safe_execute(scraper.resolve_and_scrape, fallback=(None, None, None, None, []), context="scraper.resolve_and_scrape", retries=1, url=url)
+            # scraper.resolve_and_scrape(url) — pass positional url
+            res = safe_execute(scraper.resolve_and_scrape, (None, None, None, None, []), "scraper.resolve_and_scrape", 1, 1.0, url)
             if not res:
                 log(f"      ⚠️ scraper returned nothing for {url}")
                 continue
@@ -407,7 +410,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         # 4. REDDIT INTEL & COMPETITOR ANALYSIS
         # ======================================================================
-        reddit_context, reddit_media = safe_execute(reddit_manager.get_community_intel, fallback=("", []), context="reddit_manager.get_community_intel", retries=1, long_keyword=smart_query)
+        # reddit_manager.get_community_intel(long_keyword) — pass positional
+        reddit_context, reddit_media = safe_execute(reddit_manager.get_community_intel, ("", []), "reddit_manager.get_community_intel", 1, 1.0, smart_query)
         for media in reddit_media:
             all_collected_assets.append({
                 "type": "image", "url": media['url'], "description": media['description'],
@@ -473,7 +477,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             chart_data = ensure_required_keys_generic(model_name, chart_data or {}, {"data_points": chart_prompt})
             
             if chart_data and chart_data.get('data_points') and len(chart_data['data_points']) >= 2:
-                chart_url = safe_execute(chart_generator.create_chart_from_data, fallback=None, context="chart_generator.create_chart_from_data", retries=1, data=chart_data['data_points'], title=chart_data.get('chart_title', f'{target_keyword} Comparison'))
+                # create_chart_from_data(data_points, title)
+                chart_url = safe_execute(chart_generator.create_chart_from_data, None, "chart_generator.create_chart_from_data", 1, 1.0, chart_data['data_points'], chart_data.get('chart_title', f'{target_keyword} Comparison'))
                 if chart_url:
                     log(f"      ✅ Chart Generated & Uploaded: {chart_url}")
                     chart_id = "[[GENERATED_CHART]]"
@@ -491,7 +496,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             competitor_text = "\n\n--- COMPETITOR ANALYSIS ---\n" + json.dumps(competitor_data, ensure_ascii=False) # Ensure non-ASCII chars are handled
         combined_text = "\n\n".join([s['text'][:8000] for s in collected_sources]) + competitor_text
         
-        blueprint = safe_execute(content_architect.create_article_blueprint, fallback=None, context="content_architect.create_article_blueprint", retries=1, target_keyword=target_keyword, content_type=content_type, combined_text=combined_text, reddit_context=reddit_context, visual_context="\n".join(visual_context_for_writer), model_name=model_name)
+        # content_architect.create_article_blueprint(target_keyword, content_type, combined_text, reddit_context, visual_context, model_name)
+        blueprint = safe_execute(content_architect.create_article_blueprint, None, "content_architect.create_article_blueprint", 1, 1.0, target_keyword, content_type, combined_text, reddit_context, "\n".join(visual_context_for_writer), model_name)
         if not blueprint or not blueprint.get("article_blueprint"):
             log("   ❌ CRITICAL FAILURE: Blueprint creation failed. Aborting pipeline.")
             return False
@@ -530,7 +536,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
             replacement_html = ""
             if asset['type'] == 'image':
-                final_img_url = safe_execute(image_processor.upload_external_image, fallback=asset['url'], context="image_processor.upload_external_image", retries=1, url=asset['url'], filename=f"asset-{target_keyword[:20].replace(' ', '-')}")
+                # image_processor.upload_external_image(url, filename)
+                final_img_url = safe_execute(image_processor.upload_external_image, asset['url'], "image_processor.upload_external_image", 1, 1.0, asset['url'], f"asset-{target_keyword[:20].replace(' ', '-')}")
                 if not final_img_url:
                     log(f"      ❌ Failed to upload image for {asset_id}. Trying original URL.")
                     final_img_url = asset['url'] # Fallback to original if upload fails
@@ -560,13 +567,14 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         script_json = vs_payload.get('video_script', []) if vs_payload else []
         if script_json:
             ts = int(time.time())
-            main_video_path = safe_execute(video_renderer.VideoRenderer(output_dir="output").render_video, fallback=None, context="video_renderer.render_video_main", retries=0, script=script_json, title=title, filename=f"main_{ts}.mp4")
+            # VideoRenderer.render_video(script, title, filename)
+            main_video_path = safe_execute(video_renderer.VideoRenderer(output_dir="output").render_video, None, "video_renderer.render_video_main", 0, 0.0, script_json, title, f"main_{ts}.mp4")
             if main_video_path:
-                vid_main_id, vid_main_url = safe_execute(youtube_manager.upload_video_to_youtube, fallback=(None, None), context="youtube_manager.upload_video_to_youtube_main", retries=0, path=main_video_path, title=title, description="AI Analysis", tags=[t.strip() for t in category.split()])
-            short_video_path = safe_execute(video_renderer.VideoRenderer(output_dir="output", width=1080, height=1920).render_video, fallback=None, context="video_renderer.render_video_short", retries=0, script=script_json, title=title, filename=f"short_{ts}.mp4")
+                vid_main_id, vid_main_url = safe_execute(youtube_manager.upload_video_to_youtube, (None, None), "youtube_manager.upload_video_to_youtube_main", 0, 0.0, main_video_path, title, "AI Analysis", [t.strip() for t in category.split()])
+            short_video_path = safe_execute(video_renderer.VideoRenderer(output_dir="output", width=1080, height=1920).render_video, None, "video_renderer.render_video_short", 0, 0.0, script_json, title, f"short_{ts}.mp4")
             if short_video_path:
                 local_fb_video = short_video_path
-                vid_short_id, _ = safe_execute(youtube_manager.upload_video_to_youtube, fallback=(None, None), context="youtube_manager.upload_video_to_youtube_short", retries=0, path=short_video_path, title=f"{title[:50]} #Shorts", description="Quick Look", tags=["shorts", category])
+                vid_short_id, _ = safe_execute(youtube_manager.upload_video_to_youtube, (None, None), "youtube_manager.upload_video_to_youtube_short", 0, 0.0, short_video_path, f"{title[:50]} #Shorts", "Quick Look", ["shorts", category])
 
         if vid_main_url and vid_main_url.startswith("https://"):
             video_html = f'<h3>Watch the Video Summary</h3><div class="video-wrapper" style="position:relative;padding-bottom:56.25%;"><iframe src="{vid_main_url}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{title}"></iframe></div>'
@@ -602,7 +610,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         if not img_url and isinstance(json_c, dict) and json_c.get('imageGenPrompt'):
             try:
                 log("   🎨 No real image found. Falling back to AI Image Generation...")
-                img_url = safe_execute(image_processor.generate_and_upload_image, fallback=None, context="image_processor.generate_and_upload_image", retries=0, prompt=json_c['imageGenPrompt'], overlay=json_c.get('imageOverlayText', ''))
+                # image_processor.generate_and_upload_image(prompt, overlay)
+                img_url = safe_execute(image_processor.generate_and_upload_image, None, "image_processor.generate_and_upload_image", 0, 0.0, json_c['imageGenPrompt'], json_c.get('imageOverlayText', ''))
             except Exception as e:
                 log(f"   ⚠️ Image generation failed: {e}")
 
@@ -693,7 +702,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # ======================================================================
         log(f"   🚀 [Publishing] Final Title: {final_title}")
         log(f"   🏷️  Category Included: {category}")
-        pub_result = safe_execute(publisher.publish_post, fallback=(None, None), context="publisher.publish_post", retries=0, title=final_title, html=full_body_html, categories=[category])
+        # publisher.publish_post(title, html, categories)
+        pub_result = safe_execute(publisher.publish_post, (None, None), "publisher.publish_post", 0, 0.0, final_title, full_body_html, [category])
         published_url, post_id = (pub_result if isinstance(pub_result, tuple) else (pub_result, None))
 
         if not published_url or not post_id:
@@ -704,7 +714,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         if ("schema_script" in locals() and published_url_placeholder in full_body_html) or (linked_h1_title_html in full_body_html):
             log("   ✏️ Updating post with final URL in Schema and H1...")
             final_html_with_correct_urls = full_body_html.replace(published_url_placeholder, published_url)
-            safe_execute(publisher.update_existing_post, fallback=False, context="publisher.update_existing_post", retries=0, post_id=post_id, title=final_title, html=final_html_with_correct_urls)
+            safe_execute(publisher.update_existing_post, False, "publisher.update_existing_post", 0, 0.0, post_id, final_title, final_html_with_correct_urls)
             full_body_html = final_html_with_correct_urls # Update for quality loop
 
         # QUALITY IMPROVEMENT LOOP
@@ -712,7 +722,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         while quality_score < 9.0 and attempts < MAX_RETRIES:
             attempts += 1
             log(f"   🔄 [Deep Quality Loop] Audit Round {attempts}...")
-            audit_report = safe_execute(live_auditor.audit_live_article, fallback=None, context="live_auditor.audit_live_article", retries=0, published_url=published_url, target_keyword=target_keyword, iteration=attempts)
+            audit_report = safe_execute(live_auditor.audit_live_article, None, "live_auditor.audit_live_article", 0, 0.0, published_url, target_keyword, attempts)
             if not audit_report: break
             quality_score = float(audit_report.get('quality_score', 0))
             if quality_score >= 9.5: # If quality is very high, break early
@@ -720,9 +730,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 break
             
             log(f"      🚑 Score {quality_score}/10 is not enough. Launching Surgeon Agent...")
-            fixed_html = safe_execute(remedy.fix_article_content, fallback=None, context="remedy.fix_article_content", retries=0, full_html=full_body_html, audit_report=audit_report, target_keyword=target_keyword, iteration=attempts)
+            fixed_html = safe_execute(remedy.fix_article_content, None, "remedy.fix_article_content", 0, 0.0, full_body_html, audit_report, target_keyword, attempts)
             if fixed_html and len(fixed_html) > 2000:
-                 updated = safe_execute(publisher.update_existing_post, fallback=False, context="publisher.update_after_remedy", retries=0, post_id=post_id, title=final_title, html=fixed_html)
+                 updated = safe_execute(publisher.update_existing_post, False, "publisher.update_after_remedy", 0, 0.0, post_id, final_title, fixed_html)
                  if updated:
                      full_body_html = fixed_html # Use updated HTML for next loop/final actions
                      log(f"      ✅ Surgery Successful. Article updated.")
@@ -734,18 +744,18 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                 break
 
         # FINAL DISTRIBUTION
-        safe_execute(history_manager.update_kg, fallback=None, context="history_manager.update_kg", retries=0, title=final_title, url=published_url, category=category, post_id=post_id)
-        safe_execute(indexer.submit_url, fallback=None, context="indexer.submit_url", retries=0, url=published_url)
+        safe_execute(history_manager.update_kg, None, "history_manager.update_kg", 0, 0.0, final_title, published_url, category, post_id)
+        safe_execute(indexer.submit_url, None, "indexer.submit_url", 0, 0.0, published_url)
         
         try:
             fb_dat = safe_generate_step_strict(model_name, PROMPT_FACEBOOK_HOOK.format(title=final_title), "FB Hook", ["FB_Hook"])
             fb_dat = ensure_required_keys_generic(model_name, fb_dat or {}, {"FB_Hook": PROMPT_FACEBOOK_HOOK.format(title=final_title)})
             fb_caption = fb_dat.get('FB_Hook', final_title) if fb_dat else final_title
             yt_update_text = f"👇 Read the full technical analysis:\n{published_url}"
-            if vid_main_id: safe_execute(youtube_manager.update_video_description, fallback=None, context="youtube.update_main_desc", retries=0, video_id=vid_main_id, description=yt_update_text)
-            if vid_short_id: safe_execute(youtube_manager.update_video_description, fallback=None, context="youtube.update_short_desc", retries=0, video_id=vid_short_id, description=yt_update_text)
-            if img_url: safe_execute(social_manager.distribute_content, fallback=None, context="social_manager.distribute_content", retries=0, caption=fb_caption, url=published_url, image_url=img_url)
-            if local_fb_video: safe_execute(social_manager.post_reel_to_facebook, fallback=None, context="social_manager.post_reel_to_facebook", retries=0, video_path=local_fb_video, caption=fb_caption, url=published_url)
+            if vid_main_id: safe_execute(youtube_manager.update_video_description, None, "youtube.update_main_desc", 0, 0.0, vid_main_id, yt_update_text)
+            if vid_short_id: safe_execute(youtube_manager.update_video_description, None, "youtube.update_short_desc", 0, 0.0, vid_short_id, yt_update_text)
+            if img_url: safe_execute(social_manager.distribute_content, None, "social_manager.distribute_content", 0, 0.0, fb_caption, published_url, img_url)
+            if local_fb_video: safe_execute(social_manager.post_reel_to_facebook, None, "social_manager.post_reel_to_facebook", 0, 0.0, local_fb_video, fb_caption, published_url)
         except Exception as e:
             log(f"   ⚠️ Social Distribution Error: {e}")
 
@@ -806,7 +816,7 @@ def main():
         for cat in cats:
             if trend_published: break
             
-            fresh_trends = safe_execute(trend_watcher.get_verified_trend, fallback=[], context="trend_watcher.get_verified_trend", retries=0, category=cat, cfg=cfg)
+            fresh_trends = safe_execute(trend_watcher.get_verified_trend, [], "trend_watcher.get_verified_trend", 0, 0.0, cat, cfg)
             
             if fresh_trends:
                 for trend in fresh_trends:
@@ -816,7 +826,7 @@ def main():
                         log(f"      ⏭️ Skipping duplicate trend: '{trend}'")
                         continue
                     
-                    is_valid, official_url, verified_title = safe_execute(truth_verifier.verify_topic_existence, fallback=(False, None, None), context="truth_verifier.verify_topic_existence", retries=0, topic=trend, model_name=cfg['settings']['model_name'])
+                    is_valid, official_url, verified_title = safe_execute(truth_verifier.verify_topic_existence, (False, None, None), "truth_verifier.verify_topic_existence", 0, 0.0, trend, cfg['settings']['model_name'])
                     
                     if is_valid:
                         log(f"      ✅ Trend Verified: {verified_title}")
