@@ -469,6 +469,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             category == "AI Money Engines" or     # If category is Money Engines
             content_type == "Guide"               # If content is a Guide
         )
+        chart_data = None
+        chart_url = None
 
         if should_run_chart:  
             log("📊 [Chart Generator] Extracting REAL data for visualization...")  
@@ -477,16 +479,36 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             chart_data = safe_generate_step_strict(model_name, chart_prompt, "Chart Data Extraction", ["data_points"])  
             chart_data = ensure_required_keys_generic(model_name, chart_data or {}, {"data_points": chart_prompt})
                     
-        if chart_data and chart_data.get('data_points') and len(chart_data['data_points']) >= 2:
-            chart_url = safe_execute(chart_generator.create_chart_from_data, None, "chart_generator.create_chart_from_data", 1, 1.0, chart_data['data_points'], chart_data.get('chart_title', f'{target_keyword} Comparison'))
+      
+        if chart_data and isinstance(chart_data.get('data_points'), dict) and len(chart_data['data_points']) >= 2:
+            try:
+                chart_url = safe_execute(
+                    chart_generator.create_chart_from_data,
+                    None,
+                    "chart_generator.create_chart_from_data",
+                    1,
+                    1.0,
+                    chart_data['data_points'],
+                    chart_data.get('chart_title', f'{target_keyword} Comparison')
+                )
+            except Exception as e:
+                log(f"   ⚠️ Chart creation failed: {e}")
+                traceback.print_exc()
+                chart_url = None
+
             if chart_url:
                 log(f"      ✅ Chart Generated & Uploaded: {chart_url}")
                 chart_id = "[[GENERATED_CHART]]"
                 visual_context_for_writer.append(f"{chart_id}: A data visualization chart comparing key metrics.")
-                asset_map[chart_id] = {"type": "chart", "url": chart_url, "description": chart_data.get('chart_title', 'Comparison Chart'), "score": 20} # High score for charts
+                asset_map[chart_id] = {
+                    "type": "chart",
+                    "url": chart_url,
+                    "description": chart_data.get('chart_title', 'Comparison Chart'),
+                    "score": 20
+                }  # High score for charts
             else:
-                log("      ℹ️ Not enough REAL chart data found. Skipping chart generation.")
-            
+                log("      ℹ️ Not enough REAL chart data found or upload failed. Skipping chart generation.")
+                    
         # ======================================================================
         # 6. ARCHITECT BLUEPRINT
         # ======================================================================
