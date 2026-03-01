@@ -605,17 +605,17 @@ Do NOT change the title or any other metadata.
 
 
 OUTPUT JSON STRUCTURE:
-{
+{{
   "finalTitle": "<string: SEO-friendly headline>",
   "finalContent": "<string: full rewritten HTML content>",
-  "seo": {
+  "seo": {{
     "meta_title": "<string (<=70 chars)>",
     "meta_description": "<string (<=155 chars)>",
     "focus_keywords": ["keyword1", "keyword2", "keyword3"]
-  },
-  "schemaMarkup": {
+  }},
+  "schemaMarkup": {{
     "type": "Article",
-    "schema_json_ld": {
+    "schema_json_ld": {{
       "@context": "https://schema.org",
       "@type": "Article",
       "headline": "<string>",
@@ -623,14 +623,14 @@ OUTPUT JSON STRUCTURE:
       "author": { "name": "<string or unknown>" },
       "datePublished": "<YYYY-MM-DD or unknown>",
       "mainEntityOfPage": "<URL or unknown>",
-      "publisher": {
+      "publisher": {{
         "@type": "Organization",
         "name": "<publisher name or unknown>",
         "logo": { "@type": "ImageObject", "url": "<logo_url or unknown>" }
-      }
-    }
-  }
-}
+      }}
+    }}
+  }}
+}}
 
 IMPORTANT: Return ONLY a valid JSON object matching the OUTPUT JSON STRUCTURE. 
 Do NOT add any text, explanation, or comment outside the JSON. 
