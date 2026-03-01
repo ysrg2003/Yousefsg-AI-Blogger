@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Here's how generative AI is about to revolutionize audio creation and editing Mastery Series",
+  "queue": [
+    "Mastering Generative AI Audio: A Hands-On Guide to Adobe's Revolutionary Sound Creation & Editing Tools",
+    "The Generative AI Audio Arms Race: Adobe's Position Amidst Google, OpenAI, and the Evolving Sound Industry"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
