@@ -1,6 +1,8 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Gemini 3.1 Pro: A smarter model for your most complex tasks - Google Blog Mastery Series",
+  "queue": [
+    "Gemini 3.1 Pro in the AI Arena: A Competitive Analysis Against OpenAI and the Future of LLMs"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
