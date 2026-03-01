@@ -8,7 +8,7 @@ import re
 from typing import Optional, List
 
 # Project imports
-from config import log
+from config import log, EEAT_GUIDELINES
 from api_manager import generate_step_strict
 
 def _get_core_keywords_from_ai(long_title: str) -> Optional[str]:
@@ -44,6 +44,53 @@ def generate_smart_query(long_keyword: str) -> str:
     """
     smart = _get_core_keywords_from_ai(long_keyword)
     return smart if smart else _get_core_keywords_heuristic(long_keyword)
+
+def generate_multi_perspective_queries(target_keyword: str) -> List[str]:
+    """
+    Generates 5 distinct search queries to capture different perspectives:
+    Official, Academic/Technical, Community/User Experience, Competitor/Comparison, and Future/Trend.
+    """
+    log(f"   🧠 [AI Strategy] Generating Multi-Perspective Research Plan for: {target_keyword}")
+    
+    prompt = f"""
+    ROLE: Senior Research Architect.
+    TASK: Design a 5-point search strategy to gather 360-degree information about: "{target_keyword}"
+    
+    GOAL: Ensure the final article has "Information Gain" (unique value) and is NOT just a rewrite of top results.
+    
+    REQUIRED PERSPECTIVES:
+    1. **Official & Technical Documentation:** Find the primary source (Whitepapers, API docs, Official blogs).
+    2. **Expert Critiques & Deep Dives:** Find independent technical reviews or architectural analyses.
+    3. **Community Friction & Real-World Usage:** Find Reddit/StackOverflow discussions about bugs, limitations, or "gotchas".
+    4. **Market Context & Alternatives:** Find how it compares to the #1 competitor and what users are switching from.
+    5. **Future Impact & Predictions:** Find expert opinions on how this technology will evolve in 12-24 months.
+
+    E-E-A-T GUIDELINES: {EEAT_GUIDELINES}
+
+    OUTPUT JSON ONLY:
+    {{
+        "research_queries": [
+            "Official/Technical Query",
+            "Expert Critique Query",
+            "Community Discussion Query",
+            "Market Comparison Query",
+            "Future Trend Query"
+        ]
+    }}
+    """
+    
+    try:
+        result = generate_step_strict(
+            "gemini-2.5-flash", 
+            prompt, 
+            "Multi-Perspective Research", 
+            ["research_queries"],
+            system_instruction=EEAT_GUIDELINES
+        )
+        return result.get("research_queries", [target_keyword])
+    except Exception as e:
+        log(f"      ⚠️ Multi-perspective query generation failed: {e}")
+        return [target_keyword, f"{target_keyword} review", f"{target_keyword} vs"]
 
 # ==============================================================================
 # NEW: GRADUATED SEARCH PLANNER

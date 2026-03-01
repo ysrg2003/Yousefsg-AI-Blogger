@@ -3,12 +3,23 @@
 # FIX: Escaped curly braces for independent_critiques to prevent KeyError.
 
 import json
-from config import log
+from config import log, EEAT_GUIDELINES
 from api_manager import generate_step_strict
 
 # البرومبت المتقدم مع تصحيح الأقواس (Doubled Curly Braces)
 PROMPT_DEEP_DIVE = """
-use grounding with Google search and URL context, get your response just from grounding with Google search,get {topic} official resources name and its direct link, mention the page name with its direct link , mention the latest official resources and documents and at least 4 official document and 3 researches and 3 persons experience  and 3 independent_critiques with their prov ,but they must be Very high value and from high value source or website.
+ROLE: Elite Research Investigator.
+TASK: Conduct a comprehensive E-E-A-T focused deep dive into: "{topic}"
+
+MANDATORY REQUIREMENTS:
+1. **Experience:** Find at least 3 high-value personal experiences or expert reviews (YouTube, X, Professional Blogs).
+2. **Expertise:** Find at least 4 official documents, whitepapers, or API documentations.
+3. **Authoritativeness:** Find at least 3 academic researches or industry-leading studies (MIT, Gartner, etc.).
+4. **Trustworthiness:** Find at least 3 independent critiques or "counter-arguments" to ensure a balanced, trustworthy perspective.
+
+E-E-A-T GUIDELINES: {eeat_guidelines}
+
+Use grounding with Google search and URL context. Get your response ONLY from grounding with Google search. Mention the source name, page name, and direct link for every resource. Every source must be high-value and from a reputable domain.
 
 CRITICAL OUTPUT INSTRUCTION: You MUST return a single valid JSON object. Do not add any text before or after the JSON.
 
@@ -56,11 +67,12 @@ def conduct_deep_dive(topic: str, model_name: str):
         # استدعاء الـ API مع تفعيل البحث الإجباري
         result = generate_step_strict(
             model_name,
-            PROMPT_DEEP_DIVE.format(topic=topic),
+            PROMPT_DEEP_DIVE.format(topic=topic, eeat_guidelines=json.dumps(EEAT_GUIDELINES, ensure_ascii=False)),
             "Deep Dive Research",
             # تمت إضافة independent_critiques لقائمة التحقق لضمان وجودها
             required_keys=["official_sources", "research_studies", "personal_experiences", "independent_critiques"],
-            use_google_search=True
+            use_google_search=True,
+            system_instruction=EEAT_GUIDELINES
         )
         
         # التحقق من جودة النتائج

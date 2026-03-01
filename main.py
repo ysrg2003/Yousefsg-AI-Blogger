@@ -166,10 +166,17 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                  sources_to_scrape.insert(0, {"url": official_source_url, "page_name": "Official Source"})
              official_domain = urlparse(official_source_url).netloc
 
-        if len(sources_to_scrape) < 2:
-            rss_items = news_fetcher.get_strict_rss(smart_query, category)
-            for item in rss_items[:4]:
-                sources_to_scrape.append({"url": item['link'], "page_name": item['title']})
+        if len(sources_to_scrape) < 5:
+            log("   🔍 [Research Expansion] Deep Dive results insufficient. Expanding search with Multi-Perspective Queries...")
+            expansion_queries = ai_strategy.generate_multi_perspective_queries(target_keyword)
+            for eq in expansion_queries:
+                try:
+                    # Use news_fetcher to get fresh links for each perspective
+                    exp_items = news_fetcher.get_strict_rss(eq, category)
+                    for item in exp_items[:2]:
+                        if not any(s.get('url') == item['link'] for s in sources_to_scrape):
+                            sources_to_scrape.append({"url": item['link'], "page_name": item['title']})
+                except: pass
 
         # B. SCRAPE LOOP (WITH ASSET EXTRACTION)
         processed_urls = set()

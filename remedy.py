@@ -65,8 +65,10 @@ def fix_article_content(current_html, audit_report, topic, iteration=1):
     1.  **READ EACH ORDER:** For each `order_id` in the `SURGICAL ORDERS` list:
     2.  **EXECUTE THE SEARCH:** The `execution_command` will contain a "SEARCH" directive. Use Google Search with that exact query.
     3.  **EXECUTE THE EXTRACTION:** The command will have an "EXTRACT" directive. Find that specific piece of information from your search results.
-    4.  **EXECUTE THE INTEGRATION:** The command will have an "INTEGRATE" directive. Surgically modify the `SANITIZED HTML` to insert the extracted evidence at the specified location, with the specified formatting (e.g., new H3, bold text, citations).
-    5.  **PRESERVE EVERYTHING ELSE:** Do NOT touch any part of the HTML that is not mentioned in an order. All existing images, tables, code blocks, and especially the `[[LINK_ID_X]]` placeholders MUST remain untouched and in their original positions.
+    4.  **EXECUTE THE INTEGRATION:** The command will have an "INTEGRATE" directive. Surgically modify the `SANITIZED HTML` to insert the extracted evidence at the specified location.
+    5.  **ANTI-REWRITE PROTOCOL:** When integrating new information, DO NOT just append it. Rewrite the surrounding paragraph to naturally incorporate the new evidence. Ensure the tone is analytical and expert-level.
+    6.  **UNIQUENESS CHECK:** Ensure any new text added is NOT a direct quote from the source unless it's explicitly marked as a blockquote. Paraphrase with deep insight.
+    7.  **PRESERVE EVERYTHING ELSE:** Do NOT touch any part of the HTML that is not mentioned in an order. All existing images, tables, code blocks, and especially the `[[LINK_ID_X]]` placeholders MUST remain untouched and in their original positions.
     
     FINAL OUTPUT:
     Return the complete, modified HTML after executing ALL orders.
