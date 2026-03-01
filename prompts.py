@@ -190,38 +190,57 @@ OUTPUT PURE JSON ONLY:
 # PROMPT_COMPETITOR_ANALYSIS — يرجع JSON منظّم عن المنافسين المباشرين
 
 # ------------------------------------------------------------------
-
 PROMPT_COMPETITOR_ANALYSIS = """
-🔎 **Advanced Competitor Analysis for AI Blogging**
+Return ONLY a valid JSON object. Do not write explanations, text, or markdown.
+
+Task: Advanced Competitor Analysis for AI Blogging
 
 Target Keyword: {target_keyword}
 
-Instructions:
-1. Identify top competitors related to "{target_keyword}".
-   - If no competitor list is provided, AI must auto-generate a high-quality list based on popularity, relevance, and market presence.
-2. For each competitor, provide:
-   - Name & Website/Platform
-   - Core Strengths
-   - Weaknesses or Gaps
-   - Unique Selling Points
-   - Market Position & Popularity Metrics (if available)
-   - Pricing or Monetization Strategy (optional)
-3. Rank competitors into 3 tiers:
-   - Tier 1: Market leaders
-   - Tier 2: Emerging challengers
-   - Tier 3: Niche players with opportunities
-4. Provide a clear summary highlighting:
-   - Market trends
-   - Opportunities to differentiate
-   - Recommended focus areas for gaining competitive advantage
+Requirements:
+- The JSON MUST contain this key exactly: "competitors"
+- If competitors list is empty or None, generate competitors automatically.
+- Do not omit the key under any condition.
 
-Optional Pre-Filled Competitors: {competitors}
+JSON Schema:
+{
+  "competitors": [
+    {
+      "name": "competitor name",
+      "website": "website or platform",
+      "core_strengths": ["strength1", "strength2"],
+      "weaknesses": ["gap1", "gap2"],
+      "unique_selling_points": ["usp1", "usp2"],
+      "market_position": "short description",
+      "popularity_metrics": {
+        "traffic": "optional",
+        "users": "optional"
+      },
+      "pricing_or_monetization": "optional",
+      "tier": "Tier 1 | Tier 2 | Tier 3"
+    }
+  ],
+  "summary": {
+    "market_trends": "text",
+    "opportunities": "text",
+    "recommended_focus_areas": "text"
+  }
+}
 
-Notes:
-- Ensure output is structured in JSON or Markdown table format for easy parsing.
-- Always handle missing data gracefully.
-- Avoid crashes: if {competitors} is None, generate competitors automatically.
+Pre-Filled Competitors: {competitors}
+
+Rules:
+- If competitors = auto → generate a high-quality competitor list automatically.
+- If competitors is a list → analyze the provided competitors.
+
+Important Rules:
+- Output JSON only.
+- Do not wrap JSON in markdown.
+- Do not add comments.
+- Do not remove the key "competitors".
+- If data is missing, return empty arrays or null values instead of removing keys.
 """.strip()
+
 
 
 # ------------------------------------------------------------------
