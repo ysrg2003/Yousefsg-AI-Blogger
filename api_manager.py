@@ -1,11 +1,6 @@
 # FILE: api_manager.py
-# ROLE: Advanced AI Orchestrator (Gemini-first, deterministic)
-# DESCRIPTION: Robust, production-safe Gemini caller with:
-#  - automatic sanitization of system_instruction
-#  - deterministic json-first requests (response_mime_type)
-#  - normalization/repair for varied outputs
-#  - key rotation & simple fallback on validation errors
-#  - NO Puter usage (Gemini-only)
+# ROLE: Gemini-first, deterministic, tool-aware caller
+# DESCRIPTION: Handles incompatible tool+mime usages and robust key/model rate-limit handling.
 
 import os
 import time
@@ -22,24 +17,19 @@ from pydantic import ValidationError as PydanticValidationError
 # ------------------------------------------------------------------------------
 # CONFIGURATION
 # ------------------------------------------------------------------------------
-
 API_HEAT = 30  # Seconds to wait between heavy calls to prevent flooding
-
-# Gemini Fallback Chain (primary -> fallback order)
 GEMINI_FALLBACK_CHAIN = [
     "gemini-3-flash-preview",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "gemini-robotics-er-1.5-preview"
 ]
-
-# Default deterministic temperature for critical JSON outputs
 DEFAULT_TEMPERATURE = 0.0
+MODEL_PAUSE_SECONDS = 60  # pause a model for 60s when all keys hit quota for it
 
 # ------------------------------------------------------------------------------
 # KEY MANAGER
 # ------------------------------------------------------------------------------
-
 class KeyManager:
     def __init__(self):
         self.keys = []
@@ -59,31 +49,33 @@ class KeyManager:
             return None
         return self.keys[self.current_index]
 
-    def switch_key(self):
+    def rotate_key(self):
+        """
+        Advance to next key. Return True if rotated, False if cycled back to start.
+        """
+        if not self.keys:
+            return False
         if self.current_index < len(self.keys) - 1:
             self.current_index += 1
             log(f"   🔄 Switching to Gemini Key #{self.current_index + 1}...")
             return True
-        # If we cycled through all keys, reset and return False
-        log("   ⚠️ All Gemini keys exhausted. Resetting to Key #1 (Looping)...")
+        # cycled through all keys -> reset to 0 and indicate exhaustion
         self.current_index = 0
+        log("   ⚠️ All Gemini keys exhausted. Resetting to Key #1 (Looping)...")
         return False
 
 key_manager = KeyManager()
 
 # ------------------------------------------------------------------------------
-# LOGGING SETUP
+# LOGGING
 # ------------------------------------------------------------------------------
-
 logger = logging.getLogger("RetryEngine")
 logger.setLevel(logging.INFO)
-# Reduce verbose matplotlib font-manager warnings if present
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
 # ------------------------------------------------------------------------------
 # EXCEPTIONS
 # ------------------------------------------------------------------------------
-
 class JSONValidationError(Exception):
     pass
 
@@ -93,31 +85,18 @@ class JSONParsingError(Exception):
 # ------------------------------------------------------------------------------
 # JSON PARSER & VALIDATOR
 # ------------------------------------------------------------------------------
-
 def master_json_parser(text):
-    """
-    Robust JSON extraction from messy LLM outputs.
-    Returns parsed dict/list or None.
-    """
     if not text:
         return None
-
-    # Remove common code fences and trim
     clean_text = text.replace("```json", "").replace("```", "").strip()
-
-    # Find first JSON object/array
     match = regex.search(r'\{(?:[^{}]|(?R))*\}|\[(?:[^\[\]]|(?R))*\]', clean_text, regex.DOTALL)
     candidate = match.group(0) if match else clean_text
-
-    # Try repair library first (best effort)
     try:
         decoded = json_repair.repair_json(candidate, return_objects=True)
         if isinstance(decoded, (dict, list)):
             return decoded
     except Exception:
         pass
-
-    # Try json.loads as fallback
     try:
         return json.loads(candidate)
     except Exception:
@@ -132,14 +111,9 @@ def validate_structure(data, required_keys):
     return True
 
 # ------------------------------------------------------------------------------
-# SANITIZERS (system_instruction & contents)
+# SANITIZERS
 # ------------------------------------------------------------------------------
-
 def _sanitize_system_instruction(sys_inst):
-    """
-    Ensure system_instruction is a string or list of strings (never a dict).
-    If dict -> convert to readable multiline string.
-    """
     if not sys_inst:
         return ""
     if isinstance(sys_inst, (list, tuple)):
@@ -147,20 +121,12 @@ def _sanitize_system_instruction(sys_inst):
     if isinstance(sys_inst, dict):
         lines = []
         for k, v in sys_inst.items():
-            if isinstance(v, (dict, list)):
-                v_str = json.dumps(v, ensure_ascii=False)
-            else:
-                v_str = str(v)
+            v_str = json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else str(v)
             lines.append(f"{k}: {v_str}")
         return "\n".join(lines)
     return str(sys_inst)
 
 def _build_contents_for_api(contents):
-    """
-    Build a contents payload acceptable to google-genai.
-    Prefer types.Text when available.
-    """
-    # If list, convert elements
     if isinstance(contents, list):
         converted = []
         for c in contents:
@@ -172,31 +138,18 @@ def _build_contents_for_api(contents):
             else:
                 converted.append(types.Text(str(c)) if hasattr(types, "Text") else str(c))
         return converted
-
     if isinstance(contents, (bytes, bytearray)):
         if hasattr(types, "Part") and hasattr(types.Part, "from_bytes"):
             return [types.Part.from_bytes(data=bytes(contents), mime_type="application/octet-stream")]
         return [bytes(contents)]
-
-    # Default: text
     return [types.Text(str(contents))] if hasattr(types, "Text") else str(contents)
 
 # ------------------------------------------------------------------------------
-# NORMALIZER: coerce parsed output into required shape if possible
+# NORMALIZER (kept simple — same as prior)
 # ------------------------------------------------------------------------------
-
 def _normalize_parsed_output(parsed, required_keys=None, original_text=None):
-    """
-    Heuristic normalization:
-      - dict missing keys: try to extract fields from original_text via regex
-      - list -> merge or form headline/body
-      - string -> attempt reparsing or split into headline/body
-    Returns best-effort dict/list/string.
-    """
     if required_keys is None:
         required_keys = []
-
-    # dict case
     if isinstance(parsed, dict):
         missing = [k for k in required_keys if k not in parsed]
         if not missing:
@@ -209,7 +162,6 @@ def _normalize_parsed_output(parsed, required_keys=None, original_text=None):
         missing2 = [k for k in required_keys if k not in parsed]
         if not missing2:
             return parsed
-        # fallback split for headline/article_body
         if 'headline' in required_keys and 'article_body' in required_keys:
             lines = (original_text or "").strip().splitlines()
             if len(lines) >= 2:
@@ -219,30 +171,23 @@ def _normalize_parsed_output(parsed, required_keys=None, original_text=None):
                 if not missing2:
                     return parsed
         return parsed
-
-    # list case
     if isinstance(parsed, list):
-        # list of dicts -> merge
         if all(isinstance(x, dict) for x in parsed):
             merged = {}
             for item in parsed:
                 merged.update(item)
             return _normalize_parsed_output(merged, required_keys, original_text or json.dumps(parsed, ensure_ascii=False))
-        # list of strings -> headline + body
         if all(isinstance(x, str) for x in parsed):
             if 'headline' in required_keys and 'article_body' in required_keys:
                 headline = parsed[0].strip() if parsed else ""
                 body = "\n".join(parsed[1:]).strip() if len(parsed) > 1 else ""
                 return {'headline': headline, 'article_body': body}
             return {'items': parsed}
-        # mixed -> stringify & reparsed
         textified = "\n".join([json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else x for x in parsed])
         reparsed = master_json_parser(textified)
         if reparsed and isinstance(reparsed, dict):
             return _normalize_parsed_output(reparsed, required_keys, original_text or textified)
         return {'items': parsed}
-
-    # string case
     if isinstance(parsed, str):
         reparsed = master_json_parser(parsed)
         if reparsed and reparsed is not parsed:
@@ -254,13 +199,26 @@ def _normalize_parsed_output(parsed, required_keys=None, original_text=None):
             else:
                 return {'headline': parsed.strip(), 'article_body': ''}
         return parsed
-
     return parsed
 
 # ------------------------------------------------------------------------------
-# GEMINI CALLER (robust, deterministic, sanitized)
+# In-memory map to pause models when rate-limited across all keys
 # ------------------------------------------------------------------------------
+rate_limited_models = {}  # model_name -> resume_timestamp (epoch)
 
+def is_model_paused(model_name):
+    ts = rate_limited_models.get(model_name)
+    if not ts:
+        return False
+    return time.time() < ts
+
+def pause_model(model_name, seconds=MODEL_PAUSE_SECONDS):
+    rate_limited_models[model_name] = time.time() + seconds
+    log(f"   ⏸️ Pausing model {model_name} for {seconds}s due to repeated quota errors.")
+
+# ------------------------------------------------------------------------------
+# GEMINI CALLER (tool-aware + robust key/model handling)
+# ------------------------------------------------------------------------------
 def try_gemini_generation(
     model_name,
     prompt,
@@ -269,64 +227,66 @@ def try_gemini_generation(
     system_instruction=None,
     required_keys=None
 ):
-    """
-    Primary Gemini caller. Returns normalized parsed output or None.
-    """
     model_slug = model_name.replace("models/", "")
+    if is_model_paused(model_slug):
+        log(f"   ⚠️ Skipping {model_slug} because it's currently paused due to prior quota errors.")
+        return None
+
     key = key_manager.get_current_key()
     if not key:
         raise RuntimeError("No Gemini API Keys available.")
     client = genai.Client(api_key=key)
 
-    # Sanitize inputs
     safe_system = _sanitize_system_instruction(system_instruction or system_prompt or EEAT_GUIDELINES)
     contents_payload = _build_contents_for_api(prompt)
-
-    # Safety: ensure minimal temperature for deterministic JSON
     temperature = DEFAULT_TEMPERATURE
 
-    try:
-        # Build a safe config
-        if use_google_search and hasattr(types, "Tool") and hasattr(types, "GoogleSearch"):
+    # Helper to build config with awareness: if use_google_search then DO NOT set response_mime_type="application/json"
+    def build_config(use_tools):
+        if use_tools and hasattr(types, "Tool") and hasattr(types, "GoogleSearch"):
             tools = [types.Tool(google_search=types.GoogleSearch())]
-            generation_config = types.GenerateContentConfig(
+            # Tool use + application/json is unsupported per API error; omit response_mime_type
+            cfg = types.GenerateContentConfig(
                 tools=tools,
                 temperature=temperature,
-                system_instruction=safe_system,
-                response_mime_type="application/json"
+                system_instruction=safe_system
             )
+            return cfg
         else:
-            generation_config = types.GenerateContentConfig(
+            return types.GenerateContentConfig(
                 response_mime_type="application/json",
                 temperature=temperature,
                 system_instruction=safe_system
             )
 
+    # We'll try at most two phases:
+    # Phase A: preferred config (with tools if requested)
+    # Phase B: if the API returns 400 about tool+json, retry without response_mime_type (i.e., text output) and parse.
+    tried_configs = []
+
+    try:
+        cfg = build_config(use_google_search)
+        tried_configs.append(("primary", use_google_search and True or False))
         response = client.models.generate_content(
             model=model_slug,
             contents=contents_payload,
-            config=generation_config
+            config=cfg
         )
 
         if not response:
             return None
 
-        text = getattr(response, "text", None)
-        if not text:
-            if hasattr(response, "content"):
-                text = str(response.content)
-            else:
-                text = str(response)
-
+        text = getattr(response, "text", None) or getattr(response, "content", None) or str(response)
         parsed = master_json_parser(text)
 
-        # If nothing parsed, attempt a repair extraction using a careful prompt
+        # If no JSON parsed, attempt a repair extraction
         if not parsed:
-            repair_prompt = f"Extract ONLY valid JSON matching the requested schema from this text. Return PURE JSON with keys if possible:\n\n{text[:12000]}"
+            repair_prompt = f"Extract ONLY valid JSON matching requested schema from this text. Return PURE JSON if possible:\n\n{text[:12000]}"
             repair_contents = _build_contents_for_api(repair_prompt)
-            repair_config = types.GenerateContentConfig(response_mime_type="application/json", temperature=0.0)
+            # If we used tools initially, call repair without tools and with deterministic JSON
+            repair_cfg = types.GenerateContentConfig(response_mime_type="application/json", temperature=0.0)
             try:
-                repair = client.models.generate_content(model="gemini-2.5-flash", contents=repair_contents, config=repair_config)
+                repair = client.models.generate_content(model="gemini-2.5-flash", contents=repair_contents, config=repair_cfg)
                 repair_text = getattr(repair, "text", None) or str(repair)
                 parsed = master_json_parser(repair_text)
             except Exception as repair_e:
@@ -339,26 +299,65 @@ def try_gemini_generation(
         err = str(e)
         low = err.lower()
 
-        # Validation error due to sending dict/object in system_instruction or config
-        if "extra inputs are not permitted" in low or "validation error" in low or isinstance(e, PydanticValidationError):
-            log(f"   ⚠️ Gemini validation error detected for {model_slug}. Retrying with a minimal/simple payload...")
+        # Specific 400: tool + json unsupported -> retry without response_mime_type (text output) if we used tools initially
+        if "tool use with a response mime type" in low or "extra inputs are not permitted" in low or isinstance(e, PydanticValidationError):
+            log(f"   ⚠️ Gemini validation/tool error for {model_slug}: {str(e)[:200]}")
+            # If it mentioned tool+json, retry without response_mime_type
             try:
-                simple_contents = prompt if isinstance(prompt, str) else json.dumps(prompt, ensure_ascii=False)
-                simple_resp = client.models.generate_content(model=model_slug, contents=simple_contents)
-                txt = getattr(simple_resp, "text", None) or str(simple_resp)
-                parsed = master_json_parser(txt)
-                normalized = _normalize_parsed_output(parsed, required_keys=required_keys or [], original_text=txt)
-                if normalized:
-                    return normalized
+                # Build a simpler config without response_mime_type (text output)
+                cfg2 = types.GenerateContentConfig(
+                    temperature=DEFAULT_TEMPERATURE,
+                    system_instruction=_sanitize_system_instruction(system_instruction or system_prompt or EEAT_GUIDELINES)
+                )
+                # Try a simple call (no tools) first if use_google_search was true (tool support problematic)
+                # If original intent needed google_search, we should consider doing google search outside Gemini.
+                response2 = client.models.generate_content(model=model_slug, contents=_build_contents_for_api(prompt), config=cfg2)
+                text2 = getattr(response2, "text", None) or getattr(response2, "content", None) or str(response2)
+                parsed2 = master_json_parser(text2)
+                normalized2 = _normalize_parsed_output(parsed2, required_keys=required_keys or [], original_text=text2)
+                if normalized2:
+                    return normalized2
             except Exception as e2:
-                log(f"   ❌ Gemini fallback simple request failed for {model_slug}: {str(e2)[:200]}")
+                log(f"   ⚠️ Retry without response_mime_type failed for {model_slug}: {str(e2)[:200]}")
 
-        # Quota/throttled -> rotate key and retry once
-        if "429" in low or "quota" in low or "exhausted" in low:
-            log(f"Quota hit on {model_slug}. Rotating key...")
-            if key_manager.switch_key():
+        # Quota handling (429) -> rotate key and try next key once; if all keys produce 429, pause this model for a while
+        if "429" in low or "quota" in low or "too many requests" in low or "exhausted" in low:
+            log(f"Quota hit on {model_slug}. Attempting to rotate key...")
+            # Attempt to cycle through keys until either we get a new key that might work or we detect exhaustion
+            initial_key_index = key_manager.current_index
+            tried_all_keys = False
+            any_success = False
+            for attempt in range(len(key_manager.keys)):
+                rotated = key_manager.rotate_key()
+                # If rotate_key returned False and we returned to start -> we've cycled through all keys
+                if not rotated and key_manager.current_index == initial_key_index:
+                    tried_all_keys = True
+                    break
+                # Try a light request with the new key but do not block in a tight loop: a simple HEAD-like attempt is not possible,
+                # so we just try one minimal request below and rely on exception handling to continue.
+                try:
+                    key = key_manager.get_current_key()
+                    client = genai.Client(api_key=key)
+                    # Minimal call: model ping by sending a tiny prompt and minimal config (no tools)
+                    test_cfg = types.GenerateContentConfig(temperature=0.0)
+                    test_resp = client.models.generate_content(model=model_slug, contents="ping", config=test_cfg)
+                    # If no exception -> not immediately rate-limited (we'll treat as success and proceed to full attempt next)
+                    any_success = True
+                    break
+                except Exception as exk:
+                    if "429" in str(exk).lower() or "quota" in str(exk).lower():
+                        continue
+                    else:
+                        # other error -> break and treat as non-quota
+                        break
+
+            if not any_success:
+                # All keys produced quota errors or we couldn't find a usable key -> pause this model temporarily
+                pause_model(model_slug, MODEL_PAUSE_SECONDS)
+                return None
+            else:
+                # We have a rotated key that might work: try the full request again recursively (once)
                 return try_gemini_generation(model_name, prompt, system_prompt, use_google_search, system_instruction, required_keys)
-            return None
 
         # Model not found
         if "404" in low or "not found" in low:
@@ -369,9 +368,8 @@ def try_gemini_generation(
         return None
 
 # ------------------------------------------------------------------------------
-# MASTER ORCHESTRATOR (Gemini-only)
+# MASTER ORCHESTRATOR (Gemini-only, tool-aware)
 # ------------------------------------------------------------------------------
-
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -389,16 +387,12 @@ def generate_step_strict(
     global API_HEAT
     if required_keys is None:
         required_keys = []
-
     if API_HEAT > 0:
         time.sleep(1)
-
     log(f"   🔄 Executing: {step_name}")
 
-    # Sanitize system instruction once at this top layer (ensures callers can pass dicts safely)
     sanitized_system = _sanitize_system_instruction(system_instruction or EEAT_GUIDELINES or "")
 
-    # Build model list to try (start from initial if included)
     clean_initial = initial_model_name.replace("models/", "")
     if clean_initial in GEMINI_FALLBACK_CHAIN:
         models_to_try = [clean_initial] + [m for m in GEMINI_FALLBACK_CHAIN if m != clean_initial]
@@ -408,7 +402,6 @@ def generate_step_strict(
     for model in models_to_try:
         result = try_gemini_generation(model, prompt, sanitized_system, use_google_search, sanitized_system, required_keys)
         if result:
-            # Attempt final structural validation (after normalization)
             try:
                 if required_keys:
                     validate_structure(result, required_keys)
@@ -416,6 +409,6 @@ def generate_step_strict(
                 return result
             except JSONValidationError as ve:
                 log(f"Invalid structure from {model}: {ve}")
-                # continue to next model in chain
+                continue
 
     raise RuntimeError(f"❌ CRITICAL FAILURE: All Gemini models failed for step: {step_name}")
