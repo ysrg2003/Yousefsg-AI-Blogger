@@ -191,41 +191,37 @@ OUTPUT PURE JSON ONLY:
 
 # ------------------------------------------------------------------
 
-# PROMPT_COMPETITOR_ANALYSIS — يُرجع JSON منظّم عن المنافسين المباشرين
-PROMPT_COMPETITOR_ANALYSIS = """
-TASK:
-You are an experienced market analyst. Given a target keyword / product / topic, find up to 5 direct competitors or close alternatives. For each competitor provide a concise, factual summary and structured attributes that help compare them.
+PROMPT_COMPETITOR_ANALYSIS_SMART = """
+🔎 **Advanced Competitor Analysis for AI Blogging**
 
-INPUT:
-- target_keyword: the search term, product name, or topic to analyze.
-- market_context (optional): short text describing target audience, region, price tier, or vertical.
+Target Keyword: {target_keyword}
 
-INSTRUCTIONS:
-1. Focus on direct competitors and close alternatives (products, services, or companies).
-2. For each competitor include exactly these fields: name, short_description, website, core_features (array), main_strengths (array), main_weaknesses (array), approximate_pricing_or_tier (string), visibility_score (number 0-100).
-3. Be concise, factual, and avoid hallucinations — if unsure about a fact, use the literal string "unknown".
-4. Return **ONLY** valid JSON that exactly matches the OUTPUT JSON STRUCTURE below. No extra commentary, no explanation outside JSON.
+Instructions:
+1. Identify top competitors related to "{target_keyword}".
+   - If no competitor list is provided, AI must auto-generate a high-quality list based on popularity, relevance, and market presence.
+2. For each competitor, provide:
+   - Name & Website/Platform
+   - Core Strengths
+   - Weaknesses or Gaps
+   - Unique Selling Points
+   - Market Position & Popularity Metrics (if available)
+   - Pricing or Monetization Strategy (optional)
+3. Rank competitors into 3 tiers:
+   - Tier 1: Market leaders
+   - Tier 2: Emerging challengers
+   - Tier 3: Niche players with opportunities
+4. Provide a clear summary highlighting:
+   - Market trends
+   - Opportunities to differentiate
+   - Recommended focus areas for gaining competitive advantage
 
-OUTPUT JSON STRUCTURE:
-{
-  "competitors": [
-    {
-      "name": "Competitor name",
-      "short_description": "One-line summary (<=30 words).",
-      "website": "https://example.com",
-      "core_features": ["feature A", "feature B"],
-      "main_strengths": ["strength 1", "strength 2"],
-      "main_weaknesses": ["weakness 1", "weakness 2"],
-      "approximate_pricing_or_tier": "free / freemium / $ / $$ / enterprise / unknown",
-      "visibility_score": 0.0
-    }
-  ],
-  "notes": "Optional short note about data confidence or missing info (<=40 words)."
-}
-IMPORTANT: Return ONLY a valid JSON object matching the OUTPUT JSON STRUCTURE. 
-Do NOT add any text, explanation, or comment outside the JSON. 
-If some field is unknown, set it to the literal string "unknown".
-"""
+Optional Pre-Filled Competitors: {competitors}
+
+Notes:
+- Ensure output is structured in JSON or Markdown table format for easy parsing.
+- Always handle missing data gracefully.
+- Avoid crashes: if {competitors} is None, generate competitors automatically.
+""".strip()
 
 
 # ------------------------------------------------------------------
