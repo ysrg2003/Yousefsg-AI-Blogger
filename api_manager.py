@@ -1,8 +1,11 @@
 # FILE: api_manager.py
-# ROLE: Advanced AI Orchestrator (Hybrid Waterfall Strategy)
-# STRATEGY: Puter.js (Claude/GPT) -> Gemini Chain
-# DESCRIPTION: Ensures the highest quality model is always used, degrading gracefully only on failure.
-# FEATURES: Key Rotation, Self-Healing JSON, Multi-Provider Redundancy.
+# ROLE: Advanced AI Orchestrator (Gemini-first, deterministic)
+# DESCRIPTION: Robust, production-safe Gemini caller with:
+#  - automatic sanitization of system_instruction
+#  - deterministic json-first requests (response_mime_type)
+#  - normalization/repair for varied outputs
+#  - key rotation & simple fallback on validation errors
+#  - NO Puter usage (Gemini-only)
 
 import os
 import time
@@ -10,7 +13,6 @@ import json
 import logging
 import regex
 import json_repair
-import puter as puter_sdk
 from google import genai
 from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
@@ -23,16 +25,16 @@ from pydantic import ValidationError as PydanticValidationError
 
 API_HEAT = 30  # Seconds to wait between heavy calls to prevent flooding
 
-# Primary Engine
-PUTER_MODEL = "claude-3-5-sonnet"
-
-# Gemini Fallback Chain
+# Gemini Fallback Chain (primary -> fallback order)
 GEMINI_FALLBACK_CHAIN = [
     "gemini-3-flash-preview",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "gemini-robotics-er-1.5-preview"
 ]
+
+# Default deterministic temperature for critical JSON outputs
+DEFAULT_TEMPERATURE = 0.0
 
 # ------------------------------------------------------------------------------
 # KEY MANAGER
@@ -41,17 +43,14 @@ GEMINI_FALLBACK_CHAIN = [
 class KeyManager:
     def __init__(self):
         self.keys = []
-
         for i in range(1, 11):
             k = os.getenv(f"GEMINI_API_KEY_{i}")
             if k:
                 self.keys.append(k)
-
         if not self.keys:
             k = os.getenv("GEMINI_API_KEY")
             if k:
                 self.keys.append(k)
-
         self.current_index = 0
         log(f"🔑 Loaded {len(self.keys)} Gemini API Keys.")
 
@@ -65,11 +64,10 @@ class KeyManager:
             self.current_index += 1
             log(f"   🔄 Switching to Gemini Key #{self.current_index + 1}...")
             return True
-
+        # If we cycled through all keys, reset and return False
         log("   ⚠️ All Gemini keys exhausted. Resetting to Key #1 (Looping)...")
         self.current_index = 0
         return False
-
 
 key_manager = KeyManager()
 
@@ -79,8 +77,7 @@ key_manager = KeyManager()
 
 logger = logging.getLogger("RetryEngine")
 logger.setLevel(logging.INFO)
-
-# Reduce noisy matplotlib font-manager warnings in server/container environments
+# Reduce verbose matplotlib font-manager warnings if present
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
 # ------------------------------------------------------------------------------
@@ -90,46 +87,29 @@ logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 class JSONValidationError(Exception):
     pass
 
-
 class JSONParsingError(Exception):
     pass
 
-
 # ------------------------------------------------------------------------------
-# STRICT SYSTEM PROMPT
-# ------------------------------------------------------------------------------
-
-STRICT_SYSTEM_PROMPT = """
-You are an assistant that MUST return ONLY the exact output requested.
-No explanations, no headings, no extra text, no apologies.
-Output exactly and only what the user asked for.
-If the user requests JSON, return PURE JSON.
-"""
-
-# ------------------------------------------------------------------------------
-# JSON PARSER
+# JSON PARSER & VALIDATOR
 # ------------------------------------------------------------------------------
 
 def master_json_parser(text):
     """
     Robust JSON extraction from messy LLM outputs.
+    Returns parsed dict/list or None.
     """
     if not text:
         return None
 
-    # Remove common fences and trim
+    # Remove common code fences and trim
     clean_text = text.replace("```json", "").replace("```", "").strip()
 
-    # Try to find the first JSON object or array
-    match = regex.search(
-        r'\{(?:[^{}]|(?R))*\}|\[(?:[^\[\]]|(?R))*\]',
-        clean_text,
-        regex.DOTALL
-    )
-
+    # Find first JSON object/array
+    match = regex.search(r'\{(?:[^{}]|(?R))*\}|\[(?:[^\[\]]|(?R))*\]', clean_text, regex.DOTALL)
     candidate = match.group(0) if match else clean_text
 
-    # Try repair (best effort)
+    # Try repair library first (best effort)
     try:
         decoded = json_repair.repair_json(candidate, return_objects=True)
         if isinstance(decoded, (dict, list)):
@@ -137,61 +117,50 @@ def master_json_parser(text):
     except Exception:
         pass
 
-    # Final attempt: json.loads
+    # Try json.loads as fallback
     try:
         return json.loads(candidate)
     except Exception:
         return None
 
-
 def validate_structure(data, required_keys):
     if not isinstance(data, dict):
         raise JSONValidationError(f"Expected Dictionary, got {type(data)}")
-
     missing = [k for k in required_keys if k not in data]
     if missing:
         raise JSONValidationError(f"Missing keys: {missing}")
-
     return True
 
 # ------------------------------------------------------------------------------
-# UTIL: SANITIZERS FOR Gemini API
+# SANITIZERS (system_instruction & contents)
 # ------------------------------------------------------------------------------
 
 def _sanitize_system_instruction(sys_inst):
     """
-    Ensure system_instruction is a string or list of strings (never a dict/object).
-    If dict -> convert to readable multiline string "key: value".
+    Ensure system_instruction is a string or list of strings (never a dict).
+    If dict -> convert to readable multiline string.
     """
     if not sys_inst:
         return ""
-
     if isinstance(sys_inst, (list, tuple)):
         return [str(x) for x in sys_inst]
-
     if isinstance(sys_inst, dict):
         lines = []
         for k, v in sys_inst.items():
-            # If nested dict/list, json.dumps to produce readable text
             if isinstance(v, (dict, list)):
                 v_str = json.dumps(v, ensure_ascii=False)
             else:
                 v_str = str(v)
             lines.append(f"{k}: {v_str}")
         return "\n".join(lines)
-
     return str(sys_inst)
-
 
 def _build_contents_for_api(contents):
     """
-    Build a contents payload acceptable to google-genai:
-      - prefer types.Text if available
-      - convert bytes -> types.Part.from_bytes
-      - accept list[str] or list[parts]
-    Returns either a single value or a list acceptable to client.models.generate_content
+    Build a contents payload acceptable to google-genai.
+    Prefer types.Text when available.
     """
-    # If it's already a list, convert items
+    # If list, convert elements
     if isinstance(contents, list):
         converted = []
         for c in contents:
@@ -201,62 +170,95 @@ def _build_contents_for_api(contents):
                 else:
                     converted.append(bytes(c))
             else:
-                # prefer types.Text if present
-                if hasattr(types, "Text"):
-                    converted.append(types.Text(str(c)))
-                else:
-                    converted.append(str(c))
+                converted.append(types.Text(str(c)) if hasattr(types, "Text") else str(c))
         return converted
 
-    # single bytes
     if isinstance(contents, (bytes, bytearray)):
         if hasattr(types, "Part") and hasattr(types.Part, "from_bytes"):
             return [types.Part.from_bytes(data=bytes(contents), mime_type="application/octet-stream")]
         return [bytes(contents)]
 
-    # otherwise treat as text
-    if hasattr(types, "Text"):
-        return [types.Text(str(contents))]
-    return str(contents)
+    # Default: text
+    return [types.Text(str(contents))] if hasattr(types, "Text") else str(contents)
 
 # ------------------------------------------------------------------------------
-# ENGINE 1 — PUTER (CLAUDE / GPT)
+# NORMALIZER: coerce parsed output into required shape if possible
 # ------------------------------------------------------------------------------
 
-def try_puter_generation(prompt, system_prompt):
-    try:
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
+def _normalize_parsed_output(parsed, required_keys=None, original_text=None):
+    """
+    Heuristic normalization:
+      - dict missing keys: try to extract fields from original_text via regex
+      - list -> merge or form headline/body
+      - string -> attempt reparsing or split into headline/body
+    Returns best-effort dict/list/string.
+    """
+    if required_keys is None:
+        required_keys = []
 
-        response = puter_sdk.ai.chat(
-            messages=messages,
-            model=PUTER_MODEL,
-            stream=False
-        )
-
-        text = ""
-
-        if hasattr(response, "message") and hasattr(response.message, "content"):
-            text = response.message.content
-        elif isinstance(response, str):
-            text = response
-        else:
-            text = str(response)
-
-        if not text:
-            return None
-
-        parsed = master_json_parser(text)
+    # dict case
+    if isinstance(parsed, dict):
+        missing = [k for k in required_keys if k not in parsed]
+        if not missing:
+            return parsed
+        text = original_text or json.dumps(parsed, ensure_ascii=False)
+        for key in missing:
+            m = regex.search(rf'["\']{key}["\']\s*:\s*["\'](.+?)["\']', text, regex.DOTALL | regex.IGNORECASE)
+            if m:
+                parsed[key] = m.group(1).strip()
+        missing2 = [k for k in required_keys if k not in parsed]
+        if not missing2:
+            return parsed
+        # fallback split for headline/article_body
+        if 'headline' in required_keys and 'article_body' in required_keys:
+            lines = (original_text or "").strip().splitlines()
+            if len(lines) >= 2:
+                parsed.setdefault('headline', lines[0].strip())
+                parsed.setdefault('article_body', "\n".join(lines[1:]).strip())
+                missing2 = [k for k in required_keys if k not in parsed]
+                if not missing2:
+                    return parsed
         return parsed
 
-    except Exception as e:
-        log(f"   ⚠️ Puter generation failed: {str(e)[:200]}")
-        return None
+    # list case
+    if isinstance(parsed, list):
+        # list of dicts -> merge
+        if all(isinstance(x, dict) for x in parsed):
+            merged = {}
+            for item in parsed:
+                merged.update(item)
+            return _normalize_parsed_output(merged, required_keys, original_text or json.dumps(parsed, ensure_ascii=False))
+        # list of strings -> headline + body
+        if all(isinstance(x, str) for x in parsed):
+            if 'headline' in required_keys and 'article_body' in required_keys:
+                headline = parsed[0].strip() if parsed else ""
+                body = "\n".join(parsed[1:]).strip() if len(parsed) > 1 else ""
+                return {'headline': headline, 'article_body': body}
+            return {'items': parsed}
+        # mixed -> stringify & reparsed
+        textified = "\n".join([json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else x for x in parsed])
+        reparsed = master_json_parser(textified)
+        if reparsed and isinstance(reparsed, dict):
+            return _normalize_parsed_output(reparsed, required_keys, original_text or textified)
+        return {'items': parsed}
+
+    # string case
+    if isinstance(parsed, str):
+        reparsed = master_json_parser(parsed)
+        if reparsed and reparsed is not parsed:
+            return _normalize_parsed_output(reparsed, required_keys, original_text or parsed)
+        if 'headline' in required_keys and 'article_body' in required_keys:
+            lines = parsed.strip().splitlines()
+            if len(lines) >= 2:
+                return {'headline': lines[0].strip(), 'article_body': "\n".join(lines[1:]).strip()}
+            else:
+                return {'headline': parsed.strip(), 'article_body': ''}
+        return parsed
+
+    return parsed
 
 # ------------------------------------------------------------------------------
-# ENGINE 2 — GEMINI (Robust / Sanitized)
+# GEMINI CALLER (robust, deterministic, sanitized)
 # ------------------------------------------------------------------------------
 
 def try_gemini_generation(
@@ -264,42 +266,39 @@ def try_gemini_generation(
     prompt,
     system_prompt,
     use_google_search=False,
-    system_instruction=None
+    system_instruction=None,
+    required_keys=None
 ):
     """
-    Robust Gemini caller:
-      - sanitizes system_instruction (no dicts)
-      - sanitizes contents
-      - attempts structured call, then falls back to a very simple call on validation errors
-      - rotates key on quota errors
+    Primary Gemini caller. Returns normalized parsed output or None.
     """
     model_slug = model_name.replace("models/", "")
-
     key = key_manager.get_current_key()
     if not key:
         raise RuntimeError("No Gemini API Keys available.")
-
     client = genai.Client(api_key=key)
 
-    # Sanitize system_instruction and prompt/contents
-    safe_system = _sanitize_system_instruction(system_instruction or system_prompt)
+    # Sanitize inputs
+    safe_system = _sanitize_system_instruction(system_instruction or system_prompt or EEAT_GUIDELINES)
     contents_payload = _build_contents_for_api(prompt)
 
-    generation_config = None
+    # Safety: ensure minimal temperature for deterministic JSON
+    temperature = DEFAULT_TEMPERATURE
 
     try:
-        # Build config safely (avoid passing raw dicts/objects)
+        # Build a safe config
         if use_google_search and hasattr(types, "Tool") and hasattr(types, "GoogleSearch"):
             tools = [types.Tool(google_search=types.GoogleSearch())]
             generation_config = types.GenerateContentConfig(
                 tools=tools,
-                temperature=0.3,
-                system_instruction=safe_system
+                temperature=temperature,
+                system_instruction=safe_system,
+                response_mime_type="application/json"
             )
         else:
             generation_config = types.GenerateContentConfig(
                 response_mime_type="application/json",
-                temperature=0.2,
+                temperature=temperature,
                 system_instruction=safe_system
             )
 
@@ -312,10 +311,8 @@ def try_gemini_generation(
         if not response:
             return None
 
-        # prefer .text; some SDKs return different shapes
         text = getattr(response, "text", None)
         if not text:
-            # try other known attributes
             if hasattr(response, "content"):
                 text = str(response.content)
             else:
@@ -323,72 +320,56 @@ def try_gemini_generation(
 
         parsed = master_json_parser(text)
 
-        # If parsing failed, attempt a repair-extraction using a specialized prompt
+        # If nothing parsed, attempt a repair extraction using a careful prompt
         if not parsed:
-            repair_prompt = f"Extract ONLY valid JSON from this text:\n\n{text[:8000]}"
+            repair_prompt = f"Extract ONLY valid JSON matching the requested schema from this text. Return PURE JSON with keys if possible:\n\n{text[:12000]}"
             repair_contents = _build_contents_for_api(repair_prompt)
-            repair_config = types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.05
-            )
+            repair_config = types.GenerateContentConfig(response_mime_type="application/json", temperature=0.0)
             try:
-                repair = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=repair_contents,
-                    config=repair_config
-                )
+                repair = client.models.generate_content(model="gemini-2.5-flash", contents=repair_contents, config=repair_config)
                 repair_text = getattr(repair, "text", None) or str(repair)
                 parsed = master_json_parser(repair_text)
             except Exception as repair_e:
                 log(f"   ⚠️ Gemini repair attempt failed: {str(repair_e)[:200]}")
 
-        return parsed
+        normalized = _normalize_parsed_output(parsed, required_keys=required_keys or [], original_text=text)
+        return normalized
 
     except Exception as e:
         err = str(e)
         low = err.lower()
 
-        # If validation-related error (common message: "Extra inputs are not permitted" or pydantic validation)
+        # Validation error due to sending dict/object in system_instruction or config
         if "extra inputs are not permitted" in low or "validation error" in low or isinstance(e, PydanticValidationError):
             log(f"   ⚠️ Gemini validation error detected for {model_slug}. Retrying with a minimal/simple payload...")
             try:
-                # Minimal fallback: plain string contents, no config
                 simple_contents = prompt if isinstance(prompt, str) else json.dumps(prompt, ensure_ascii=False)
-                simple_resp = client.models.generate_content(
-                    model=model_slug,
-                    contents=simple_contents
-                )
+                simple_resp = client.models.generate_content(model=model_slug, contents=simple_contents)
                 txt = getattr(simple_resp, "text", None) or str(simple_resp)
                 parsed = master_json_parser(txt)
-                if parsed:
-                    return parsed
+                normalized = _normalize_parsed_output(parsed, required_keys=required_keys or [], original_text=txt)
+                if normalized:
+                    return normalized
             except Exception as e2:
                 log(f"   ❌ Gemini fallback simple request failed for {model_slug}: {str(e2)[:200]}")
 
-        # Throttle/quota handling -> rotate key then retry once
+        # Quota/throttled -> rotate key and retry once
         if "429" in low or "quota" in low or "exhausted" in low:
             log(f"Quota hit on {model_slug}. Rotating key...")
             if key_manager.switch_key():
-                return try_gemini_generation(
-                    model_name,
-                    prompt,
-                    system_prompt,
-                    use_google_search,
-                    system_instruction
-                )
+                return try_gemini_generation(model_name, prompt, system_prompt, use_google_search, system_instruction, required_keys)
             return None
 
-        # Model not found / invalid model
+        # Model not found
         if "404" in low or "not found" in low:
             log(f"Model not found: {model_slug}")
             return None
 
-        # Generic logging for other errors
-        log(f"API Error on {model_slug}: {str(e)[:240]}")
+        log(f"API Error on {model_slug}: {str(e)[:300]}")
         return None
 
 # ------------------------------------------------------------------------------
-# MASTER ORCHESTRATOR
+# MASTER ORCHESTRATOR (Gemini-only)
 # ------------------------------------------------------------------------------
 
 @retry(
@@ -406,7 +387,6 @@ def generate_step_strict(
     system_instruction=None
 ):
     global API_HEAT
-
     if required_keys is None:
         required_keys = []
 
@@ -415,60 +395,27 @@ def generate_step_strict(
 
     log(f"   🔄 Executing: {step_name}")
 
-    # Prepare a sanitized system instruction to pass consistently
-    sanitized_system = _sanitize_system_instruction(system_instruction or STRICT_SYSTEM_PROMPT)
+    # Sanitize system instruction once at this top layer (ensures callers can pass dicts safely)
+    sanitized_system = _sanitize_system_instruction(system_instruction or EEAT_GUIDELINES or "")
 
-    # Tier 1 — Puter
-    if not use_google_search:
-        result = try_puter_generation(
-            prompt,
-            sanitized_system
-        )
-
-        if result:
-            try:
-                if required_keys:
-                    validate_structure(result, required_keys)
-
-                log("      ✅ Success (Source: Puter)")
-                return result
-            except JSONValidationError:
-                log("      ⚠️ Puter returned invalid JSON structure.")
-
-    # Tier 2 — Gemini Chain
-    models_to_try = []
-
+    # Build model list to try (start from initial if included)
     clean_initial = initial_model_name.replace("models/", "")
-
     if clean_initial in GEMINI_FALLBACK_CHAIN:
-        models_to_try.append(clean_initial)
-        models_to_try.extend(
-            [m for m in GEMINI_FALLBACK_CHAIN if m != clean_initial]
-        )
+        models_to_try = [clean_initial] + [m for m in GEMINI_FALLBACK_CHAIN if m != clean_initial]
     else:
-        models_to_try = GEMINI_FALLBACK_CHAIN
+        models_to_try = GEMINI_FALLBACK_CHAIN.copy()
 
     for model in models_to_try:
-        result = try_gemini_generation(
-            model,
-            prompt,
-            sanitized_system,
-            use_google_search,
-            sanitized_system
-        )
-
+        result = try_gemini_generation(model, prompt, sanitized_system, use_google_search, sanitized_system, required_keys)
         if result:
+            # Attempt final structural validation (after normalization)
             try:
                 if required_keys:
                     validate_structure(result, required_keys)
-
                 log(f"      ✅ Success (Source: {model})")
                 return result
-
             except JSONValidationError as ve:
                 log(f"Invalid structure from {model}: {ve}")
-                continue
+                # continue to next model in chain
 
-    raise RuntimeError(
-        f"❌ CRITICAL FAILURE: All AI models failed for step: {step_name}"
-    )
+    raise RuntimeError(f"❌ CRITICAL FAILURE: All Gemini models failed for step: {step_name}")
