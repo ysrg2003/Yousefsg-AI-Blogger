@@ -1,6 +1,8 @@
 name: Reddit Manager - Manual Test
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
     inputs:
       keyword:
@@ -11,6 +13,7 @@ on:
 jobs:
   reddit-manager-test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -29,18 +32,6 @@ jobs:
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
           TEST_KEYWORD: ${{ github.event.inputs.keyword }}
         run: |
-          python - <<'PY'
-import os
-from reddit_manager import get_community_intel
-
-q = os.getenv("TEST_KEYWORD")
-print("Searching for:", q)
-
-text, media = get_community_intel(q)
-
-print("=== TEXT LENGTH ===", len(text))
-print("=== MEDIA COUNT ===", len(media))
-
-if text:
-    print(text[:800])
-PY
+          echo "Running reddit_manager test..."
+          echo "Keyword: $TEST_KEYWORD"
+          python test_runner.py
