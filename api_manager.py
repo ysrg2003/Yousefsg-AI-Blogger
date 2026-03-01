@@ -15,6 +15,7 @@ from google import genai
 from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from config import log, EEAT_GUIDELINES
+from pydantic import ValidationError as PydanticValidationError
 
 # ------------------------------------------------------------------------------
 # CONFIGURATION
@@ -73,11 +74,14 @@ class KeyManager:
 key_manager = KeyManager()
 
 # ------------------------------------------------------------------------------
-# LOGGING
+# LOGGING SETUP
 # ------------------------------------------------------------------------------
 
 logger = logging.getLogger("RetryEngine")
 logger.setLevel(logging.INFO)
+
+# Reduce noisy matplotlib font-manager warnings in server/container environments
+logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
 # ------------------------------------------------------------------------------
 # EXCEPTIONS
@@ -113,8 +117,10 @@ def master_json_parser(text):
     if not text:
         return None
 
+    # Remove common fences and trim
     clean_text = text.replace("```json", "").replace("```", "").strip()
 
+    # Try to find the first JSON object or array
     match = regex.search(
         r'\{(?:[^{}]|(?R))*\}|\[(?:[^\[\]]|(?R))*\]',
         clean_text,
@@ -123,16 +129,18 @@ def master_json_parser(text):
 
     candidate = match.group(0) if match else clean_text
 
+    # Try repair (best effort)
     try:
         decoded = json_repair.repair_json(candidate, return_objects=True)
         if isinstance(decoded, (dict, list)):
             return decoded
-    except:
+    except Exception:
         pass
 
+    # Final attempt: json.loads
     try:
         return json.loads(candidate)
-    except:
+    except Exception:
         return None
 
 
@@ -145,6 +153,71 @@ def validate_structure(data, required_keys):
         raise JSONValidationError(f"Missing keys: {missing}")
 
     return True
+
+# ------------------------------------------------------------------------------
+# UTIL: SANITIZERS FOR Gemini API
+# ------------------------------------------------------------------------------
+
+def _sanitize_system_instruction(sys_inst):
+    """
+    Ensure system_instruction is a string or list of strings (never a dict/object).
+    If dict -> convert to readable multiline string "key: value".
+    """
+    if not sys_inst:
+        return ""
+
+    if isinstance(sys_inst, (list, tuple)):
+        return [str(x) for x in sys_inst]
+
+    if isinstance(sys_inst, dict):
+        lines = []
+        for k, v in sys_inst.items():
+            # If nested dict/list, json.dumps to produce readable text
+            if isinstance(v, (dict, list)):
+                v_str = json.dumps(v, ensure_ascii=False)
+            else:
+                v_str = str(v)
+            lines.append(f"{k}: {v_str}")
+        return "\n".join(lines)
+
+    return str(sys_inst)
+
+
+def _build_contents_for_api(contents):
+    """
+    Build a contents payload acceptable to google-genai:
+      - prefer types.Text if available
+      - convert bytes -> types.Part.from_bytes
+      - accept list[str] or list[parts]
+    Returns either a single value or a list acceptable to client.models.generate_content
+    """
+    # If it's already a list, convert items
+    if isinstance(contents, list):
+        converted = []
+        for c in contents:
+            if isinstance(c, (bytes, bytearray)):
+                if hasattr(types, "Part") and hasattr(types.Part, "from_bytes"):
+                    converted.append(types.Part.from_bytes(data=bytes(c), mime_type="application/octet-stream"))
+                else:
+                    converted.append(bytes(c))
+            else:
+                # prefer types.Text if present
+                if hasattr(types, "Text"):
+                    converted.append(types.Text(str(c)))
+                else:
+                    converted.append(str(c))
+        return converted
+
+    # single bytes
+    if isinstance(contents, (bytes, bytearray)):
+        if hasattr(types, "Part") and hasattr(types.Part, "from_bytes"):
+            return [types.Part.from_bytes(data=bytes(contents), mime_type="application/octet-stream")]
+        return [bytes(contents)]
+
+    # otherwise treat as text
+    if hasattr(types, "Text"):
+        return [types.Text(str(contents))]
+    return str(contents)
 
 # ------------------------------------------------------------------------------
 # ENGINE 1 — PUTER (CLAUDE / GPT)
@@ -178,11 +251,12 @@ def try_puter_generation(prompt, system_prompt):
         parsed = master_json_parser(text)
         return parsed
 
-    except Exception:
+    except Exception as e:
+        log(f"   ⚠️ Puter generation failed: {str(e)[:200]}")
         return None
 
 # ------------------------------------------------------------------------------
-# ENGINE 2 — GEMINI
+# ENGINE 2 — GEMINI (Robust / Sanitized)
 # ------------------------------------------------------------------------------
 
 def try_gemini_generation(
@@ -192,6 +266,13 @@ def try_gemini_generation(
     use_google_search=False,
     system_instruction=None
 ):
+    """
+    Robust Gemini caller:
+      - sanitizes system_instruction (no dicts)
+      - sanitizes contents
+      - attempts structured call, then falls back to a very simple call on validation errors
+      - rotates key on quota errors
+    """
     model_slug = model_name.replace("models/", "")
 
     key = key_manager.get_current_key()
@@ -200,68 +281,92 @@ def try_gemini_generation(
 
     client = genai.Client(api_key=key)
 
+    # Sanitize system_instruction and prompt/contents
+    safe_system = _sanitize_system_instruction(system_instruction or system_prompt)
+    contents_payload = _build_contents_for_api(prompt)
+
     generation_config = None
 
     try:
-        # Build config safely
-        if use_google_search:
+        # Build config safely (avoid passing raw dicts/objects)
+        if use_google_search and hasattr(types, "Tool") and hasattr(types, "GoogleSearch"):
             tools = [types.Tool(google_search=types.GoogleSearch())]
-
             generation_config = types.GenerateContentConfig(
                 tools=tools,
                 temperature=0.3,
-                system_instruction=system_instruction or system_prompt
+                system_instruction=safe_system
             )
         else:
             generation_config = types.GenerateContentConfig(
                 response_mime_type="application/json",
                 temperature=0.2,
-                system_instruction=system_instruction or system_prompt
+                system_instruction=safe_system
             )
 
         response = client.models.generate_content(
             model=model_slug,
-            contents=prompt,
+            contents=contents_payload,
             config=generation_config
         )
 
         if not response:
             return None
 
+        # prefer .text; some SDKs return different shapes
         text = getattr(response, "text", None)
-
         if not text:
-            text = str(response)
+            # try other known attributes
+            if hasattr(response, "content"):
+                text = str(response.content)
+            else:
+                text = str(response)
 
         parsed = master_json_parser(text)
 
+        # If parsing failed, attempt a repair-extraction using a specialized prompt
         if not parsed:
-            repair_prompt = f"""
-Extract ONLY valid JSON from this text:
-
-{text[:8000]}
-"""
-
+            repair_prompt = f"Extract ONLY valid JSON from this text:\n\n{text[:8000]}"
+            repair_contents = _build_contents_for_api(repair_prompt)
             repair_config = types.GenerateContentConfig(
                 response_mime_type="application/json",
-                temperature=0.1
+                temperature=0.05
             )
-
-            repair = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=repair_prompt,
-                config=repair_config
-            )
-
-            repair_text = getattr(repair, "text", str(repair))
-            parsed = master_json_parser(repair_text)
+            try:
+                repair = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=repair_contents,
+                    config=repair_config
+                )
+                repair_text = getattr(repair, "text", None) or str(repair)
+                parsed = master_json_parser(repair_text)
+            except Exception as repair_e:
+                log(f"   ⚠️ Gemini repair attempt failed: {str(repair_e)[:200]}")
 
         return parsed
 
     except Exception as e:
-        error_msg = str(e).lower()
+        err = str(e)
+        low = err.lower()
 
-        if "429" in error_msg or "quota" in error_msg:
+        # If validation-related error (common message: "Extra inputs are not permitted" or pydantic validation)
+        if "extra inputs are not permitted" in low or "validation error" in low or isinstance(e, PydanticValidationError):
+            log(f"   ⚠️ Gemini validation error detected for {model_slug}. Retrying with a minimal/simple payload...")
+            try:
+                # Minimal fallback: plain string contents, no config
+                simple_contents = prompt if isinstance(prompt, str) else json.dumps(prompt, ensure_ascii=False)
+                simple_resp = client.models.generate_content(
+                    model=model_slug,
+                    contents=simple_contents
+                )
+                txt = getattr(simple_resp, "text", None) or str(simple_resp)
+                parsed = master_json_parser(txt)
+                if parsed:
+                    return parsed
+            except Exception as e2:
+                log(f"   ❌ Gemini fallback simple request failed for {model_slug}: {str(e2)[:200]}")
+
+        # Throttle/quota handling -> rotate key then retry once
+        if "429" in low or "quota" in low or "exhausted" in low:
             log(f"Quota hit on {model_slug}. Rotating key...")
             if key_manager.switch_key():
                 return try_gemini_generation(
@@ -273,11 +378,13 @@ Extract ONLY valid JSON from this text:
                 )
             return None
 
-        if "404" in error_msg:
+        # Model not found / invalid model
+        if "404" in low or "not found" in low:
             log(f"Model not found: {model_slug}")
             return None
 
-        log(f"API Error on {model_slug}: {str(e)[:120]}")
+        # Generic logging for other errors
+        log(f"API Error on {model_slug}: {str(e)[:240]}")
         return None
 
 # ------------------------------------------------------------------------------
@@ -308,11 +415,14 @@ def generate_step_strict(
 
     log(f"   🔄 Executing: {step_name}")
 
+    # Prepare a sanitized system instruction to pass consistently
+    sanitized_system = _sanitize_system_instruction(system_instruction or STRICT_SYSTEM_PROMPT)
+
     # Tier 1 — Puter
     if not use_google_search:
         result = try_puter_generation(
             prompt,
-            system_instruction or STRICT_SYSTEM_PROMPT
+            sanitized_system
         )
 
         if result:
@@ -342,9 +452,9 @@ def generate_step_strict(
         result = try_gemini_generation(
             model,
             prompt,
-            STRICT_SYSTEM_PROMPT,
+            sanitized_system,
             use_google_search,
-            system_instruction or STRICT_SYSTEM_PROMPT
+            sanitized_system
         )
 
         if result:
