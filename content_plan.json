@@ -1,9 +1,6 @@
 {
-  "active_cluster": "Here's how generative AI is about to revolutionize audio creation and editing Mastery Series",
-  "queue": [
-    "Mastering Generative AI Audio: A Hands-On Guide to Adobe's Revolutionary Sound Creation & Editing Tools",
-    "The Generative AI Audio Arms Race: Adobe's Position Amidst Google, OpenAI, and the Evolving Sound Industry"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -24,7 +21,8 @@
     "Qwen3-TTS Family is Now Open Sourced: Voice Design, Clone, and Generation! Mastery Series",
     "What's new in Azure OpenAI in Azure AI Foundry Models? (classic) Mastery Series",
     "Sora 2 is here Mastery Series",
-    "Scaling AI for everyone Mastery Series"
+    "Scaling AI for everyone Mastery Series",
+    "Here's how generative AI is about to revolutionize audio creation and editing Mastery Series"
   ],
   "last_generated": "2026-03-01"
 }
