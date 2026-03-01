@@ -646,6 +646,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             else:
                 final_body_html = video_html + final_body_html
 
+        sources_data = collected_sources
+        kg_links = {}
         # ======================================================================
         # SEO POLISH, HUMANIZER, AND INJECTIONS (Robust with smart fallback)
         # ======================================================================
