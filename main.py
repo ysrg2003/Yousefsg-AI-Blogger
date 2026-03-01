@@ -470,12 +470,13 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             content_type == "Guide"               # If content is a Guide
         )
 
-        if should_run_chart:
-            log("   📊 [Chart Generator] Analyzing data for potential visualization...")
-            chart_prompt = f"TASK: Extract numerical data for a comparison chart related to {target_keyword} from the following text (focus on ROI, Cost, Efficiency, Setup Time, Performance, Score, Price per Unit):\nTEXT: {all_text_blob_for_assets}\nOUTPUT JSON: {{'chart_title': 'A relevant comparison chart title', 'data_points': {{'Entity1': 10.5, 'Entity2': 20.3}}}}\nOR return null if no sufficient data."
-            chart_data = safe_generate_step_strict(model_name, chart_prompt, "Data Extraction for Chart", ["data_points"])
+        if should_run_chart:  
+            log("📊 [Chart Generator] Extracting REAL data for visualization...")  
+            chart_sources_text = "\n".join([s['text'] for s in collected_sources])[:20000]  
+            chart_prompt = f"""TASK: Extract ONLY real numerical data from the following collected sources for a comparison chart about '{target_keyword}'. Focus on metrics: ROI, Cost, Efficiency, Setup Time, Performance, Score, Price per Unit. Sources Text: {chart_sources_text} Return JSON ONLY in this format: {{'chart_title': 'Comparison Chart for {target_keyword}', 'data_points': {{'Entity Name': value, ...}}}} Return null if no sufficient real data exists."""  
+            chart_data = safe_generate_step_strict(model_name, chart_prompt, "Chart Data Extraction", ["data_points"])  
             chart_data = ensure_required_keys_generic(model_name, chart_data or {}, {"data_points": chart_prompt})
-            
+                    
             if chart_data and chart_data.get('data_points') and len(chart_data['data_points']) >= 2:
                 # create_chart_from_data(data_points, title)
                 chart_url = safe_execute(chart_generator.create_chart_from_data, None, "chart_generator.create_chart_from_data", 1, 1.0, chart_data['data_points'], chart_data.get('chart_title', f'{target_keyword} Comparison'))
