@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Scaling AI for everyone Mastery Series",
+  "queue": [
+    "From Concept to Code: A Practical Guide to Implementing OpenAI's Scalable AI Features",
+    "OpenAI vs. The Giants: Analyzing the Competitive Landscape After 'Scaling AI for Everyone'"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
