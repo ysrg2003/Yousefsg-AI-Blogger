@@ -191,6 +191,7 @@ OUTPUT PURE JSON ONLY:
 
 # ------------------------------------------------------------------
 
+# PROMPT_COMPETITOR_ANALYSIS — يُرجع JSON منظّم عن المنافسين المباشرين
 PROMPT_COMPETITOR_ANALYSIS = """
 TASK:
 You are an experienced market analyst. Given a target keyword / product / topic, find up to 5 direct competitors or close alternatives. For each competitor provide a concise, factual summary and structured attributes that help compare them.
@@ -201,16 +202,16 @@ INPUT:
 
 INSTRUCTIONS:
 1. Focus on direct competitors and close alternatives (products, services, or companies).
-2. For each competitor include: name, short_description, website (if available), core_features (short list), main_strengths (short list), main_weaknesses (short list), approximate_pricing_or_tier (if known), and a numeric visibility_score (0-100) estimating organic presence.
-3. Be concise, factual, and avoid hallucinations — if unsure about a fact, leave the field empty or use "unknown".
-4. Return **ONLY** valid JSON matching the "OUTPUT JSON STRUCTURE" below. Do not include any extra commentary outside the JSON.
+2. For each competitor include exactly these fields: name, short_description, website, core_features (array), main_strengths (array), main_weaknesses (array), approximate_pricing_or_tier (string), visibility_score (number 0-100).
+3. Be concise, factual, and avoid hallucinations — if unsure about a fact, use the literal string "unknown".
+4. Return **ONLY** valid JSON that exactly matches the OUTPUT JSON STRUCTURE below. No extra commentary, no explanation outside JSON.
 
 OUTPUT JSON STRUCTURE:
 {
   "competitors": [
     {
       "name": "Competitor name",
-      "short_description": "One-line summary (max 30 words).",
+      "short_description": "One-line summary (<=30 words).",
       "website": "https://example.com",
       "core_features": ["feature A", "feature B"],
       "main_strengths": ["strength 1", "strength 2"],
@@ -219,7 +220,7 @@ OUTPUT JSON STRUCTURE:
       "visibility_score": 0.0
     }
   ],
-  "notes": "Optional short note about data confidence or missing info (max 40 words)."
+  "notes": "Optional short note about data confidence or missing info (<=40 words)."
 }
 """
 
@@ -582,13 +583,15 @@ Do NOT change the title or any other metadata.
 
 
 
+
+
 OUTPUT JSON STRUCTURE:
 {
   "finalTitle": "<string: SEO-friendly headline>",
   "finalContent": "<string: full rewritten HTML content>",
   "seo": {
-    "meta_title": "<string: suggested meta title (<=70 chars)>",
-    "meta_description": "<string: suggested meta description (<=155 chars)>",
+    "meta_title": "<string (<=70 chars)>",
+    "meta_description": "<string (<=155 chars)>",
     "focus_keywords": ["keyword1", "keyword2", "keyword3"]
   },
   "schemaMarkup": {
@@ -606,7 +609,6 @@ OUTPUT JSON STRUCTURE:
         "name": "<publisher name or unknown>",
         "logo": { "@type": "ImageObject", "url": "<logo_url or unknown>" }
       }
-      /* Add other fields if applicable; keep valid JSON */
     }
   }
 }
