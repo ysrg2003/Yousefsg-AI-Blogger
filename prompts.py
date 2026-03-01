@@ -185,6 +185,44 @@ OUTPUT PURE JSON ONLY:
 "visual_strategy": "The chosen strategy from the list above"
 }}
 """
+# ------------------------------------------------------------------
+
+# PROMPT_COMPETITOR_ANALYSIS — يرجع JSON منظّم عن المنافسين المباشرين
+
+# ------------------------------------------------------------------
+
+PROMPT_COMPETITOR_ANALYSIS = """
+TASK:
+You are an experienced market analyst. Given a target keyword / product / topic, find up to 5 direct competitors or close alternatives. For each competitor provide a concise, factual summary and structured attributes that help compare them.
+
+INPUT:
+- target_keyword: the search term, product name, or topic to analyze.
+- market_context (optional): short text describing target audience, region, price tier, or vertical.
+
+INSTRUCTIONS:
+1. Focus on direct competitors and close alternatives (products, services, or companies).
+2. For each competitor include: name, short_description, website (if available), core_features (short list), main_strengths (short list), main_weaknesses (short list), approximate_pricing_or_tier (if known), and a numeric visibility_score (0-100) estimating organic presence.
+3. Be concise, factual, and avoid hallucinations — if unsure about a fact, leave the field empty or use "unknown".
+4. Return **ONLY** valid JSON matching the "OUTPUT JSON STRUCTURE" below. Do not include any extra commentary outside the JSON.
+
+OUTPUT JSON STRUCTURE:
+{
+  "competitors": [
+    {
+      "name": "Competitor name",
+      "short_description": "One-line summary (max 30 words).",
+      "website": "https://example.com",
+      "core_features": ["feature A", "feature B"],
+      "main_strengths": ["strength 1", "strength 2"],
+      "main_weaknesses": ["weakness 1", "weakness 2"],
+      "approximate_pricing_or_tier": "free / freemium / $ / $$ / enterprise / unknown",
+      "visibility_score": 0.0
+    }
+  ],
+  "notes": "Optional short note about data confidence or missing info (max 40 words)."
+}
+"""
+
 
 # ------------------------------------------------------------------
 
@@ -543,11 +581,41 @@ Do NOT add new sections.
 Do NOT change the title or any other metadata.
 
 
-OUTPUT JSON STRUCTURE:
-{{
-"finalContent": "The rewritten, humanized, and easy-to-read full HTML content."
-}}
 
+OUTPUT JSON STRUCTURE:
+{
+  "finalTitle": "<string: SEO-friendly headline>",
+  "finalContent": "<string: full rewritten HTML content>",
+  "seo": {
+    "meta_title": "<string: suggested meta title (<=70 chars)>",
+    "meta_description": "<string: suggested meta description (<=155 chars)>",
+    "focus_keywords": ["keyword1", "keyword2", "keyword3"]
+  },
+  "schemaMarkup": {
+    "type": "Article",
+    "schema_json_ld": {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      "headline": "<string>",
+      "description": "<string>",
+      "author": { "name": "<string or unknown>" },
+      "datePublished": "<YYYY-MM-DD or unknown>",
+      "mainEntityOfPage": "<URL or unknown>",
+      "publisher": {
+        "@type": "Organization",
+        "name": "<publisher name or unknown>",
+        "logo": { "@type": "ImageObject", "url": "<logo_url or unknown>" }
+      }
+      /* Add other fields if applicable; keep valid JSON */
+    }
+  }
+}
+
+ADDITIONAL NOTES FOR THE MODEL:
+- finalContent must preserve HTML tags where appropriate (paragraphs, headings, lists). Return it as a single JSON string (escape quotes properly).
+- Use short arrays (max 6 keywords) and numeric/non-verbose schema fields.
+- If some metadata is unknown, use the literal string "unknown" for that field (do not leave it out).
+- Ensure the entire response is parseable JSON (strict compliance required).
 CRITICAL OUTPUT RULES:
 
 1. Return PURE VALID JSON ONLY.
