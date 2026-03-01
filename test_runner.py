@@ -1,9 +1,10 @@
-# test_runner.py
-# Simple runner used by GitHub Actions workflow to call get_community_intel
 import os
+import json
+
 from reddit_manager import get_community_intel
 
-q = os.getenv("TEST_KEYWORD") or "Sora 2 OpenAI discussion"
+q = os.getenv("TEST_KEYWORD")
+
 print("Searching for:", q)
 
 text, media = get_community_intel(q)
@@ -11,11 +12,12 @@ text, media = get_community_intel(q)
 print("=== TEXT LENGTH ===", len(text))
 print("=== MEDIA COUNT ===", len(media))
 
-if text:
-    print("=== SAMPLE TEXT (first 800 chars) ===")
-    print(text[:800])
+# -------- Save Evidence Text --------
+with open("reddit_evidence.txt", "w", encoding="utf-8") as f:
+    f.write(text)
 
-if media:
-    print("=== SAMPLE MEDIA (first 5) ===")
-    for m in media[:5]:
-        print(m)
+# -------- Save Media JSON --------
+with open("reddit_media.json", "w", encoding="utf-8") as f:
+    json.dump(media, f, indent=2, ensure_ascii=False)
+
+print("Files saved successfully.")
