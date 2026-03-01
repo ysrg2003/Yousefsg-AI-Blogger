@@ -389,8 +389,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
         kg_links = history_manager.get_relevant_kg_for_linking(title, category)
         seo_payload = {"draft_content": {"headline": title, "article_body": final_body_html}, "sources_data": sources_data}
-        json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(seo_payload, ensure_ascii=False), knowledge_graph=kg_links, eeat_guidelines=json.dumps(EEAT_GUIDELINES, ensure_ascii=False), boring_keywords=json.dumps(BORING_KEYWORDS, ensure_ascii=False)), "SEO Polish", ["finalTitle", "finalContent", "seo", "schemaMarkup"], system_instruction=EEAT_GUIDELINES)
-
+        json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(html_content=final_body_html, original_sources=json.dumps(sources_data, ensure_ascii=False), knowledge_graph=json.dumps(kg_links, ensure_ascii=False), eeat_guidelines=json.dumps(EEAT_GUIDELINES, ensure_ascii=False), boring_keywords=json.dumps(BORING_KEYWORDS, ensure_ascii=False)), "SEO Polish", ["finalTitle", "finalContent", "seo", "schemaMarkup"], system_instruction=EEAT_GUIDELINES)
         if not img_url and json_c.get('imageGenPrompt'):
             log("   🎨 No real image found. Falling back to AI Image Generation...")
             img_url = image_processor.generate_and_upload_image(json_c['imageGenPrompt'], json_c.get('imageOverlayText', ''))
