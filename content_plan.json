@@ -1,8 +1,6 @@
 {
-  "active_cluster": "Gemini 3.1 Pro: A smarter model for your most complex tasks - Google Blog Mastery Series",
-  "queue": [
-    "Gemini 3.1 Pro in the AI Arena: A Competitive Analysis Against OpenAI and the Future of LLMs"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -24,7 +22,8 @@
     "What's new in Azure OpenAI in Azure AI Foundry Models? (classic) Mastery Series",
     "Sora 2 is here Mastery Series",
     "Scaling AI for everyone Mastery Series",
-    "Here's how generative AI is about to revolutionize audio creation and editing Mastery Series"
+    "Here's how generative AI is about to revolutionize audio creation and editing Mastery Series",
+    "Gemini 3.1 Pro: A smarter model for your most complex tasks - Google Blog Mastery Series"
   ],
   "last_generated": "2026-03-01"
 }
