@@ -222,6 +222,9 @@ OUTPUT JSON STRUCTURE:
   ],
   "notes": "Optional short note about data confidence or missing info (<=40 words)."
 }
+IMPORTANT: Return ONLY a valid JSON object matching the OUTPUT JSON STRUCTURE. 
+Do NOT add any text, explanation, or comment outside the JSON. 
+If some field is unknown, set it to the literal string "unknown".
 """
 
 
@@ -613,20 +616,9 @@ OUTPUT JSON STRUCTURE:
   }
 }
 
-ADDITIONAL NOTES FOR THE MODEL:
-- finalContent must preserve HTML tags where appropriate (paragraphs, headings, lists). Return it as a single JSON string (escape quotes properly).
-- Use short arrays (max 6 keywords) and numeric/non-verbose schema fields.
-- If some metadata is unknown, use the literal string "unknown" for that field (do not leave it out).
-- Ensure the entire response is parseable JSON (strict compliance required).
-CRITICAL OUTPUT RULES:
-
-1. Return PURE VALID JSON ONLY.
-
-
-2. Maintain valid HTML escaping (\").
-
-
-3. No Markdown.
+IMPORTANT: Return ONLY a valid JSON object matching the OUTPUT JSON STRUCTURE. 
+Do NOT add any text, explanation, or comment outside the JSON. 
+If some field is unknown, set it to the literal string "unknown".
 """
 
 
