@@ -420,9 +420,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         
         log("   🔍 [Competitor Analysis] Identifying market alternatives...")
         competitor_data = []
-        comp_prompt = PROMPT_COMPETITOR_ANALYSIS.format(target_keyword=target_keyword)
+        comp_prompt = PROMPT_COMPETITOR_ANALYSIS.format(target_keyword=target_keyword, competitors="")
         comp_result = safe_generate_step_strict(model_name, comp_prompt, "Competitor Analysis", ["competitors"], use_google_search=True, system_instruction=EEAT_GUIDELINES)
-        comp_result = ensure_required_keys_generic(model_name, comp_result or {}, {"competitors": comp_prompt})
+        comp_result = ensure_required_keys_generic(model_name, comp_result or {}, {"competitors": []})
         if comp_result and comp_result.get("competitors"):
             competitor_data = comp_result["competitors"]
             log(f"      ✅ Found competitors: {[c.get('name') for c in competitor_data]}")
