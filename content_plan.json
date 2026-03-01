@@ -1,9 +1,6 @@
 {
-  "active_cluster": "Scaling AI for everyone Mastery Series",
-  "queue": [
-    "From Concept to Code: A Practical Guide to Implementing OpenAI's Scalable AI Features",
-    "OpenAI vs. The Giants: Analyzing the Competitive Landscape After 'Scaling AI for Everyone'"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -23,7 +20,8 @@
     "Best TTS APIs for Real-Time Voice Agents (2026 Benchmarks) - Inworld AI Mastery Series",
     "Qwen3-TTS Family is Now Open Sourced: Voice Design, Clone, and Generation! Mastery Series",
     "What's new in Azure OpenAI in Azure AI Foundry Models? (classic) Mastery Series",
-    "Sora 2 is here Mastery Series"
+    "Sora 2 is here Mastery Series",
+    "Scaling AI for everyone Mastery Series"
   ],
   "last_generated": "2026-03-01"
 }
