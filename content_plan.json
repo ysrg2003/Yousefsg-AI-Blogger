@@ -1,8 +1,6 @@
 {
-  "active_cluster": "How Voice Security Can Combat Deepfake AI - Pindrop Mastery Series",
-  "queue": [
-    "Deepfake Defense Landscape: Pindrop's Voice Security Compared to Google, OpenAI, and Emerging Solutions"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -16,7 +14,8 @@
     "Financial AI Leaders Join Forces: BridgeWise Acquires US-Based Context Analytics to Pioneer End-to-End Wealth-Native Intelligence Mastery Series",
     "ByteDance Seedream 4.0: Full Review & Features Guide - CapCut Mastery Series",
     "Lyria 3 — Google DeepMind Mastery Series",
-    "FIS Launches 24/7 AI Assistant to Ease Risk Models Management Mastery Series"
+    "FIS Launches 24/7 AI Assistant to Ease Risk Models Management Mastery Series",
+    "How Voice Security Can Combat Deepfake AI - Pindrop Mastery Series"
   ],
   "last_generated": "2026-03-02"
 }
