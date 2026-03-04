@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Samsung Unveils All New Galaxy Buds4 Series With Ultimate Sound Mastery Series",
+  "queue": [
+    "Mastering Your Galaxy Buds4: A Comprehensive Guide to Unlocking Ultimate Sound Features",
+    "Galaxy Buds4 Series vs. The Competition: A Head-to-Head Analysis of Ultimate Sound Technology"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -17,5 +20,5 @@
     "FIS Launches 24/7 AI Assistant to Ease Risk Models Management Mastery Series",
     "How Voice Security Can Combat Deepfake AI - Pindrop Mastery Series"
   ],
-  "last_generated": "2026-03-02"
+  "last_generated": "2026-03-04"
 }
