@@ -1,8 +1,6 @@
 {
-  "active_cluster": "How the voices for ChatGPT were chosen Mastery Series",
-  "queue": [
-    "The AI Voice Frontier: OpenAI's Strategy vs. Google & Amazon in the Battle for Conversational AI"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -18,7 +16,8 @@
     "Lyria 3 — Google DeepMind Mastery Series",
     "FIS Launches 24/7 AI Assistant to Ease Risk Models Management Mastery Series",
     "How Voice Security Can Combat Deepfake AI - Pindrop Mastery Series",
-    "Samsung Unveils All New Galaxy Buds4 Series With Ultimate Sound Mastery Series"
+    "Samsung Unveils All New Galaxy Buds4 Series With Ultimate Sound Mastery Series",
+    "How the voices for ChatGPT were chosen Mastery Series"
   ],
   "last_generated": "2026-03-06"
 }
