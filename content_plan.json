@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Betterment Launches AI-Enabled Account Recommender, Advancing Enterprise AI Strategy Mastery Series",
+  "queue": [
+    "Mastering Your Investments: A Step-by-Step Guide to Utilizing Betterment's New AI Account Recommender",
+    "The AI Robo-Advisor Race: How Betterment's New Recommender Compares to Competitors and Redefines FinTech"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -20,5 +23,5 @@
     "How the voices for ChatGPT were chosen Mastery Series",
     "State of the Call 2026: AI Deepfake Voice Calls Hit 1 in 4 Americans as Consumers Say Scammers Are Beating Mobile Network Operators 2-to-1 Mastery Series"
   ],
-  "last_generated": "2026-03-07"
+  "last_generated": "2026-03-09"
 }
