@@ -1,8 +1,6 @@
 {
-  "active_cluster": "State of the Call 2026: AI Deepfake Voice Calls Hit 1 in 4 Americans as Consumers Say Scammers Are Beating Mobile Network Operators 2-to-1 Mastery Series",
-  "queue": [
-    "The AI Deepfake Arms Race: How Mobile Network Operators & Tech Giants Are Battling (or Losing To) Voice Scammers"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -19,7 +17,8 @@
     "FIS Launches 24/7 AI Assistant to Ease Risk Models Management Mastery Series",
     "How Voice Security Can Combat Deepfake AI - Pindrop Mastery Series",
     "Samsung Unveils All New Galaxy Buds4 Series With Ultimate Sound Mastery Series",
-    "How the voices for ChatGPT were chosen Mastery Series"
+    "How the voices for ChatGPT were chosen Mastery Series",
+    "State of the Call 2026: AI Deepfake Voice Calls Hit 1 in 4 Americans as Consumers Say Scammers Are Beating Mobile Network Operators 2-to-1 Mastery Series"
   ],
   "last_generated": "2026-03-07"
 }
