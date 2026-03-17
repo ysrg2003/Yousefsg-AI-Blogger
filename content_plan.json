@@ -1,8 +1,6 @@
 {
-  "active_cluster": "IA Engine drives innovation and welcomes seven new FinTech firms to its Innovator and Advanced Access Programmes Mastery Series",
-  "queue": [
-    "IA Engine's FinTech Strategy: A Comparative Analysis Against Global Investment Innovation Hubs"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -23,7 +21,8 @@
     "State of the Call 2026: AI Deepfake Voice Calls Hit 1 in 4 Americans as Consumers Say Scammers Are Beating Mobile Network Operators 2-to-1 Mastery Series",
     "Betterment Launches AI-Enabled Account Recommender, Advancing Enterprise AI Strategy Mastery Series",
     "Nscale Raises $2 Billion in Series C — the Largest in European History Mastery Series",
-    "JBL Unleashes the Power of AI with The Release of the JBL PartyBox On-the-Go 2 Plus, JBL EasySing Mics, and JBL EasySing Mic Mini Mastery Series"
+    "JBL Unleashes the Power of AI with The Release of the JBL PartyBox On-the-Go 2 Plus, JBL EasySing Mics, and JBL EasySing Mic Mini Mastery Series",
+    "IA Engine drives innovation and welcomes seven new FinTech firms to its Innovator and Advanced Access Programmes Mastery Series"
   ],
   "last_generated": "2026-03-16"
 }
