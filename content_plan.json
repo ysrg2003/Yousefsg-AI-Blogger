@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "NVIDIA Announces NemoClaw for the OpenClaw Community Mastery Series",
+  "queue": [
+    "Mastering NemoClaw: A Hands-On Guide to Leveraging NVIDIA's New Features for OpenClaw Development",
+    "NVIDIA NemoClaw's Industry Impact: A Comparative Analysis for the OpenClaw Ecosystem"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -24,5 +27,5 @@
     "JBL Unleashes the Power of AI with The Release of the JBL PartyBox On-the-Go 2 Plus, JBL EasySing Mics, and JBL EasySing Mic Mini Mastery Series",
     "IA Engine drives innovation and welcomes seven new FinTech firms to its Innovator and Advanced Access Programmes Mastery Series"
   ],
-  "last_generated": "2026-03-16"
+  "last_generated": "2026-03-18"
 }
