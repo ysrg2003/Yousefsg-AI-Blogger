@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Klap | Turn videos into viral shorts Mastery Series",
+  "queue": [
+    "Mastering Klap.app: Your Step-by-Step Guide to Turning Long Videos into Viral Shorts",
+    "Klap.app vs. The Competition: Analyzing the Future of AI-Powered Short-Form Video Editing"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -25,5 +28,5 @@
     "IA Engine drives innovation and welcomes seven new FinTech firms to its Innovator and Advanced Access Programmes Mastery Series",
     "NVIDIA Announces NemoClaw for the OpenClaw Community Mastery Series"
   ],
-  "last_generated": "2026-03-18"
+  "last_generated": "2026-03-19"
 }
