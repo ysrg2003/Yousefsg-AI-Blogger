@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Moshi open-source release: run Moshi locally! Mastery Series",
+  "queue": [
+    "Mastering Moshi Locally: A Comprehensive Hands-On Guide to Deploying Your Own Open-Source AI",
+    "Moshi's Open-Source Impact: Comparing Local AI Deployment with Cloud Giants and Legacy Solutions"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -26,5 +29,5 @@
     "NVIDIA Announces NemoClaw for the OpenClaw Community Mastery Series",
     "Klap | Turn videos into viral shorts Mastery Series"
   ],
-  "last_generated": "2026-03-19"
+  "last_generated": "2026-03-21"
 }
