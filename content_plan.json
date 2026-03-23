@@ -1,8 +1,6 @@
 {
-  "active_cluster": "Moshi open-source release: run Moshi locally! Mastery Series",
-  "queue": [
-    "Moshi's Open-Source Impact: Comparing Local AI Deployment with Cloud Giants and Legacy Solutions"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -26,7 +24,8 @@
     "JBL Unleashes the Power of AI with The Release of the JBL PartyBox On-the-Go 2 Plus, JBL EasySing Mics, and JBL EasySing Mic Mini Mastery Series",
     "IA Engine drives innovation and welcomes seven new FinTech firms to its Innovator and Advanced Access Programmes Mastery Series",
     "NVIDIA Announces NemoClaw for the OpenClaw Community Mastery Series",
-    "Klap | Turn videos into viral shorts Mastery Series"
+    "Klap | Turn videos into viral shorts Mastery Series",
+    "Moshi open-source release: run Moshi locally! Mastery Series"
   ],
   "last_generated": "2026-03-21"
 }
