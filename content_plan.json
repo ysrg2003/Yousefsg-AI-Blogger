@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Starling launches UK's first Agentic AI financial assistant Mastery Series",
+  "queue": [
+    "Mastering Your Finances with Starling's Agentic AI: A Step-by-Step Guide to Leveraging Its New Features",
+    "Starling's Agentic AI vs. The Competition: How the UK's First Financial Assistant Reshapes the Fintech Landscape"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -27,5 +30,5 @@
     "Klap | Turn videos into viral shorts Mastery Series",
     "Moshi open-source release: run Moshi locally! Mastery Series"
   ],
-  "last_generated": "2026-03-21"
+  "last_generated": "2026-03-23"
 }
