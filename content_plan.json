@@ -1,8 +1,6 @@
 {
-  "active_cluster": "Starling launches UK's first Agentic AI financial assistant Mastery Series",
-  "queue": [
-    "Starling's Agentic AI vs. The Competition: How the UK's First Financial Assistant Reshapes the Fintech Landscape"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -27,7 +25,8 @@
     "IA Engine drives innovation and welcomes seven new FinTech firms to its Innovator and Advanced Access Programmes Mastery Series",
     "NVIDIA Announces NemoClaw for the OpenClaw Community Mastery Series",
     "Klap | Turn videos into viral shorts Mastery Series",
-    "Moshi open-source release: run Moshi locally! Mastery Series"
+    "Moshi open-source release: run Moshi locally! Mastery Series",
+    "Starling launches UK's first Agentic AI financial assistant Mastery Series"
   ],
   "last_generated": "2026-03-23"
 }
