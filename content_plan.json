@@ -1,8 +1,6 @@
 {
-  "active_cluster": "Val Kilmer's AI Voice - Sonantic Mastery Series",
-  "queue": [
-    "The AI Voice Revolution: Sonantic's Val Kilmer Project vs. Google, OpenAI, and the Future of Sound"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -28,7 +26,8 @@
     "NVIDIA Announces NemoClaw for the OpenClaw Community Mastery Series",
     "Klap | Turn videos into viral shorts Mastery Series",
     "Moshi open-source release: run Moshi locally! Mastery Series",
-    "Starling launches UK's first Agentic AI financial assistant Mastery Series"
+    "Starling launches UK's first Agentic AI financial assistant Mastery Series",
+    "Val Kilmer's AI Voice - Sonantic Mastery Series"
   ],
   "last_generated": "2026-03-24"
 }
