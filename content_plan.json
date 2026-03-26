@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "DealWire and Capital Engine Announce Strategic Partnership to Revolutionize Private Markets Intelligence with AI-Driven Data Solutions Mastery Series",
+  "queue": [
+    "Mastering AI-Driven Private Market Insights: A Practical Guide to Leveraging DealWire & Capital Engine's New Solutions",
+    "DealWire, Capital Engine, and the Future: A Competitive Analysis of AI's Impact on Private Markets Intelligence"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -29,5 +32,5 @@
     "Starling launches UK's first Agentic AI financial assistant Mastery Series",
     "Val Kilmer's AI Voice - Sonantic Mastery Series"
   ],
-  "last_generated": "2026-03-24"
+  "last_generated": "2026-03-26"
 }
