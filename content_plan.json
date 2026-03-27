@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Introducing Lightning V3: A Text-to-Speech Model Designed for Conversational Voice Agents Mastery Series",
+  "queue": [
+    "Mastering Conversational AI with Lightning V3: A Hands-On Guide to Smallest AI's New TTS Features",
+    "Lightning V3 in the TTS Landscape: A Comparative Analysis Against Google, OpenAI, and Industry Leaders"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -30,5 +33,5 @@
     "Val Kilmer's AI Voice - Sonantic Mastery Series",
     "DealWire and Capital Engine Announce Strategic Partnership to Revolutionize Private Markets Intelligence with AI-Driven Data Solutions Mastery Series"
   ],
-  "last_generated": "2026-03-26"
+  "last_generated": "2026-03-27"
 }
