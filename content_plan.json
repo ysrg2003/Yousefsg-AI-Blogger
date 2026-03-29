@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Introducing GPT-5.4 Mastery Series",
+  "queue": [
+    "Mastering GPT-5.4: A Hands-On Guide to Leveraging Its Advanced Capabilities for Next-Gen AI Applications",
+    "GPT-5.4 vs. The Giants: How OpenAI's New Model Reshapes the AI Landscape Against Google, Anthropic, and Legacy Versions"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -31,5 +34,5 @@
     "DealWire and Capital Engine Announce Strategic Partnership to Revolutionize Private Markets Intelligence with AI-Driven Data Solutions Mastery Series",
     "Introducing Lightning V3: A Text-to-Speech Model Designed for Conversational Voice Agents Mastery Series"
   ],
-  "last_generated": "2026-03-27"
+  "last_generated": "2026-03-29"
 }
