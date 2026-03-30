@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Frameish Launches Revolutionary Platform That Eliminates Video Production Barriers for Content Creators and Marketers Mastery Series",
+  "queue": [
+    "Frameish Masterclass: Your Hands-On Guide to Effortlessly Creating Impactful Video Content for Marketing & Beyond",
+    "Frameish's Industry Impact: How the New Platform Disrupts & Redefines Video Production Against Legacy Solutions & Competitors"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -32,5 +35,5 @@
     "Introducing Lightning V3: A Text-to-Speech Model Designed for Conversational Voice Agents Mastery Series",
     "Introducing GPT-5.4 Mastery Series"
   ],
-  "last_generated": "2026-03-29"
+  "last_generated": "2026-03-30"
 }
