@@ -1,8 +1,6 @@
 {
-  "active_cluster": "Introducing GPT-5.4 Mastery Series",
-  "queue": [
-    "GPT-5.4 vs. The Giants: How OpenAI's New Model Reshapes the AI Landscape Against Google, Anthropic, and Legacy Versions"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -31,7 +29,8 @@
     "Starling launches UK's first Agentic AI financial assistant Mastery Series",
     "Val Kilmer's AI Voice - Sonantic Mastery Series",
     "DealWire and Capital Engine Announce Strategic Partnership to Revolutionize Private Markets Intelligence with AI-Driven Data Solutions Mastery Series",
-    "Introducing Lightning V3: A Text-to-Speech Model Designed for Conversational Voice Agents Mastery Series"
+    "Introducing Lightning V3: A Text-to-Speech Model Designed for Conversational Voice Agents Mastery Series",
+    "Introducing GPT-5.4 Mastery Series"
   ],
   "last_generated": "2026-03-29"
 }
