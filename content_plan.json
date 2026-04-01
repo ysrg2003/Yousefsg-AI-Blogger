@@ -1,8 +1,6 @@
 {
-  "active_cluster": "Frameish Launches Revolutionary Platform That Eliminates Video Production Barriers for Content Creators and Marketers Mastery Series",
-  "queue": [
-    "Frameish's Industry Impact: How the New Platform Disrupts & Redefines Video Production Against Legacy Solutions & Competitors"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -32,7 +30,8 @@
     "Val Kilmer's AI Voice - Sonantic Mastery Series",
     "DealWire and Capital Engine Announce Strategic Partnership to Revolutionize Private Markets Intelligence with AI-Driven Data Solutions Mastery Series",
     "Introducing Lightning V3: A Text-to-Speech Model Designed for Conversational Voice Agents Mastery Series",
-    "Introducing GPT-5.4 Mastery Series"
+    "Introducing GPT-5.4 Mastery Series",
+    "Frameish Launches Revolutionary Platform That Eliminates Video Production Barriers for Content Creators and Marketers Mastery Series"
   ],
   "last_generated": "2026-03-30"
 }
