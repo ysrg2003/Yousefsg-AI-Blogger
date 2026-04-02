@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Two in-house models in support of our mission Mastery Series",
+  "queue": [
+    "Mastering Microsoft's New In-House AI: A Practical Guide to Integration and Application",
+    "Microsoft's In-House AI Models: A Competitive Landscape Analysis Against Google and OpenAI"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -33,5 +36,5 @@
     "Introducing GPT-5.4 Mastery Series",
     "Frameish Launches Revolutionary Platform That Eliminates Video Production Barriers for Content Creators and Marketers Mastery Series"
   ],
-  "last_generated": "2026-03-30"
+  "last_generated": "2026-04-02"
 }
