@@ -1,8 +1,6 @@
 {
-  "active_cluster": "Two in-house models in support of our mission Mastery Series",
-  "queue": [
-    "Microsoft's In-House AI Models: A Competitive Landscape Analysis Against Google and OpenAI"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -33,7 +31,8 @@
     "DealWire and Capital Engine Announce Strategic Partnership to Revolutionize Private Markets Intelligence with AI-Driven Data Solutions Mastery Series",
     "Introducing Lightning V3: A Text-to-Speech Model Designed for Conversational Voice Agents Mastery Series",
     "Introducing GPT-5.4 Mastery Series",
-    "Frameish Launches Revolutionary Platform That Eliminates Video Production Barriers for Content Creators and Marketers Mastery Series"
+    "Frameish Launches Revolutionary Platform That Eliminates Video Production Barriers for Content Creators and Marketers Mastery Series",
+    "Two in-house models in support of our mission Mastery Series"
   ],
   "last_generated": "2026-04-02"
 }
