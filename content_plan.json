@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Introducing Veo 3.1 and new creative capabilities in the Gemini API Mastery Series",
+  "queue": [
+    "Mastering Veo 3.1 & Gemini API: A Hands-On Guide to Unleashing New Creative AI Capabilities",
+    "Veo 3.1 vs. The Competition: Analyzing Gemini API's New Creative Capabilities in the Evolving AI Landscape"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -34,5 +37,5 @@
     "Frameish Launches Revolutionary Platform That Eliminates Video Production Barriers for Content Creators and Marketers Mastery Series",
     "Two in-house models in support of our mission Mastery Series"
   ],
-  "last_generated": "2026-04-02"
+  "last_generated": "2026-04-04"
 }
