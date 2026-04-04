@@ -1,8 +1,6 @@
 {
-  "active_cluster": "Introducing Veo 3.1 and new creative capabilities in the Gemini API Mastery Series",
-  "queue": [
-    "Veo 3.1 vs. The Competition: Analyzing Gemini API's New Creative Capabilities in the Evolving AI Landscape"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -34,7 +32,8 @@
     "Introducing Lightning V3: A Text-to-Speech Model Designed for Conversational Voice Agents Mastery Series",
     "Introducing GPT-5.4 Mastery Series",
     "Frameish Launches Revolutionary Platform That Eliminates Video Production Barriers for Content Creators and Marketers Mastery Series",
-    "Two in-house models in support of our mission Mastery Series"
+    "Two in-house models in support of our mission Mastery Series",
+    "Introducing Veo 3.1 and new creative capabilities in the Gemini API Mastery Series"
   ],
   "last_generated": "2026-04-04"
 }
