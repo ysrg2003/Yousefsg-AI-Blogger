@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "Using Image to Video AI to Create Clips for Free from a Single Image - Steve.AI Mastery Series",
+  "queue": [
+    "Masterclass: How to Create Free AI Video Clips from a Single Image Using Steve.AI - A Step-by-Step Guide",
+    "Image-to-Video AI Landscape: How Steve.AI's Free Single-Image Tool Compares to Competitors and Shapes the Future"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -35,5 +38,5 @@
     "Two in-house models in support of our mission Mastery Series",
     "Introducing Veo 3.1 and new creative capabilities in the Gemini API Mastery Series"
   ],
-  "last_generated": "2026-04-04"
+  "last_generated": "2026-04-05"
 }
