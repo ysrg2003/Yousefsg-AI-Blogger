@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "AI Trivia Gameshow Builder - Trivana Mastery Series",
+  "queue": [
+    "Mastering Trivana: Your Step-by-Step Guide to Building Engaging AI Trivia Gameshows from Scratch",
+    "Trivana vs. The Field: How AI Trivia Gameshow Builders Are Reshaping Edutainment and Engagement"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -36,5 +39,5 @@
     "Introducing Veo 3.1 and new creative capabilities in the Gemini API Mastery Series",
     "Using Image to Video AI to Create Clips for Free from a Single Image - Steve.AI Mastery Series"
   ],
-  "last_generated": "2026-04-05"
+  "last_generated": "2026-04-06"
 }
