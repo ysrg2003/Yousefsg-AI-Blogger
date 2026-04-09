@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "What to know about the Sora discontinuation Mastery Series",
+  "queue": [
+    "Beyond Sora: A Practical Guide to OpenAI's Evolving AI Video Capabilities and New Features",
+    "AI Video Market Shift: Analyzing Sora's Discontinuation Against Google, Runway, and Emerging Competitors"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -37,5 +40,5 @@
     "Using Image to Video AI to Create Clips for Free from a Single Image - Steve.AI Mastery Series",
     "AI Trivia Gameshow Builder - Trivana Mastery Series"
   ],
-  "last_generated": "2026-04-06"
+  "last_generated": "2026-04-09"
 }
