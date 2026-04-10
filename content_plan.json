@@ -1,8 +1,6 @@
 {
-  "active_cluster": "What to know about the Sora discontinuation Mastery Series",
-  "queue": [
-    "AI Video Market Shift: Analyzing Sora's Discontinuation Against Google, Runway, and Emerging Competitors"
-  ],
+  "active_cluster": null,
+  "queue": [],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -37,7 +35,8 @@
     "Two in-house models in support of our mission Mastery Series",
     "Introducing Veo 3.1 and new creative capabilities in the Gemini API Mastery Series",
     "Using Image to Video AI to Create Clips for Free from a Single Image - Steve.AI Mastery Series",
-    "AI Trivia Gameshow Builder - Trivana Mastery Series"
+    "AI Trivia Gameshow Builder - Trivana Mastery Series",
+    "What to know about the Sora discontinuation Mastery Series"
   ],
   "last_generated": "2026-04-09"
 }
