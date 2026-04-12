@@ -306,9 +306,15 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # 7. ARTISAN WRITER
         # ======================================================================
         log("   ✍️ [The Artisan] Writing the article...")
+        # FIX v4.1: Added reddit_status_flag to explicitly signal when no real Reddit data exists
+        reddit_status_flag = "NO_REDDIT_DATA_AVAILABLE" if not reddit_context or len(reddit_context) < 50 else "REAL_DATA_PRESENT"
         artisan_prompt = PROMPT_B_TEMPLATE.format(
-            blueprint_json=json.dumps(blueprint, ensure_ascii=False), # ensure_ascii=False for proper Arabic handling
-            raw_data_bundle=json.dumps({"research": combined_text[:15000], "reddit": reddit_context[:5000]}, ensure_ascii=False)
+            blueprint_json=json.dumps(blueprint, ensure_ascii=False),
+            raw_data_bundle=json.dumps({
+                "research": combined_text[:15000],
+                "reddit": reddit_context[:5000],
+                "reddit_status_flag": reddit_status_flag
+            }, ensure_ascii=False)
         )
         json_b = api_manager.generate_step_strict(model_name, artisan_prompt, "Artisan Writer", ["headline", "article_body"])
         title = blueprint.get("final_title", json_b.get('headline', target_keyword))
@@ -536,6 +542,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             repair_instructions = "\n".join(gate_result["blocking_issues"])
             repair_prompt = f"""You are an HTML editor. Fix ONLY the following issues in the article HTML below.
 Do NOT change any other content. Return the complete fixed HTML only.
+CRITICAL: The HTML may be long. Process it completely — do NOT truncate or omit any section.
+Return the FULL article HTML after fixing, including schema, author box, and sources at the end.
 
 ISSUES TO FIX:
 {repair_instructions}
@@ -546,9 +554,10 @@ MANDATORY RULES:
 - If authority source mentioned without link (Reuters, Bloomberg) — rewrite as "industry reports indicate" 
 - If same URL appears 4+ times, keep max 2 occurrences, remove the rest
 - Do NOT add placeholder links like # or javascript:void(0)
+- Preserve ALL content after the main article body (schema JSON-LD, author box, sources section)
 
-HTML TO FIX:
-{full_body_html[:30000]}"""
+HTML TO FIX (COMPLETE — DO NOT TRUNCATE YOUR OUTPUT):
+{full_body_html}"""
             
             try:
                 repaired = api_manager.generate_step_strict(
@@ -608,11 +617,14 @@ HTML TO FIX:
             return False
             
         # Update schema and H1 with the final URL, then update the post
-        if ("schema_script" in locals() and published_url_placeholder in full_body_html) or (linked_h1_title_html in full_body_html):
+        # FIX v4.1: Simple reliable check — published_url_placeholder never changes format after BeautifulSoup
+        if published_url_placeholder in full_body_html:
             log("   ✏️ Updating post with final URL in Schema and H1...")
             final_html_with_correct_urls = full_body_html.replace(published_url_placeholder, published_url)
             publisher.update_existing_post(post_id, final_title, final_html_with_correct_urls)
-            full_body_html = final_html_with_correct_urls # Update for quality loop
+            full_body_html = final_html_with_correct_urls  # Update for quality loop
+        else:
+            log("   ⚠️ published_url_placeholder not found — schema/H1 may already have correct URL.")
 
         # QUALITY IMPROVEMENT LOOP
         quality_score, attempts, MAX_RETRIES = 0, 0, 1 # Enabled 1 loop

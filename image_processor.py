@@ -18,6 +18,27 @@ from bs4 import BeautifulSoup
 from config import log, USER_AGENTS
 from api_manager import key_manager
 import time # <--- إضافة استيراد الوقت هنا
+# FIX v4.1: Suppress FreeType errors for color emoji fonts (NotoColorEmoji.ttf incompatibility)
+import logging
+logging.getLogger("fontTools").setLevel(logging.CRITICAL)
+logging.getLogger("PIL.ImageFont").setLevel(logging.CRITICAL)
+
+# Safe font loader — always uses bundled Roboto, never scans system fonts
+def _get_safe_font(size=16):
+    """Returns a reliable font, avoiding NotoColorEmoji and system font scan errors."""
+    candidates = [
+        os.path.join(os.path.dirname(__file__), "assets", "Roboto-Bold.ttf"),
+        "/usr/share/fonts/truetype/roboto/Roboto-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
+
 
 def extract_og_image(html_content):
     try:

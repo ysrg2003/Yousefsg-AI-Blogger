@@ -316,7 +316,7 @@ RAW DATA BUNDLE:
     -   The Deeper Analysis: Use `[RESEARCH STUDY]` to explain the technical importance.
     -   The Real-World Test: Weave in the `[EXPERT EXPERIENCE]` and Reddit quotes to show what this means for a real person.
     -   The Verdict: A final, balanced recommendation.
-5.  **Assign ALL Evidence:** I will pre-assign every single piece of visual evidence (`[[VISUAL_EVIDENCE_X]]`, `[[GENERATED_CHART]]`, `[[CODE_SNIPPET_1]]`) to the most logical section in my blueprint.
+5.  **Assign ALL Evidence:** I will pre-assign every single piece of visual evidence (`[[ASSET_1]]`, `[[ASSET_2]]`... up to `[[ASSET_15]]`, and `[[GENERATED_CHART]]`) to the most logical section in my blueprint. CRITICAL: I will ONLY use asset IDs that exist in the Available Visuals section. If an asset is not listed, I will use null.
 </thought>
 
 ---
@@ -338,49 +338,49 @@ OUTPUT JSON ONLY:
             "title": "Quick Overview: The Official Pitch vs. The Reality",
             "instructions_for_writer": "Summarize the official announcement (Source of Truth) but contrast it immediately with the user experience (Reddit/Expert Experience).",
             "key_data_to_include": ["Cite the main product name and version.", "Mention the release date or availability."],
-            "visual_asset_to_place": "[[ASSET_1]]" // <-- صورة رسمية للمنتج (المطلوب #1)
+            "visual_asset_to_place": "[[ASSET_1]]"
         }},
         {{
             "section_type": "H2",
             "title": "Technical Deep Dive: How the New API Works",
             "instructions_for_writer": "Explain the API or core technology in simple, technical terms. Use the code asset to show practical implementation.",
             "key_data_to_include": ["Use one hard number/statistic from research."],
-            "visual_asset_to_place": "[[ASSET_2]]" // <-- مكان إلزامي للكود البرمجي (المطلوب #2)
+            "visual_asset_to_place": "[[ASSET_2]]"
         }},
         {{
             "section_type": "H3",
             "title": "Real-World Success: Implementation & Proof",
             "instructions_for_writer": "Detail one successful case study or a major feature from the official source. Focus on *how* العمل تم بنجاح.",
             "key_data_to_include": ["Quote a positive result (e.g., '90% accuracy')."],
-            "visual_asset_to_place": "[[ASSET_3]]" // <-- صورة آلية العمل/النجاح (#3)
+            "visual_asset_to_place": "[[ASSET_3]]"
         }},
         {{
             "section_type": "H3",
             "title": "Performance Snapshot: Screenshots & Interface",
             "instructions_for_writer": "Describe the user interface (UI) أو واجهة الداشبورد. هذا القسم يجب أن يكون قصيراً ومرئياً.",
             "key_data_to_include": ["Mention any pricing tiers or key performance metrics."],
-            "visual_asset_to_place": "[[ASSET_4]]" // <-- لقطة شاشة للواجهة (#4)
+            "visual_asset_to_place": "[[ASSET_4]]"
         }},
         {{
             "section_type": "H2",
             "title": "Community Pulse: Criticisms and Workarounds (E-A-T Check)",
             "instructions_for_writer": "Integrate the raw community opinions (Reddit/Critiques). Focus on the biggest weaknesses/limitations. Use an asset to show a user complaint or bug.",
             "key_data_to_include": ["Quote one critical comment or user experience."],
-            "visual_asset_to_place": "[[ASSET_5]]" // <-- صورة لقطة شاشة (مشكلة/مراجعة) (#5)
+            "visual_asset_to_place": "[[ASSET_5]]"
         }},
         {{
             "section_type": "H3",
             "title": "Alternative Perspectives & Further Proof",
             "instructions_for_writer": "Introduce an alternative tool أو قم بإضافة دليل إثبات إضافي (مثل جدول مقارنة أو اقتباس جديد).",
             "key_data_to_include": ["Mention the name and link of a direct competitor (if available)."],
-            "visual_asset_to_place": "[[ASSET_6]]" // <-- صورة آلية عمل/إثبات أخرى (#6)
+            "visual_asset_to_place": "[[ASSET_6]]"
         }},
         {{
             "section_type": "H3",
             "title": "Practical Tip & Final Recommendation",
             "instructions_for_writer": "Provide نصيحة عملية نهائية للقارئ. هذا القسم يجب أن يكون بصيغة 'ماذا تفعل الآن؟'.",
             "key_data_to_include": [],
-            "visual_asset_to_place": "[[ASSET_7]]" // <-- صورة أو إثبات آخر (#7)
+            "visual_asset_to_place": "[[ASSET_7]]"
         }}
     ],
     // ... (باقي كود الـ JSON)
@@ -414,7 +414,7 @@ CRITICAL CONTEXT (V12.0 - HYBRID ENGINE: E-A-A-T + HUMAN SOUL):
 I have provided you with:
 1. **MULTIPLE SOURCES:** Raw news and articles.
 2. **SOURCE OF TRUTH:** Official documentation or press release.
-3. **REAL VISUALS:** Charts (`[[GENERATED_CHART]]`), Images (`[[VISUAL_EVIDENCE_1]]`), and critically, a **CODE SNIPPET** (`[[CODE_SNIPPET_1]]`).
+3. **REAL VISUALS:** Charts (`[[GENERATED_CHART]]`), Images (`[[ASSET_1]]`, `[[ASSET_2]]`...), and code assets (also referenced as `[[ASSET_N]]`).
 4. **REDDIT COMMUNITY FEEDBACK:** Real unfiltered opinions from users.
 
 Your task is to SYNTHESIZE all of these into one Master Review that is **technically accurate and verifiable** but **reads like a helpful, engaging conversation**.
@@ -432,12 +432,20 @@ YOUR PERSONA & TONE:
 
 ---
 
+0. **CRITICAL — ASSET NAMING LAW (ENFORCED BEFORE EVERYTHING ELSE):**
+    *   The ONLY valid asset placeholders are: `[[ASSET_1]]`, `[[ASSET_2]]`, `[[ASSET_3]]`... up to `[[ASSET_15]]`, and `[[GENERATED_CHART]]`.
+    *   You MUST look at the `visual_asset_to_place` field in each section of the blueprint and use EXACTLY that ID.
+    *   **FORBIDDEN NAMES:** `[[VISUAL_EVIDENCE_X]]`, `[[CODE_SNIPPET_X]]`, `[[SCREENSHOT_X]]`, `[[IMAGE_X]]` — these are INVALID and will cause the image to be silently dropped from the article.
+    *   If the blueprint says `"visual_asset_to_place": "[[ASSET_3]]"`, you write `[[ASSET_3]]` in the HTML. Nothing else.
+    *   If a section's blueprint has `null` for `visual_asset_to_place`, write NO placeholder in that section.
+
 1.  **THE "REDDIT SOUL" MANDATE (RESTORING THE HUMAN TOUCH):**
     *   The provided Reddit data is your "Secret Weapon". It contains the *pain points* and *joy* of real users.
     *   **Storytelling:** Do NOT just list complaints. Tell a story. "Users were excited about X, but quickly realized Y was broken."
     *   **Find "Hacks" & "Workarounds":** Did a Reddit user find a clever way to fix a bug? Mention it! This adds immense value for hobbyists.
     *   **Emotional Connection:** Validate the user's feelings. ("If you're frustrated by the price hike, you're not alone...").
     *   **HARD RULE — NO SPECULATION:** If you have NO real Reddit comments or community data, DO NOT write a "Community Pulse" section at all. NEVER write "we don't have direct Reddit feedback yet, but we can guess..." or "users might criticize..." — these are speculation, not community pulse. A missing section is better than a fake one. Only write this section if you have real quotes with usernames and URLs.
+    *   **REDDIT STATUS CHECK (READ FIRST):** Check the `reddit_status_flag` field in the RAW DATA. If it says `"NO_REDDIT_DATA_AVAILABLE"`, you are **absolutely forbidden** from writing any Community Pulse section. Replace the entire section with a one-line note: `<p><em>Community feedback for this topic is being collected and will be added shortly.</em></p>` — and nothing more. This rule overrides all other instructions.
     *   **HARD RULE — NO ASCII ART:** Never put a text-based diagram, ASCII art, or code-formatted data flow inside <pre> or <code> tags as a substitute for a real image. ASCII diagrams look unprofessional and are flagged as fake content. If you need to show a flow, describe it in plain text or wait for a real chart.
 
 2.  **THE "ELI5" SIMPLIFICATION PROTOCOL (Explain Like I'm 5):**
@@ -518,7 +526,7 @@ EXECUTION DIRECTIVES (NON-NEGOTIABLE):
 IF content_type is "Guide":
     1. The article MUST begin with a numbered or bulleted list titled "Quick 5-Step Action Plan".
     2. The body MUST use H3 headers for each step (e.g., "<h3>Step 1: Obtain Your API Key</h3>").
-    3. You MUST integrate AT LEAST ONE visual tag (e.g., [[VISUAL_EVIDENCE_1]]) in every section that corresponds to a screenshot.
+    3. You MUST integrate AT LEAST ONE visual tag (e.g., [[ASSET_1]], [[ASSET_2]]...) in every section that corresponds to a screenshot.
     4. The Final Verdict MUST be a clear recommendation on "Who is this Guide for?".
 
 IF content_type is "Review":

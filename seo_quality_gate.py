@@ -64,6 +64,15 @@ IGNORANCE_PHRASES = [
     "people might criticize",
     "users will likely complain",
     "community might feel",
+    # FIX v4.1: Community Pulse faking patterns
+    "community feedback for this topic is NOT yet available",
+    "no community data was available",
+    "reddit data was not available",
+    "based on similar tools",
+    "based on past experience with similar",
+    "we can predict",
+    "sentiment is likely",
+    "early adopters will probably",
 ]
 
 FAKE_CONTENT_TRIGGERS = [
@@ -546,6 +555,39 @@ def clean_forbidden_phrases(html: str) -> str:
 # ---------------------------------------------------------------------------
 # MAIN GATE FUNCTION
 # ---------------------------------------------------------------------------
+
+
+def check_temp_slug_in_links(soup) -> list:
+    """
+    FIX v4.1: Detects if the temp-slug placeholder URL was never replaced with the real published URL.
+    This happens when published_url_placeholder replacement fails.
+    """
+    issues = []
+    html_str = str(soup)
+    if "temp-slug.html" in html_str:
+        count = html_str.count("temp-slug.html")
+        issues.append(QualityIssue("BLOCK", "TEMP_SLUG_URL",
+            f"temp-slug.html placeholder found {count} time(s) — published URL was never injected. Schema and H1 point to wrong URL."))
+    return issues
+
+
+def check_word_count(soup) -> list:
+    """FIX v4.1: Enforce minimum word count of 1200 words for SEO competitiveness."""
+    issues = []
+    for tag in soup.find_all(["script", "style", "noscript"]):
+        tag.decompose()
+    text = soup.get_text(separator=" ")
+    import re as _re
+    text = _re.sub(r"\s+", " ", text).strip()
+    words = len(text.split())
+    if words < 900:
+        issues.append(QualityIssue("BLOCK", "WORD_COUNT_TOO_LOW",
+            f"Article is only {words} words — minimum is 1,200 for competitive AI topics. Google will not rank thin content."))
+    elif words < 1200:
+        issues.append(QualityIssue("WARN", "WORD_COUNT_SHORT",
+            f"Article is {words} words — target 1,500+ for best ranking. Competitors average 1,800+."))
+    return issues
+
 
 def run_quality_gate(html: str, title: str, published_date: datetime.date = None) -> dict:
     """

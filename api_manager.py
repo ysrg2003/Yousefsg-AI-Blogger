@@ -23,11 +23,13 @@ API_HEAT = 30  # Seconds to wait between heavy calls to prevent flooding
 PUTER_MODEL = "claude-3-5-sonnet" 
 
 # 2. Google Gemini Fallback Chain (Ordered from Strongest/Smartest to Fastest/Cheapest)
+# FIX v4.1: Removed non-existent models (gemini-3-flash-preview, gemini-robotics-er-1.5-preview)
+# that caused silent API errors and wasted retry cycles.
 GEMINI_FALLBACK_CHAIN = [
-    "gemini-3-flash-preview",   # Best reasoning capabilities
-    "gemini-2.5-flash-lite",  # Best context handling
-    "gemini-2.5-flash",       # Balanced performance
-    "gemini-robotics-er-1.5-preview"        # Reliable fallback
+    "gemini-2.5-flash",       # Primary — best balance of speed and quality
+    "gemini-2.0-flash",       # Strong fallback
+    "gemini-1.5-pro",         # Deep context fallback
+    "gemini-1.5-flash"        # Last resort — fast and reliable
 ]
 
 class KeyManager:
