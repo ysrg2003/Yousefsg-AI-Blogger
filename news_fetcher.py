@@ -14,6 +14,39 @@ import re
 from config import log
 from api_manager import generate_step_strict
 
+# ---------------------------------------------------------------------------
+# SOURCE FRESHNESS GUARD
+# ---------------------------------------------------------------------------
+MAX_SOURCE_AGE_DAYS = 60  # Reject any source older than this
+
+def _is_fresh_enough(date_str: str, max_days: int = MAX_SOURCE_AGE_DAYS) -> bool:
+    """Returns True if the source date is within the acceptable window."""
+    if not date_str or date_str in ("Today", "Unknown", ""):
+        return True  # Assume fresh if no date info
+    try:
+        # feedparser gives RFC 2822 dates e.g. "Tue, 04 Jun 2024 12:00:00 +0000"
+        import email.utils
+        parsed = email.utils.parsedate_to_datetime(date_str)
+        age = (datetime.datetime.now(datetime.timezone.utc) - parsed).days
+        if age > max_days:
+            log(f"   🗓️ [Freshness Guard] Source REJECTED — {age} days old: {date_str[:30]}")
+            return False
+        return True
+    except Exception:
+        try:
+            # Try ISO format e.g. "2024-06-04T12:00:00Z"
+            clean = date_str.replace("Z", "+00:00")
+            parsed = datetime.datetime.fromisoformat(clean)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+            age = (datetime.datetime.now(datetime.timezone.utc) - parsed).days
+            if age > max_days:
+                log(f"   🗓️ [Freshness Guard] Source REJECTED — {age} days old.")
+                return False
+            return True
+        except Exception:
+            return True  # Can't parse → assume OK
+
 # ==============================================================================
 # NEW: STRICT RSS FETCHER (PRIMARY MECHANISM)
 # ==============================================================================
@@ -39,16 +72,22 @@ def get_strict_rss(query_keywords, category):
         if feed.entries:
             for entry in feed.entries[:8]:
                 pub = entry.published if 'published' in entry else "Today"
+                if not _is_fresh_enough(pub):
+                    continue
                 title_clean = entry.title.split(' - ')[0]
                 items.append({"title": title_clean, "link": entry.link, "date": pub})
-            return items 
-        else:
+            if items:
+                return items
+            log(f"   ⚠️ RSS entries found but all stale. Fallback.")
+        if not items:
             log(f"   ⚠️ RSS Empty. Fallback.")
             fb = f"{category} news when:1d"
             url = f"https://news.google.com/rss/search?q={urllib.parse.quote(fb)}&hl=en-US&gl=US&ceid=US:en"
             feed = feedparser.parse(url)
             for entry in feed.entries[:5]:
-                items.append({"title": entry.title, "link": entry.link, "date": "Today"})
+                pub2 = entry.published if 'published' in entry else 'Today'
+                if _is_fresh_enough(pub2):
+                    items.append({"title": entry.title, "link": entry.link, "date": pub2})
             return items
             
     except Exception as e:
@@ -347,6 +386,10 @@ def get_real_news_rss(query_keywords, category=None):
             for entry in feed.entries[:10]:
                 # Extract publication date or default to Today
                 pub = entry.published if 'published' in entry else "Today"
+                
+                # FRESHNESS GUARD: Skip articles older than MAX_SOURCE_AGE_DAYS
+                if not _is_fresh_enough(pub):
+                    continue
                 
                 # Clean title (remove source name at the end usually, e.g. " - The Verge")
                 title_clean = entry.title.split(' - ')[0]

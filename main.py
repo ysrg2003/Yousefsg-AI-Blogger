@@ -43,6 +43,7 @@ import code_hunter
 import image_enricher
 import content_architect
 import deep_dive_researcher
+import seo_quality_gate
 
 def is_source_viable(url, min_text_length=600):
     """Checks if a source URL is valid and has content."""
@@ -331,7 +332,14 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                     log(f"      ❌ Failed to upload image for {asset_id}. Trying original URL.")
                     final_img_url = asset['url'] # Fallback to original if upload fails
                 
-                replacement_html = f'''<figure style="margin: 30px auto; text-align: center;"><img src="{final_img_url}" alt="{asset['description']}" style="width: 100%; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.08);"><figcaption style="font-size: 13px; color: #555; margin-top: 8px; font-style: italic;">📸 {asset['description']}</figcaption></figure>'''
+                # Build clean alt text — strip any metadata junk
+                import re as _re
+                _raw_desc = asset.get('description', '') or ''
+                _clean_alt = _re.sub(r'[|].*$', '', _raw_desc).strip()
+                _clean_alt = _re.sub(r'\d+[km]\d+.*$', '', _clean_alt, flags=_re.IGNORECASE).strip()
+                _clean_alt = (_clean_alt or title)[:150]  # fallback to article title
+                _clean_cap = _clean_alt if _clean_alt else "Article illustration"
+                replacement_html = f'''<figure style="margin: 30px auto; text-align: center;"><img src="{final_img_url}" alt="{_clean_alt}" style="width: 100%; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 4px 12px rgba(0,0,0,0.08);"><figcaption style="font-size: 13px; color: #555; margin-top: 8px; font-style: italic;">📸 {_clean_cap}</figcaption></figure>'''
                 if not img_url: img_url = final_img_url # Set hero image if not already set
 
             elif asset['type'] == 'code':
@@ -366,17 +374,40 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         except Exception as e:
             log(f"   ⚠️ Video Production Failed: {e}")
 
-        if vid_main_url and vid_main_url.startswith("https://"):
+        # VIDEO SECTION: Only inject if we have a REAL verified YouTube URL
+        if vid_main_url and vid_main_url.startswith("https://www.youtube.com") or (vid_main_url and "youtu.be" in vid_main_url):
             video_html = f'<h3>Watch the Video Summary</h3><div class="video-wrapper" style="position:relative;padding-bottom:56.25%;"><iframe src="{vid_main_url}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen title="{title}"></iframe></div>'
             if "[[TOC_PLACEHOLDER]]" in final_body_html:
                 final_body_html = final_body_html.replace("[[TOC_PLACEHOLDER]]", "[[TOC_PLACEHOLDER]]" + video_html)
             else:
                 final_body_html = video_html + final_body_html
+        else:
+            # NO VIDEO: Remove any video section headers that may have been injected by AI
+            from bs4 import BeautifulSoup as _BS
+            _soup_v = _BS(final_body_html, 'html.parser')
+            for _h in _soup_v.find_all(['h2','h3','h4']):
+                if 'watch the video' in _h.get_text(strip=True).lower() or 'video summary' in _h.get_text(strip=True).lower():
+                    _h.decompose()
+            final_body_html = str(_soup_v)
+            log("   ℹ️ No real video URL — video section header removed.")
 
         # ======================================================================
         # SEO POLISH, HUMANIZER, AND INJECTIONS
         # ======================================================================
-        sources_data = [{"title": s['title'], "url": s['url']} for s in collected_sources if s.get('url')]
+        # FILTER: Remove sources whose title reveals they are 404/broken
+        _dead_anchor_signals = ["404", "page not found", "not found", "just a moment",
+                                "sorry, this page", "unavailable", "access denied", "error 404",
+                                "subarctic plant", "response of native"]
+        sources_data = []
+        for s in collected_sources:
+            if not s.get('url'):
+                continue
+            title_lower = (s.get('title') or '').lower()
+            if any(sig in title_lower for sig in _dead_anchor_signals):
+                log(f"      🗑️ Dropping dead source: '{s.get('title','')[:50]}'")
+                continue
+            sources_data.append({"title": s['title'], "url": s['url']})
+        log(f"   ✅ Sources after dead-link filter: {len(sources_data)} valid sources")
         kg_links = history_manager.get_relevant_kg_for_linking(title, category)
         seo_payload = {"draft_content": {"headline": title, "article_body": final_body_html}, "sources_data": sources_data}
         json_c = api_manager.generate_step_strict(model_name, PROMPT_C_TEMPLATE.format(json_input=json.dumps(seo_payload, ensure_ascii=False), knowledge_graph=kg_links), "SEO Polish", ["finalTitle", "finalContent", "seo", "schemaMarkup"])
@@ -409,24 +440,60 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
 
         # 1. Schema Injection
+        # SCHEMA: Always inject — build from scratch if AI didn't return one
+        log("   🧬 Injecting JSON-LD Schema (guaranteed)...")
+        today_iso = datetime.date.today().isoformat()
         if json_c.get('schemaMarkup') and json_c['schemaMarkup'].get('OUTPUT'):
-            log("   🧬 Injecting JSON-LD Schema into final HTML...")
             schema_data = json_c['schemaMarkup']['OUTPUT']
-            schema_data['headline'] = final_title
-            schema_data['datePublished'] = datetime.date.today().isoformat()
-            if img_url: schema_data['image'] = img_url
-            if 'mainEntityOfPage' in schema_data: schema_data['mainEntityOfPage']['@id'] = published_url_placeholder # Use placeholder here
-            schema_script = f'<script type="application/ld+json">{json.dumps(schema_data, indent=2, ensure_ascii=False)}</script>'
-            full_body_html += schema_script
+        else:
+            # Build a complete schema from scratch — never skip this
+            log("   ⚠️ AI schema missing — building fallback schema...")
+            schema_data = {
+                "@context": "https://schema.org",
+                "@type": "TechArticle",
+                "mainEntityOfPage": {"@type": "WebPage", "@id": published_url_placeholder},
+                "publisher": {
+                    "@type": "Organization",
+                    "name": "Latest AI",
+                    "logo": {"@type": "ImageObject",
+                             "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"}
+                },
+                "mainEntity": [{
+                    "@type": "FAQPage",
+                    "mainEntity": []
+                }]
+            }
+        # Always override these critical fields
+        schema_data['headline'] = final_title
+        schema_data['datePublished'] = today_iso
+        schema_data['dateModified'] = today_iso
+        schema_data['author'] = {'@type': 'Person', 'name': 'Yousef S.', 'url': 'https://www.latestai.me'}
+        if img_url:
+            schema_data['image'] = img_url
+        if 'mainEntityOfPage' in schema_data:
+            schema_data['mainEntityOfPage']['@id'] = published_url_placeholder
+        schema_script = f'<script type="application/ld+json">{json.dumps(schema_data, indent=2, ensure_ascii=False)}</script>'
+        full_body_html += schema_script
         
         # 2. Hero Image Injection
         if img_url:
             img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{final_title}" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" /></a></div>'
             full_body_html = img_html + full_body_html
 
-        # 3. Dynamic Author Box Injection
+        # 3. Dynamic Author Box Injection — ALWAYS inject (fallback to defaults)
         log("   👤 Building dynamic author box...")
         author_info = config.get("author_profile", {})
+        # FALLBACK: if no author profile in config, use site defaults
+        if not author_info:
+            author_info = {
+                "name": "Yousef S.",
+                "title": "AI Automation Specialist & Tech Editor",
+                "bio": "Specializing in enterprise AI implementation and ROI analysis. With over 5 years of experience in deploying conversational AI, Yousef provides hands-on insights into what actually works in production environments.",
+                "profile_image_url": "https://blogger.googleusercontent.com/img/a/AVvXsEiB6B0pK8PhY0j0JrrYCSG_QykTjsbxbbdePdNP_nRT_39FW4SGPPqTrAjendimEUZdipHUiYJfvHVjTBH7Eoz8vEjzzCTeRcDlIcDrxDnUhRJFJv4V7QHtileqO4wF-GH39vq_JAe4UrSxNkfjfi1fDS9_T4mPmwEC71VH9RJSEuSFrNb2ZRQedyA61iQ=s1017-rw",
+                "linkedin_url": "https://www.linkedin.com/in/yousef-ghaben/",
+                "twitter_url": "https://x.com/latestaime",
+                "reddit_url": "https://www.reddit.com/user/Yousefsg/",
+            }
         if author_info:
             author_box = f'''
             <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
@@ -450,6 +517,65 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             '''
             full_body_html += author_box
             
+        # ======================================================================
+        # 12.5. IRON GATE — PRE-PUBLISH SEO QUALITY CHECK
+        # ======================================================================
+        log("   🔒 Running Iron Gate quality checks...")
+        gate_result = seo_quality_gate.run_quality_gate(
+            full_body_html, final_title, datetime.date.today()
+        )
+        full_body_html = gate_result["cleaned_html"]  # always use cleaned version
+        
+        if not gate_result["passed"]:
+            log(f"   ❌ [Iron Gate] BLOCKED {len(gate_result['blocking_issues'])} issues:")
+            for issue in gate_result["blocking_issues"]:
+                log(f"      🚫 {issue}")
+            log("   ⚠️  Attempting AI repair of blocking issues...")
+            
+            # Build a repair prompt from the issues
+            repair_instructions = "\n".join(gate_result["blocking_issues"])
+            repair_prompt = f"""You are an HTML editor. Fix ONLY the following issues in the article HTML below.
+Do NOT change any other content. Return the complete fixed HTML only.
+
+ISSUES TO FIX:
+{repair_instructions}
+
+RULES:
+- Remove any sentence admitting ignorance ("we don't know", "details unclear")
+- Remove any text containing "Hypothetical Screenshot" or "Imagine a..."
+- If an authority source (Reuters, Bloomberg, etc.) is mentioned without a link, either add a real link or remove the mention
+- Do NOT add placeholder links like # or javascript:void(0)
+
+HTML TO FIX:
+{full_body_html[:30000]}"""
+            
+            try:
+                repaired = api_manager.generate_step_strict(
+                    model_name, repair_prompt, "Iron Gate Repair", []
+                )
+                if isinstance(repaired, str) and len(repaired) > 2000:
+                    full_body_html = repaired
+                elif isinstance(repaired, dict):
+                    # Sometimes returns dict with key
+                    for v in repaired.values():
+                        if isinstance(v, str) and len(v) > 2000:
+                            full_body_html = v
+                            break
+                # Re-run gate after repair
+                gate_result2 = seo_quality_gate.run_quality_gate(full_body_html, final_title, datetime.date.today())
+                full_body_html = gate_result2["cleaned_html"]
+                if not gate_result2["passed"]:
+                    log(f"   ⚠️ Gate still has {len(gate_result2['blocking_issues'])} issues after repair — publishing anyway with cleaned version.")
+                else:
+                    log("   ✅ Repair successful. Gate passed.")
+            except Exception as _ge:
+                log(f"   ⚠️ Repair attempt failed: {_ge}. Publishing cleaned version.")
+        
+        if gate_result["auto_fixes"] > 0:
+            log(f"   🔧 Iron Gate auto-fixed {gate_result['auto_fixes']} issues silently.")
+        if gate_result["warnings"]:
+            log(f"   ⚠️  Gate warnings ({len(gate_result['warnings'])}): {gate_result['warnings'][:2]}")
+
         # ======================================================================
         # 13. PUBLISH & POST-PROCESS
         # ======================================================================

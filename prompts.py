@@ -67,6 +67,12 @@ INTENT ALIGNMENT: Align with high CPC keywords like "Best", "Review", "Monetize"
 
 Strictly avoid any topic or event mentioned in the History: {history}. If we covered the "Launch", look for a "Guide", "Problem Fix", or "Comparison".
 
+5. SOURCE FRESHNESS MANDATE (CRITICAL FOR CREDIBILITY):
+   The current date is {date}. ONLY select topics where PRIMARY sources (the official announcement, product page, or press release) were published within the LAST 60 DAYS.
+   - If a topic's main source is older than 60 days, SKIP IT and find a newer one.
+   - NEVER select a topic whose only evidence is press releases or announcements from 6+ months ago.
+   - Target topics that are "this week" or "this month" level fresh.
+
 
 
 ---
@@ -451,6 +457,11 @@ YOUR PERSONA & TONE:
 
 5.  **MANDATORY HTML CITATIONS & BACKLINK STRATEGY:**
     *   **CRITICAL LINK RULE:** You MUST NOT create a hyperlink (<a> tag) if you do not have a real, functioning URL (starting with http:// or https://) for the anchor text. **DO NOT use "#" or "javascript:void(0)" or the current article URL.** If the link is missing, simply write the text without the <a> tag.
+    *   **CITATION REPETITION LIMIT:** Never cite the same URL more than 3 times in a single article. If all your information comes from one source, you MUST diversify — search for corroborating sources.
+    *   **AUTHORITY LINK MANDATE:** If you mention any major outlet by name (Reuters, Bloomberg, TechCrunch, The Verge, CNBC, NYT, Forbes, etc.) you MUST include a real hyperlink to that specific article. Mentioning authority sources WITHOUT a link is worse than not mentioning them — it creates false credibility.
+    *   **SELF-CHECK BEFORE WRITING:** Before writing any sentence that starts with "According to [outlet]" or "As reported by [outlet]" or "[outlet] says", STOP and ask: do I have a real URL for this? If NO — rewrite the sentence without mentioning the outlet by name. Write "Industry analysts note..." or "Reports indicate..." instead. NEVER name-drop an outlet without its specific article URL.
+    *   **NO HYPOTHETICAL CONTENT:** NEVER write phrases like "Imagine a screenshot", "Hypothetical Screenshot", or describe what an interface "would look like". If you don't have a real screenshot, skip that visual entirely.
+    *   **NO IGNORANCE ADMISSIONS:** NEVER write "we don't know the technical details", "details are unclear", "specifics are unknown". If data is unavailable, simply omit that claim and move on.
     *   **Link to sources:* using `<a href="..." target="_blank" rel="noopener noreferrer">...</a>`.
     *   **Credit the Community:** "As <a href='...'>u/TechGuy pointed out on Reddit</a>..."
     *   **Authority Backlinks:** If the research data mentions big names like **TechCrunch**, **The Verge**, or **documentation**, link to them. This increases trust.
@@ -471,6 +482,12 @@ EXECUTION DIRECTIVES (NON-NEGOTIABLE):
 1.  **Short Paragraphs:** Keep it readable. Mobile-friendly (2-3 sentences max per paragraph).
 2.  **Formatting:** Use **Bold** for key takeaways and emphasized points.
 3.  **Analogies:** Use real-world analogies. (e.g., "Think of this model like a Ferrari engine in a Toyota Corolla...").
+
+**MINIMUM DEPTH REQUIREMENTS (NON-NEGOTIABLE FOR SEO):**
+- **Word count:** The complete article MUST be at least 1,400 words. Competitive AI topics require depth. An article under 1,000 words WILL NOT rank.
+- **Evidence density:** Every H2 section must contain at least one: (a) specific number/stat, (b) real quote from a source, or (c) concrete example with details.
+- **No filler:** Every paragraph must add information the reader cannot get from the title alone. Delete sentences that don't teach something specific.
+- **Depth over breadth:** It is better to cover 4 sections extremely well than 8 sections superficially.
 
 **MANDATORY STRUCTURE (Do not skip any section):**
 
@@ -613,6 +630,19 @@ CHART INJECTION: If a chart_url exists in the input, you MUST inject it. Wrap it
 
 Find the "Verdict" section and wrap it in: <blockquote>...</blockquote>.
 
+2.5. IMAGE ALT TEXT LAW (NON-NEGOTIABLE):
+Every <img> tag MUST have a descriptive alt attribute that describes the actual content shown.
+FORBIDDEN alt text values: "Main Featured Image", "OpenGraph Image", "Article Image", "Featured Image", "Placeholder", or any generic label.
+REQUIRED format: "[Tool/Product Name] [specific UI element or feature shown]", e.g. alt="Suno v5.5 custom model creation interface with voice upload dialog"
+If a specific description is impossible, use the article headline as alt text — never a generic label.
+
+2.6. FIGCAPTION HYGIENE LAW (NON-NEGOTIABLE):
+Scan EVERY <figcaption> in the article and remove ALL raw metadata, algorithm data, or junk text.
+Forbidden in captions: "| 348k4.4k", "| 255k", "changes |", "hip quake", "Main Featured Image / OpenGraph Image", "📸 Main Featured Image".
+Required: Captions must be ONE human-readable sentence describing what the image shows.
+Example GOOD caption: "📸 The LTX Desktop interface showing the text-to-video generation panel with resolution settings"
+Example BAD caption: "📸 changes | 348k4.4k" — DELETE THIS.
+
 
 
 3. Contextual FAQ (Not Generic):
@@ -636,8 +666,12 @@ Look for THEMATIC CONNECTIONS:
 Example: If the current article is about "AI Coding Errors", and you see a link for "AI Writing Hallucinations", write a bridge sentence:
 "This logic error is exactly like the hallucination problem we discussed in <a href=\"URL\">[Link Title]</a>, but for code."
 
+Action: Insert 2-4 such "Bridge Links" naturally in the text.
 
-Action: Insert 1-2 such "Bridge Links" naturally in the text.
+INTERNAL LINK MANDATE (NON-NEGOTIABLE):
+- You MUST insert at least 2 internal links to latestai.me articles from the KG LINKS provided.
+- If the KG LINKS list is empty or irrelevant, create a contextual link using the format: <a href="https://www.latestai.me" title="Latest AI">our coverage of AI tools</a>
+- Internal links improve PageRank flow and reduce bounce rate. NEVER publish without at least 2 internal links.
 
 
 
@@ -792,6 +826,14 @@ If a paragraph talks about "Investors" or "Market Cap", REWRITE IT to talk about
 
 
 8. Preserve Structure: You MUST keep all existing HTML tags, divs, and class names (takeaways-box, toc-box, Sources, chart-box, etc.) intact. Do NOT change the HTML structure.
+
+9. TECHNICAL ACCURACY PROTECTION (CRITICAL):
+   - Do NOT simplify paragraphs that contain specific numbers, prices, model versions, or benchmark scores.
+   - Do NOT change technical terms in comparison tables (e.g., VRAM, latency, tokens/sec, MMLU score).
+   - "Grandma Test" applies ONLY to introductions and conclusions — NOT to technical sections.
+   - If a paragraph contains 3+ numbers or specific metrics, preserve it AS IS with only vocabulary simplification.
+   - NEVER add phrases like "We don't know the technical details" or "details are unclear" — delete any existing such phrases.
+   - NEVER add phrases admitting ignorance. If info is missing, simply omit that claim.
 
 
 9. THE "WHO CARES?" TEST:

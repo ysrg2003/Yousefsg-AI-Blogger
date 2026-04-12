@@ -199,6 +199,32 @@ class AdvancedContentValidator:
         except: return None
 
     
+    def remove_dead_anchor_links(self, html_content):
+        """
+        Removes links whose anchor text reveals the page is dead (404, error pages).
+        These are the worst kind of citations — they actively hurt E-E-A-T.
+        """
+        DEAD_SIGNALS = ["404", "page not found", "not found", "just a moment",
+                        "sorry, this page", "unavailable to load", "access denied",
+                        "response of native", "subarctic plant", "error loading"]
+        soup = BeautifulSoup(html_content, 'html.parser')
+        removed = 0
+        for link in soup.find_all('a', href=True):
+            anchor = link.get_text(strip=True).lower()
+            if any(sig in anchor for sig in DEAD_SIGNALS):
+                # Replace the link with just its text, or remove from list
+                logger.warning(f"🗑️ Removing dead-anchor link: '{link.get_text(strip=True)[:50]}'")
+                # Remove the whole <li> parent if it's in a sources list
+                parent_li = link.find_parent('li')
+                if parent_li:
+                    parent_li.decompose()
+                else:
+                    link.replace_with(link.get_text(strip=True))
+                removed += 1
+        if removed:
+            logger.info(f"   ✅ Removed {removed} dead-anchor links from article.")
+        return str(soup)
+
     def restore_link_integrity(self, html_content, sources_metadata):
         soup = BeautifulSoup(html_content, 'html.parser')
         links = soup.find_all('a', href=True)
@@ -298,7 +324,10 @@ class AdvancedContentValidator:
         # 5. Quotes
         html = self.verify_quotes(html, full_source_text)
         
-        # 6. Links
+        # 6. Remove dead-anchor links FIRST
+        html = self.remove_dead_anchor_links(html)
+        
+        # 7. Fix remaining links
         html = self.restore_link_integrity(html, sources_metadata)
         
         html = re.sub(r'</?(html|body|head|meta|title)>', '', html, flags=re.IGNORECASE)

@@ -186,12 +186,31 @@ def select_best_image_with_gemini(model_name, article_title, images_list):
     
     return valid_images[0]['original_url']
 
+# Placeholder image domains that must NEVER be uploaded
+_PLACEHOLDER_DOMAINS = [
+    "via.placeholder.com", "placeholder.com", "placehold.it",
+    "placekitten.com", "lorempixel.com", "dummyimage.com",
+    "fakeimg.pl", "picsum.photos",
+]
+
+def _is_placeholder_url(url: str) -> bool:
+    """Returns True if the URL is a placeholder/fake image service."""
+    if not url:
+        return True
+    url_lower = url.lower()
+    return any(p in url_lower for p in _PLACEHOLDER_DOMAINS)
+
 def upload_external_image(source_url, filename_title):
     """
     Downloads an image from a URL, applies smart blur, and uploads it to GitHub CDN.
     This ensures all images in the article are hosted internally (no broken hotlinks).
     Returns: Public CDN URL or None.
     """
+    # GUARD: Reject placeholder/fake image URLs immediately
+    if _is_placeholder_url(source_url):
+        log(f"      🚫 [Image Guard] Placeholder URL rejected: {source_url[:70]}")
+        return None
+    
     try:
         # استخدام User-Agent عشوائي لتقليد المتصفح
         headers = {'User-Agent': random.choice(USER_AGENTS)} 
