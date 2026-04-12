@@ -505,11 +505,11 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                         <span style="font-size:12px; background:#e8f6ef; color:#2ecc71; padding:4px 10px; border-radius:6px; font-weight:bold;">{author_info.get('title', 'Tech Editor')}</span>
                         <p style="margin:15px 0; color:#555; line-height:1.7;">{author_info.get('bio', '')}</p>
                         <div style="display:flex; gap:15px; flex-wrap:wrap; margin-top:15px;">
-                            <a href="{author_info.get('linkedin_url', '#')}" target="_blank" title="LinkedIn"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384014.png" width="24"></a>
-                            <a href="{author_info.get('twitter_url', '#')}" target="_blank" title="X (Twitter)"><img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24"></a>
-                            <a href="{author_info.get('reddit_url', '#')}" target="_blank" title="Reddit"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="24"></a>
-                            <a href="https://www.latestai.me" target="_blank" title="Website"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24"></a>
-                            <a href="https://m.youtube.com/@0latestai" target="_blank" title="YouTube"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24"></a>
+                            <a href="{author_info.get('linkedin_url', 'https://www.linkedin.com/in/yousef-ghaben/')}" target="_blank" rel="noopener noreferrer" title="LinkedIn"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384014.png" width="24" height="24" alt="LinkedIn profile of Yousef S."></a>
+                            <a href="{author_info.get('twitter_url', 'https://x.com/latestaime')}" target="_blank" rel="noopener noreferrer" title="X (Twitter)"><img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24" height="24" alt="X (Twitter) profile of Latest AI"></a>
+                            <a href="{author_info.get('reddit_url', 'https://www.reddit.com/user/Yousefsg/')}" target="_blank" rel="noopener noreferrer" title="Reddit"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="24" height="24" alt="Reddit profile of Yousef S."></a>
+                            <a href="https://www.latestai.me" target="_blank" rel="noopener noreferrer" title="Latest AI Website"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24" height="24" alt="Latest AI — AI news and analysis website"></a>
+                            <a href="https://m.youtube.com/@0latestai" target="_blank" rel="noopener noreferrer" title="YouTube"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24" height="24" alt="Latest AI YouTube channel"></a>
                         </div>
                     </div>
                 </div>
@@ -540,10 +540,11 @@ Do NOT change any other content. Return the complete fixed HTML only.
 ISSUES TO FIX:
 {repair_instructions}
 
-RULES:
-- Remove any sentence admitting ignorance ("we don't know", "details unclear")
-- Remove any text containing "Hypothetical Screenshot" or "Imagine a..."
-- If an authority source (Reuters, Bloomberg, etc.) is mentioned without a link, either add a real link or remove the mention
+MANDATORY RULES:
+- Remove any sentence admitting ignorance or speculation ("we don't know", "details unclear", "we can guess", "we don't have direct feedback from Reddit")
+- Delete any text or code block containing "Hypothetical" or ASCII art (+-|= box characters in <pre>/<code> tags)
+- If authority source mentioned without link (Reuters, Bloomberg) — rewrite as "industry reports indicate" 
+- If same URL appears 4+ times, keep max 2 occurrences, remove the rest
 - Do NOT add placeholder links like # or javascript:void(0)
 
 HTML TO FIX:
@@ -553,23 +554,41 @@ HTML TO FIX:
                 repaired = api_manager.generate_step_strict(
                     model_name, repair_prompt, "Iron Gate Repair", []
                 )
+                repaired_html = None
                 if isinstance(repaired, str) and len(repaired) > 2000:
-                    full_body_html = repaired
+                    repaired_html = repaired
                 elif isinstance(repaired, dict):
-                    # Sometimes returns dict with key
                     for v in repaired.values():
                         if isinstance(v, str) and len(v) > 2000:
-                            full_body_html = v
+                            repaired_html = v
                             break
-                # Re-run gate after repair
-                gate_result2 = seo_quality_gate.run_quality_gate(full_body_html, final_title, datetime.date.today())
-                full_body_html = gate_result2["cleaned_html"]
-                if not gate_result2["passed"]:
-                    log(f"   ⚠️ Gate still has {len(gate_result2['blocking_issues'])} issues after repair — publishing anyway with cleaned version.")
+                
+                if repaired_html:
+                    # Re-run gate after repair
+                    gate_result2 = seo_quality_gate.run_quality_gate(repaired_html, final_title, datetime.date.today())
+                    full_body_html = gate_result2["cleaned_html"]
+                    if gate_result2["passed"]:
+                        log("   ✅ Repair successful. Gate passed — proceeding to publish.")
+                    else:
+                        remaining = len(gate_result2["blocking_issues"])
+                        log(f"   ⚠️ Gate still has {remaining} blocking issue(s) after repair.")
+                        # Only publish if issues are non-critical (warnings only escalated to block)
+                        # NEVER publish with IMG_PLACEHOLDER, FAKE_CONTENT, or IGNORANCE_ADMISSION
+                        hard_blockers = ["IMG_PLACEHOLDER", "FAKE_CONTENT", "IGNORANCE_ADMISSION", "FAKE_ASCII_ART"]
+                        has_hard_block = any(
+                            any(hb in issue for hb in hard_blockers)
+                            for issue in gate_result2["blocking_issues"]
+                        )
+                        if has_hard_block:
+                            log(f"   ❌ HARD BLOCK: Article contains unfixable fake/ignorance content. ABORTING PUBLISH.")
+                            return False  # Do NOT publish
+                        else:
+                            log(f"   ⚠️ Soft blocks only — publishing cleaned version (flagged for review).")
                 else:
-                    log("   ✅ Repair successful. Gate passed.")
+                    log("   ⚠️ Repair returned no usable HTML — using gate-cleaned version.")
+                    
             except Exception as _ge:
-                log(f"   ⚠️ Repair attempt failed: {_ge}. Publishing cleaned version.")
+                log(f"   ⚠️ Repair attempt failed: {_ge}. Using gate-cleaned version.")
         
         if gate_result["auto_fixes"] > 0:
             log(f"   🔧 Iron Gate auto-fixed {gate_result['auto_fixes']} issues silently.")

@@ -52,17 +52,38 @@ IGNORANCE_PHRASES = [
     "no official data available",
     "the exact details are not yet known",
     "specifics are not yet available",
+    # NEW: community/reddit vagueness
+    "we don't have a lot of direct feedback from reddit",
+    "we don't have direct feedback",
+    "we can guess some things",
+    "we can guess what people might",
+    "no direct reddit feedback",
+    "we can predict the criticism",
+    "based on what we know, we can assume",
+    # NEW: speculation disguised as analysis
+    "people might criticize",
+    "users will likely complain",
+    "community might feel",
 ]
 
 FAKE_CONTENT_TRIGGERS = [
     "hypothetical screenshot",
+    "hypothetical data flow",   # ASCII art diagram placeholder
     "imagine a clean interface",
     "imagine a screenshot",
+    "imagine a dashboard",
     "[[asset_",       # un-replaced placeholders (case-insensitive)
     "[[generated_chart]]",
     "[[visual_evidence",
     "[[code_snippet",
     "placeholder for",
+]
+
+# ASCII art code blocks used as fake diagrams
+ASCII_ART_PATTERNS = [
+    r"```.*?\+[-]+\+.*?```",       # box-drawing characters in code blocks
+    r"<pre>.*?\+[-=]+\+.*?</pre>", # same in HTML pre tags
+    r"<code>.*?\+[-=]+\+.*?</code>",
 ]
 
 AUTHORITY_NAMES = [
@@ -145,12 +166,24 @@ def check_placeholder_images(soup) -> list:
 
 def check_fake_content(soup) -> list:
     issues = []
-    text = soup.get_text().lower()
     html_lower = str(soup).lower()
     for phrase in FAKE_CONTENT_TRIGGERS:
         if phrase.lower() in html_lower:
             issues.append(QualityIssue("BLOCK", "FAKE_CONTENT",
                 f"Fake/placeholder content detected: '{phrase}'"))
+    
+    # Detect ASCII art code blocks used as fake diagrams
+    import re as _re
+    html_str = str(soup)
+    # Look for <pre> or <code> blocks containing box-drawing characters
+    code_blocks = _re.findall(r'<(?:pre|code)[^>]*>(.*?)</(?:pre|code)>', html_str, _re.DOTALL | _re.IGNORECASE)
+    for block in code_blocks:
+        # Box-drawing chars: +, |, -, =, >, < in structured patterns
+        if block.count('+') >= 3 and block.count('|') >= 3 and block.count('-') >= 5:
+            issues.append(QualityIssue("BLOCK", "FAKE_ASCII_ART",
+                "ASCII art diagram in <pre>/<code> block — replace with a real image or chart"))
+            break  # One report is enough
+    
     return issues
 
 
@@ -319,20 +352,39 @@ def check_bad_captions(soup) -> list:
     return issues
 
 
+# Generic anchor text patterns that signal low-quality internal links
+_GENERIC_INTERNAL_ANCHORS = [
+    "our articles on ai", "ai tools", "ai innovations", "latest ai news",
+    "click here", "read more", "learn more", "see more", "find out more",
+    "our coverage", "check it out", "visit our site",
+]
+
 def check_dead_link_anchors(soup) -> list:
     """
     Detects links whose visible anchor text reveals the URL is broken.
-    e.g. <a href="...">404 - Suno</a> or <a href="...">Page not found</a>
-    These are dead sources that destroy E-E-A-T and reader trust.
+    Also detects generic homepage internal links (latestai.me with no path).
     """
     issues = []
     links = soup.find_all("a", href=True)
     for link in links:
         anchor = link.get_text(strip=True).lower()
         href = link.get("href", "")
-        # Skip internal links and anchors
-        if not href.startswith("http") or "latestai.me" in href:
+        
+        # Check for generic internal homepage links (no article path)
+        if "latestai.me" in href:
+            from urllib.parse import urlparse
+            parsed = urlparse(href)
+            path = parsed.path.strip("/")
+            if not path or path == "" or path == "index.html":
+                # It's a bare homepage link
+                if any(g in anchor for g in _GENERIC_INTERNAL_ANCHORS):
+                    issues.append(QualityIssue("BLOCK", "GENERIC_INTERNAL_LINK",
+                        f"Generic homepage internal link: '{anchor[:60]}' → {href} — must link to a specific article"))
+            continue  # Done checking internal links
+            
+        if not href.startswith("http"):
             continue
+            
         for pattern in DEAD_LINK_ANCHOR_PATTERNS:
             if pattern in anchor:
                 issues.append(QualityIssue("BLOCK", "DEAD_SOURCE_LINK",
@@ -360,14 +412,53 @@ def check_promo_in_caption(soup) -> list:
     return issues
 
 
+# Social media icon URLs that get a pass (decorative, author box)
+_SOCIAL_ICON_DOMAINS = ["flaticon.com", "cdn-icons-png"]
+
+def check_unsourced_statistics(soup) -> list:
+    """
+    Detects percentage/number statistics that appear without a citation link nearby.
+    Pattern: a sentence contains X% or $X and no <a href> appears within 200 chars.
+    """
+    import re
+    issues = []
+    html_str = str(soup)
+    
+    # Find paragraphs with statistics
+    paragraphs = soup.find_all("p")
+    stat_pattern = re.compile(r'\b(\d+\.?\d*\s*%|\$\d+|\d+x\s+(?:faster|cheaper|more)|\d+\s+(?:million|billion|thousand))', re.IGNORECASE)
+    
+    for para in paragraphs:
+        text = para.get_text()
+        stats = stat_pattern.findall(text)
+        if not stats:
+            continue
+        # Check if paragraph has a citation link
+        has_link = bool(para.find("a", href=True))
+        if not has_link and len(stats) >= 2:  # 2+ stats, no source = suspicious
+            issues.append(QualityIssue("WARN", "UNSOURCED_STAT",
+                f"Paragraph has {len(stats)} statistics ({stats[0]}, {stats[1] if len(stats)>1 else ''}) but no citation link"))
+    return issues
+
+
 def check_generic_alt_text(soup) -> list:
     issues = []
     imgs = soup.find_all("img")
     for img in imgs:
+        src = img.get("src", "")
         alt = img.get("alt", "").strip().lower()
+        
+        # Check if it's a social/decorative icon — upgrade missing alt to BLOCK
+        is_icon = any(d in src for d in _SOCIAL_ICON_DOMAINS)
+        
         if not alt:
-            issues.append(QualityIssue("WARN", "MISSING_ALT",
-                f"Image missing alt text: {img.get('src','')[:60]}"))
+            if is_icon:
+                # Social icons MUST have alt for accessibility — BLOCK
+                issues.append(QualityIssue("BLOCK", "MISSING_ALT_ICON",
+                    f"Social/icon image missing alt text: {src[:60]} — add descriptive alt"))
+            else:
+                issues.append(QualityIssue("WARN", "MISSING_ALT",
+                    f"Image missing alt text: {src[:60]}"))
         elif any(g in alt for g in GENERIC_ALT_PATTERNS):
             issues.append(QualityIssue("WARN", "GENERIC_ALT",
                 f"Generic/meaningless alt text: '{alt[:60]}'"))
@@ -487,6 +578,7 @@ def run_quality_gate(html: str, title: str, published_date: datetime.date = None
     all_issues += check_dead_link_anchors(soup)
     all_issues += check_promo_in_caption(soup)                # mutates soup captions
     all_issues += check_table_quality(soup)
+    all_issues += check_unsourced_statistics(soup)
     all_issues += check_generic_alt_text(soup)
     
     # Capture ALL mutations into cleaned_html AFTER all soup-mutating checks
