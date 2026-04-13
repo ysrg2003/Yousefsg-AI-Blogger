@@ -587,10 +587,8 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             
             # Build a repair prompt from the issues
             repair_instructions = "\n".join(gate_result["blocking_issues"])
-            repair_prompt = f"""You are an HTML editor. Fix ONLY the following issues in the article HTML below.
-Do NOT change any other content. Return the complete fixed HTML only.
-CRITICAL: The HTML may be long. Process it completely — do NOT truncate or omit any section.
-Return the FULL article HTML after fixing, including schema, author box, and sources at the end.
+            repair_prompt = f"""You are a precise HTML patcher. Review the HTML below and fix ONLY the following issues.
+To save output tokens, DO NOT return the entire HTML! Instead, return a JSON array containing the exact old snippets that need fixing, and the new fixed snippets.
 
 ISSUES TO FIX:
 {repair_instructions}
@@ -601,23 +599,43 @@ MANDATORY RULES:
 - If authority source mentioned without link (Reuters, Bloomberg) — rewrite as "industry reports indicate" 
 - If same URL appears 4+ times, keep max 2 occurrences, remove the rest
 - Do NOT add placeholder links like # or javascript:void(0)
-- Preserve ALL content after the main article body (schema JSON-LD, author box, sources section)
 
-HTML TO FIX (COMPLETE — DO NOT TRUNCATE YOUR OUTPUT):
-{full_body_html}"""
+HTML TO ANALYZE:
+{full_body_html}
+
+OUTPUT FORMAT:
+Return PURE JSON in this specific array format:
+[
+  {{"original_text": "the exact old html snippet that has the issue", "fixed_text": "the new corrected string (or empty to delete)"}}
+]"""
             
             try:
+                # Force JSON structure detection by avoiding strictly expected keys
                 repaired = api_manager.generate_step_strict(
-                    model_name, repair_prompt, "Iron Gate Repair", []
+                    model_name, repair_prompt, "Iron Gate Repair (JSON Patch)", []
                 )
                 repaired_html = None
-                if isinstance(repaired, str) and len(repaired) > 2000:
-                    repaired_html = repaired
-                elif isinstance(repaired, dict):
-                    for v in repaired.values():
-                        if isinstance(v, str) and len(v) > 2000:
-                            repaired_html = v
-                            break
+                
+                # Check if we got a valid list of patches
+                if isinstance(repaired, list):
+                    temp_html = full_body_html
+                    changes_applied = 0
+                    for patch in repaired:
+                        orig = patch.get("original_text", "")
+                        fixed = patch.get("fixed_text", "")
+                        # Make sure original text snippet is non-empty and exists
+                        if orig and len(orig) >= 3 and orig in temp_html:
+                            temp_html = temp_html.replace(orig, fixed)
+                            changes_applied += 1
+                    
+                    if changes_applied > 0:
+                        repaired_html = temp_html
+                        log(f"   ✅ Successfully applied {changes_applied} patches.")
+                    else:
+                        log("   ⚠️ AI returned patches, but snippets did not exactly match the HTML.")
+                        # Fallback logic if needed could go here, for now it remains None
+                else:
+                    log("   ⚠️ Repair did not return a valid JSON list format.")
                 
                 if repaired_html:
                     # Re-run gate after repair
