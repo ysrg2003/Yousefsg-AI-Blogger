@@ -2,41 +2,50 @@ name: Daily Article Publishing
 
 on:
   schedule:
-    # توقيت افتراضي (36 دقيقة بعد 12 ظهراً بتوقيت UTC) - يمكنك تعديله لاحقاً
+    # توقيت افتراضي (يمكن تعديله تلقائياً بواسطة السكربت)
     - cron: '21 12 * * *' 
-  workflow_dispatch: # يسمح بتشغيل الـ workflow يدوياً من واجهة GitHub
+  workflow_dispatch: 
 
 permissions:
-  contents: write # إعطاء صلاحيات الكتابة للمستودع للسماح بالـ commits
+  contents: write 
 
 jobs:
   publish-articles:
-    runs-on: ubuntu-latest # تشغيل الوظيفة على بيئة Ubuntu حديثة
+    runs-on: ubuntu-latest 
     steps:
-      - name: Checkout repository # خطوة سحب المستودع من GitHub
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4 # تحديث للإصدار v4
         with:
-          # استخدام التوكن الشخصي الخاص بك (MY_GITHUB_TOKEN)
-          # هذا التوكن يجب أن يكون قد تم إعداده كـ Secret في GitHub
-          # يسمح هذا التوكن للمهام بعمل commits وتعديل ملفات الـ Workflow نفسها
           token: ${{ secrets.MY_GITHUB_TOKEN }}
-          # ضروري لعمليات الـ Git التي تتضمن history مثل --rebase
           fetch-depth: 0 
       
-      - name: Set up Python # إعداد بيئة Python المطلوبة
-        uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5 # تحديث للإصدار v5 يدعم الكاش بشكل أفضل
         with:
-          python-version: '3.11' # تحديد إصدار Python المراد استخدامه
-      
-      - name: Install dependencies # تثبيت المكتبات المطلوبة لعمل المشروع
+          python-version: '3.11'
+          cache: 'pip' # تفعيل الكاش التلقائي لمكتبات pip بناءً على requirements.txt
+
+      # إضافة كاش مخصص لمجلدات Hugging Face والنماذج (لأنك تستخدم HF_TOKEN)
+      - name: Cache Hugging Face models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-hf-
+
+      - name: Install dependencies
         run: |
-          sudo apt-get update # تحديث قوائم الحزم في النظام
-          sudo apt-get install -y ffmpeg # تثبيت ffmpeg (مطلوب بواسطة مكتبة moviepy لإنشاء الفيديوهات)
-          pip install -r requirements.txt # تثبيت جميع مكتبات Python المحددة في requirements.txt
+          sudo apt-get update
+          # تثبيت ffmpeg فقط إذا لم يكن موجوداً لتسريع العملية
+          if ! command -v ffmpeg &> /dev/null; then
+            sudo apt-get install -y ffmpeg
+          fi
+          pip install --upgrade pip
+          pip install -r requirements.txt
       
-      # 1. تشغيل المولد الرئيسي للمقالات والفيديوهات (main.py)
       - name: Run Article Generator
-        env: # متغيرات البيئة التي سيتم تمريرها لسكربت main.py (يتم جلبها من GitHub Secrets)
+        env:
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
@@ -53,58 +62,38 @@ jobs:
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
-          GITHUB_REPO_NAME: ${{ github.repository }} # يمثل المستودع الحالي (مثال: ysrg2003/AI-Blogger-Automation)
-          GITHUB_IMAGE_REPO: "ysrg2003/latest-ai-assets" # اسم المستودع الذي سيتم رفع الصور عليه (قيمة ثابتة)
+          GITHUB_REPO_NAME: ${{ github.repository }}
+          GITHUB_IMAGE_REPO: "ysrg2003/latest-ai-assets"
           YOUTUBE_CREDENTIALS_JSON: ${{ secrets.YOUTUBE_CREDENTIALS_JSON }}
           GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }} 
           GOOGLE_INDEXING_JSON: ${{ secrets.GOOGLE_INDEXING_JSON }}
-          GH_MODELS_TOKEN: ${{ secrets.GH_MODELS_TOKEN }} # توكن اختياري لتحميل نماذج من GitHub (إذا كان النظام يستخدمها)
+          GH_MODELS_TOKEN: ${{ secrets.GH_MODELS_TOKEN }}
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
           GOOGLE_SEARCH_CX: ${{ secrets.GOOGLE_SEARCH_CX }}
           GOOGLE_SEARCH_API_KEY: ${{ secrets.GOOGLE_SEARCH_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python -u main.py # تشغيل سكريبت main.py مع إخراج غير مخزن مؤقتاً (-u)
+        run: python -u main.py
 
-      # 2. تغيير توقيت التشغيل العشوائي للـ workflow لليوم التالي
-      # يتم تشغيل هذه الخطوة دائماً (if: always()) حتى لو فشلت الخطوات السابقة، لضمان تحديث التوقيت
       - name: Randomize Schedule
         if: always()
-        run: python update_schedule.py # تشغيل سكريبت تحديث التوقيت
+        run: python update_schedule.py 
 
-      # 3. حفظ جميع التغييرات التي حدثت ورفعها إلى المستودع (Git Operations)
-      # يتم تشغيل هذه الخطوة دائماً (if: always()) لضمان حفظ حالة النظام بعد كل تشغيل
       - name: Push Changes
         if: always()
         run: |
-          # إعداد معلومات المستخدم لـ Git (مطلوب لعمل commits)
           git config --global user.name 'Scheduler Bot'
           git config --global user.email 'scheduler@bot.com'
           
-          # 1. إضافة الملفات المعدلة إلى الـ Staging Area (تجهيزها للـ commit)
-          # سنقوم بإضافة الملفات التي يتم تعديلها بواسطة سكربتات Python وتحتوي على حالة النظام
-          
-          # ملف الـ workflow نفسه (يتم تعديل الـ cron بواسطة update_schedule.py)، يجب إضافته دائماً
           git add .github/workflows/daily-publish.yml
-
-          # إضافة الملفات الأخرى إذا كانت موجودة (باستخدام الأوامر الشرطية المختصرة)
           [ -f "knowledge_graph.json" ] && git add knowledge_graph.json
           [ -f "source_reputation.json" ] && git add source_reputation.json
           [ -f "content_plan.json" ] && git add content_plan.json
-          
-          # التحقق من وجود مجلد 'archive' قبل محاولة إضافته
           [ -d "archive" ] && git add archive/
           
-          # 2. التحقق من وجود تغييرات staged (تم إعدادها للـ commit) ثم عمل Commit لها
-          # استخدام 'git diff-index --quiet HEAD' للتحقق مما إذا كانت هناك تغييرات staged
-          if ! git diff-index --quiet HEAD; then # <-- التصحيح: 'then' يجب أن تكون هنا، مع عكس الشرط لسهولة القراءة
-            git commit -m "📅 Auto-Update: Schedule & Content Data" # عمل commit للتغييرات
-            
-            # 3. سحب التحديثات من السيرفر ودمجها مع الـ commit المحلي
-            # 'git pull origin main --rebase --autostash' لزيادة المتانة
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "📅 Auto-Update: Schedule & Content Data"
             git pull origin main --rebase --autostash
-            
-            # 4. الرفع النهائي: دفع التغييرات إلى المستودع البعيد
             git push origin main
-          else # <-- التصحيح: 'else' تأتي هنا
-            echo "No changes to commit." # لا توجد تغييرات staged، لا حاجة للـ commit
-          fi # <-- التصحيح: 'fi' تغلق جملة الشرط
+          else
+            echo "No changes to commit."
+          fi
