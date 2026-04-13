@@ -10,6 +10,7 @@ import json
 import math
 import random
 import logging
+import datetime
 import regex
 import json_repair
 import puter as puter_sdk
@@ -30,6 +31,17 @@ RPD_LIMIT = 20         # Requests per day per key
 # Retry configuration
 MAX_RETRIES_PER_KEY = 2      # Attempts on the same key before marking it cooling and switching
 MAX_BACKOFF_SECONDS = 60     # Cap for exponential backoff waits
+
+# Cooldown applied to a key after its per-key retries are exhausted on a 429
+COOLDOWN_BASE_SECONDS = 30   # Multiplied by (attempt + 1); capped at MAX_BACKOFF_SECONDS
+
+# Default token estimate when no better estimate is available
+DEFAULT_ESTIMATED_TOKENS = 1000
+
+# Tenacity outer-retry parameters (inner loops handle most transient failures)
+TENACITY_MULTIPLIER = 2
+TENACITY_MIN_WAIT = 5
+TENACITY_MAX_WAIT = 30
 
 # Lightweight model used for self-repair calls to reduce quota consumption
 SELF_REPAIR_MODEL = "gemini-2.5-flash-lite"
@@ -135,17 +147,17 @@ class KeyRateLimiter:
             count = 0
 
         if count >= self.rpd_limit:
-            # Wait until midnight
-            now_local = time.localtime(now)
-            midnight = time.mktime(time.struct_time((
-                now_local.tm_year, now_local.tm_mon, now_local.tm_mday + 1,
-                0, 0, 0, now_local.tm_wday, now_local.tm_yday, now_local.tm_isdst
-            )))
-            return False, max(0.0, midnight - now)
+            # Wait until midnight — use datetime.timedelta for safe date arithmetic
+            today_dt = datetime.date.today()
+            tomorrow_midnight = datetime.datetime.combine(
+                today_dt + datetime.timedelta(days=1), datetime.time.min
+            )
+            wait = (tomorrow_midnight - datetime.datetime.now()).total_seconds()
+            return False, max(0.0, wait)
 
         return True, 0.0
 
-    def record_request(self, key_index, estimated_tokens=1000):
+    def record_request(self, key_index, estimated_tokens=DEFAULT_ESTIMATED_TOKENS):
         """Record a request against the key's sliding window and daily counter."""
         now = time.time()
         self._prune_window(key_index, now)
@@ -485,7 +497,7 @@ def try_gemini_generation(model_name, prompt, system_prompt, use_google_search=F
 
                     if attempt == MAX_RETRIES_PER_KEY - 1:
                         # Exhausted retries on this key — put it in cooldown
-                        cooldown = min(MAX_BACKOFF_SECONDS, 30 * (attempt + 1))
+                        cooldown = min(MAX_BACKOFF_SECONDS, COOLDOWN_BASE_SECONDS * (attempt + 1))
                         key_manager.rate_limiter.mark_cooling(key_idx, cooldown)
                     continue  # Retry same key
 
@@ -518,7 +530,7 @@ def try_gemini_generation(model_name, prompt, system_prompt, use_google_search=F
     # Reduced from 5 to 2: internal per-key loops now handle most transient failures.
     # The outer tenacity layer is a lightweight safety net for hard RuntimeError failures only.
     stop=stop_after_attempt(2),
-    wait=wait_exponential(multiplier=2, min=5, max=30),
+    wait=wait_exponential(multiplier=TENACITY_MULTIPLIER, min=TENACITY_MIN_WAIT, max=TENACITY_MAX_WAIT),
     retry=retry_if_exception_type(RuntimeError),
     before_sleep=before_sleep_log(logger, logging.INFO)
 )
