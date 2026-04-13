@@ -24,7 +24,7 @@ from config import log
 API_HEAT = 30  # Seconds to wait between heavy calls to prevent flooding
 
 # Per-key Gemini rate limits (free tier defaults; adjust as needed)
-RPM_LIMIT = 5          # Requests per minute per key
+RPM_LIMIT = 3          # Requests per minute per key
 TPM_LIMIT = 250_000    # Tokens per minute per key (approximate)
 RPD_LIMIT = 20         # Requests per day per key
 
