@@ -28,7 +28,7 @@ GEMINI_FALLBACK_CHAIN = [
     "gemini-3-flash-preview",       # Primary — best balance of speed and quality
     "gemini-2.5-flash",       # Strong fallback
     "gemini-3.1-flash-lite-preview",         # Deep context fallback
-    "gemini-2.5-flash-lite-preview"        # Last resort — fast and reliable
+    "gemini-2.5-flash-lite"        # Last resort — fast and reliable
 ]
 
 class KeyManager:
