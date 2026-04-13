@@ -74,7 +74,7 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
     Executes the full content lifecycle using a robust, multi-layered strategy.
     Integrated with Truth Verification, Data Visualization, Code Hunting, and Strict Quality Loops.
     """
-    model_name = config['settings'].get('model_name', "gemini-3-flash-preview")
+    model_name = config['settings'].get('model_name', "gemini-2.5-flash")
     img_url = None
 
     vid_main_id, vid_main_url = None, None
