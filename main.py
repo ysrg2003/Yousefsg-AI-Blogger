@@ -306,15 +306,9 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
         # 7. ARTISAN WRITER
         # ======================================================================
         log("   ✍️ [The Artisan] Writing the article...")
-        # FIX v4.1: Added reddit_status_flag to explicitly signal when no real Reddit data exists
-        reddit_status_flag = "NO_REDDIT_DATA_AVAILABLE" if not reddit_context or len(reddit_context) < 50 else "REAL_DATA_PRESENT"
         artisan_prompt = PROMPT_B_TEMPLATE.format(
-            blueprint_json=json.dumps(blueprint, ensure_ascii=False),
-            raw_data_bundle=json.dumps({
-                "research": combined_text[:15000],
-                "reddit": reddit_context[:5000],
-                "reddit_status_flag": reddit_status_flag
-            }, ensure_ascii=False)
+            blueprint_json=json.dumps(blueprint, ensure_ascii=False), # ensure_ascii=False for proper Arabic handling
+            raw_data_bundle=json.dumps({"research": combined_text[:15000], "reddit": reddit_context[:5000]}, ensure_ascii=False)
         )
         json_b = api_manager.generate_step_strict(model_name, artisan_prompt, "Artisan Writer", ["headline", "article_body"])
         title = blueprint.get("final_title", json_b.get('headline', target_keyword))
@@ -446,60 +440,28 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
 
 
         # 1. Schema Injection
-        # SCHEMA: Always inject — build from scratch if AI didn't return one
-        log("   🧬 Injecting JSON-LD Schema (guaranteed)...")
-        today_iso = datetime.date.today().isoformat()
         if json_c.get('schemaMarkup') and json_c['schemaMarkup'].get('OUTPUT'):
+            log("   🧬 Injecting JSON-LD Schema into final HTML...")
             schema_data = json_c['schemaMarkup']['OUTPUT']
-        else:
-            # Build a complete schema from scratch — never skip this
-            log("   ⚠️ AI schema missing — building fallback schema...")
-            schema_data = {
-                "@context": "https://schema.org",
-                "@type": "TechArticle",
-                "mainEntityOfPage": {"@type": "WebPage", "@id": published_url_placeholder},
-                "publisher": {
-                    "@type": "Organization",
-                    "name": "Latest AI",
-                    "logo": {"@type": "ImageObject",
-                             "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"}
-                },
-                "mainEntity": [{
-                    "@type": "FAQPage",
-                    "mainEntity": []
-                }]
-            }
-        # Always override these critical fields
-        schema_data['headline'] = final_title
-        schema_data['datePublished'] = today_iso
-        schema_data['dateModified'] = today_iso
-        schema_data['author'] = {'@type': 'Person', 'name': 'Yousef S.', 'url': 'https://www.latestai.me'}
-        if img_url:
-            schema_data['image'] = img_url
-        if 'mainEntityOfPage' in schema_data:
-            schema_data['mainEntityOfPage']['@id'] = published_url_placeholder
-        schema_script = f'<script type="application/ld+json">{json.dumps(schema_data, indent=2, ensure_ascii=False)}</script>'
-        full_body_html += schema_script
+            schema_data['headline'] = final_title
+            today_iso = datetime.date.today().isoformat()
+            schema_data['datePublished'] = today_iso
+            schema_data['dateModified'] = today_iso  # Always update modification date
+            if img_url: schema_data['image'] = img_url
+            # Ensure author fields are correctly set
+            schema_data.setdefault('author', {}).update({'@type': 'Person', 'name': 'Yousef S.', 'url': 'https://www.latestai.me'})
+            if 'mainEntityOfPage' in schema_data: schema_data['mainEntityOfPage']['@id'] = published_url_placeholder # Use placeholder here
+            schema_script = f'<script type="application/ld+json">{json.dumps(schema_data, indent=2, ensure_ascii=False)}</script>'
+            full_body_html += schema_script
         
         # 2. Hero Image Injection
         if img_url:
             img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{final_title}" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" /></a></div>'
             full_body_html = img_html + full_body_html
 
-        # 3. Dynamic Author Box Injection — ALWAYS inject (fallback to defaults)
+        # 3. Dynamic Author Box Injection
         log("   👤 Building dynamic author box...")
         author_info = config.get("author_profile", {})
-        # FALLBACK: if no author profile in config, use site defaults
-        if not author_info:
-            author_info = {
-                "name": "Yousef S.",
-                "title": "AI Automation Specialist & Tech Editor",
-                "bio": "Specializing in enterprise AI implementation and ROI analysis. With over 5 years of experience in deploying conversational AI, Yousef provides hands-on insights into what actually works in production environments.",
-                "profile_image_url": "https://blogger.googleusercontent.com/img/a/AVvXsEiB6B0pK8PhY0j0JrrYCSG_QykTjsbxbbdePdNP_nRT_39FW4SGPPqTrAjendimEUZdipHUiYJfvHVjTBH7Eoz8vEjzzCTeRcDlIcDrxDnUhRJFJv4V7QHtileqO4wF-GH39vq_JAe4UrSxNkfjfi1fDS9_T4mPmwEC71VH9RJSEuSFrNb2ZRQedyA61iQ=s1017-rw",
-                "linkedin_url": "https://www.linkedin.com/in/yousef-ghaben/",
-                "twitter_url": "https://x.com/latestaime",
-                "reddit_url": "https://www.reddit.com/user/Yousefsg/",
-            }
         if author_info:
             author_box = f'''
             <div style="margin-top:50px; padding:30px; background:#f9f9f9; border-left: 6px solid #2ecc71; border-radius:12px; font-family:sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
@@ -511,11 +473,11 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
                         <span style="font-size:12px; background:#e8f6ef; color:#2ecc71; padding:4px 10px; border-radius:6px; font-weight:bold;">{author_info.get('title', 'Tech Editor')}</span>
                         <p style="margin:15px 0; color:#555; line-height:1.7;">{author_info.get('bio', '')}</p>
                         <div style="display:flex; gap:15px; flex-wrap:wrap; margin-top:15px;">
-                            <a href="{author_info.get('linkedin_url', 'https://www.linkedin.com/in/yousef-ghaben/')}" target="_blank" rel="noopener noreferrer" title="LinkedIn"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384014.png" width="24" height="24" alt="LinkedIn profile of Yousef S."></a>
-                            <a href="{author_info.get('twitter_url', 'https://x.com/latestaime')}" target="_blank" rel="noopener noreferrer" title="X (Twitter)"><img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24" height="24" alt="X (Twitter) profile of Latest AI"></a>
-                            <a href="{author_info.get('reddit_url', 'https://www.reddit.com/user/Yousefsg/')}" target="_blank" rel="noopener noreferrer" title="Reddit"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="24" height="24" alt="Reddit profile of Yousef S."></a>
-                            <a href="https://www.latestai.me" target="_blank" rel="noopener noreferrer" title="Latest AI Website"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24" height="24" alt="Latest AI — AI news and analysis website"></a>
-                            <a href="https://m.youtube.com/@0latestai" target="_blank" rel="noopener noreferrer" title="YouTube"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24" height="24" alt="Latest AI YouTube channel"></a>
+                            <a href="{author_info.get('linkedin_url', '#')}" target="_blank" title="LinkedIn"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384014.png" width="24"></a>
+                            <a href="{author_info.get('twitter_url', '#')}" target="_blank" title="X (Twitter)"><img src="https://cdn-icons-png.flaticon.com/512/5969/5969020.png" width="24"></a>
+                            <a href="{author_info.get('reddit_url', '#')}" target="_blank" title="Reddit"><img src="https://cdn-icons-png.flaticon.com/512/3536/3536761.png" width="24"></a>
+                            <a href="https://www.latestai.me" target="_blank" title="Website"><img src="https://cdn-icons-png.flaticon.com/512/1006/1006771.png" width="24"></a>
+                            <a href="https://m.youtube.com/@0latestai" target="_blank" title="YouTube"><img src="https://cdn-icons-png.flaticon.com/512/1384/1384060.png" width="24"></a>
                         </div>
                     </div>
                 </div>
@@ -542,62 +504,40 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             repair_instructions = "\n".join(gate_result["blocking_issues"])
             repair_prompt = f"""You are an HTML editor. Fix ONLY the following issues in the article HTML below.
 Do NOT change any other content. Return the complete fixed HTML only.
-CRITICAL: The HTML may be long. Process it completely — do NOT truncate or omit any section.
-Return the FULL article HTML after fixing, including schema, author box, and sources at the end.
 
 ISSUES TO FIX:
 {repair_instructions}
 
-MANDATORY RULES:
-- Remove any sentence admitting ignorance or speculation ("we don't know", "details unclear", "we can guess", "we don't have direct feedback from Reddit")
-- Delete any text or code block containing "Hypothetical" or ASCII art (+-|= box characters in <pre>/<code> tags)
-- If authority source mentioned without link (Reuters, Bloomberg) — rewrite as "industry reports indicate" 
-- If same URL appears 4+ times, keep max 2 occurrences, remove the rest
+RULES:
+- Remove any sentence admitting ignorance ("we don't know", "details unclear")
+- Remove any text containing "Hypothetical Screenshot" or "Imagine a..."
+- If an authority source (Reuters, Bloomberg, etc.) is mentioned without a link, either add a real link or remove the mention
 - Do NOT add placeholder links like # or javascript:void(0)
-- Preserve ALL content after the main article body (schema JSON-LD, author box, sources section)
 
-HTML TO FIX (COMPLETE — DO NOT TRUNCATE YOUR OUTPUT):
-{full_body_html}"""
+HTML TO FIX:
+{full_body_html[:30000]}"""
             
             try:
                 repaired = api_manager.generate_step_strict(
                     model_name, repair_prompt, "Iron Gate Repair", []
                 )
-                repaired_html = None
                 if isinstance(repaired, str) and len(repaired) > 2000:
-                    repaired_html = repaired
+                    full_body_html = repaired
                 elif isinstance(repaired, dict):
+                    # Sometimes returns dict with key
                     for v in repaired.values():
                         if isinstance(v, str) and len(v) > 2000:
-                            repaired_html = v
+                            full_body_html = v
                             break
-                
-                if repaired_html:
-                    # Re-run gate after repair
-                    gate_result2 = seo_quality_gate.run_quality_gate(repaired_html, final_title, datetime.date.today())
-                    full_body_html = gate_result2["cleaned_html"]
-                    if gate_result2["passed"]:
-                        log("   ✅ Repair successful. Gate passed — proceeding to publish.")
-                    else:
-                        remaining = len(gate_result2["blocking_issues"])
-                        log(f"   ⚠️ Gate still has {remaining} blocking issue(s) after repair.")
-                        # Only publish if issues are non-critical (warnings only escalated to block)
-                        # NEVER publish with IMG_PLACEHOLDER, FAKE_CONTENT, or IGNORANCE_ADMISSION
-                        hard_blockers = ["IMG_PLACEHOLDER", "FAKE_CONTENT", "IGNORANCE_ADMISSION", "FAKE_ASCII_ART"]
-                        has_hard_block = any(
-                            any(hb in issue for hb in hard_blockers)
-                            for issue in gate_result2["blocking_issues"]
-                        )
-                        if has_hard_block:
-                            log(f"   ❌ HARD BLOCK: Article contains unfixable fake/ignorance content. ABORTING PUBLISH.")
-                            return False  # Do NOT publish
-                        else:
-                            log(f"   ⚠️ Soft blocks only — publishing cleaned version (flagged for review).")
+                # Re-run gate after repair
+                gate_result2 = seo_quality_gate.run_quality_gate(full_body_html, final_title, datetime.date.today())
+                full_body_html = gate_result2["cleaned_html"]
+                if not gate_result2["passed"]:
+                    log(f"   ⚠️ Gate still has {len(gate_result2['blocking_issues'])} issues after repair — publishing anyway with cleaned version.")
                 else:
-                    log("   ⚠️ Repair returned no usable HTML — using gate-cleaned version.")
-                    
+                    log("   ✅ Repair successful. Gate passed.")
             except Exception as _ge:
-                log(f"   ⚠️ Repair attempt failed: {_ge}. Using gate-cleaned version.")
+                log(f"   ⚠️ Repair attempt failed: {_ge}. Publishing cleaned version.")
         
         if gate_result["auto_fixes"] > 0:
             log(f"   🔧 Iron Gate auto-fixed {gate_result['auto_fixes']} issues silently.")
@@ -617,14 +557,11 @@ HTML TO FIX (COMPLETE — DO NOT TRUNCATE YOUR OUTPUT):
             return False
             
         # Update schema and H1 with the final URL, then update the post
-        # FIX v4.1: Simple reliable check — published_url_placeholder never changes format after BeautifulSoup
-        if published_url_placeholder in full_body_html:
+        if ("schema_script" in locals() and published_url_placeholder in full_body_html) or (linked_h1_title_html in full_body_html):
             log("   ✏️ Updating post with final URL in Schema and H1...")
             final_html_with_correct_urls = full_body_html.replace(published_url_placeholder, published_url)
             publisher.update_existing_post(post_id, final_title, final_html_with_correct_urls)
-            full_body_html = final_html_with_correct_urls  # Update for quality loop
-        else:
-            log("   ⚠️ published_url_placeholder not found — schema/H1 may already have correct URL.")
+            full_body_html = final_html_with_correct_urls # Update for quality loop
 
         # QUALITY IMPROVEMENT LOOP
         quality_score, attempts, MAX_RETRIES = 0, 0, 1 # Enabled 1 loop

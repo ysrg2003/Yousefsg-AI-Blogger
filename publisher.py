@@ -39,16 +39,12 @@ def publish_post(title, content, labels):
         "Authorization": f"Bearer {token}", 
         "Content-Type": "application/json"
     }
-    import datetime as _dt
-    now_iso = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S+00:00")
     body = {
         "kind": "blogger#post",
         "blog": {"id": blog_id},
         "title": title,
         "content": content,
-        "labels": labels,
-        "updated": now_iso,   # Forces Blogger to show correct "Last Update" date
-        "published": now_iso, # Ensures publish date is exact
+        "labels": labels
     }
     try:
         r = requests.post(url, headers=headers, json=body)
@@ -111,16 +107,13 @@ def update_existing_post(post_id, title, content):
         "Content-Type": "application/json"
     }
     
-    import datetime as _dt
-    now_iso = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S+00:00")
     # البيانات التي سيتم تحديثها
     body = {
         "kind": "blogger#post",
         "id": post_id,
         "blog": {"id": blog_id},
         "title": title,
-        "content": content,
-        "updated": now_iso,  # Forces "Last Update" field to show correct date
+        "content": content
     }
     
     try:

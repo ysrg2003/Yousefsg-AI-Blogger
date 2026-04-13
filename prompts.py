@@ -316,7 +316,7 @@ RAW DATA BUNDLE:
     -   The Deeper Analysis: Use `[RESEARCH STUDY]` to explain the technical importance.
     -   The Real-World Test: Weave in the `[EXPERT EXPERIENCE]` and Reddit quotes to show what this means for a real person.
     -   The Verdict: A final, balanced recommendation.
-5.  **Assign ALL Evidence:** I will pre-assign every single piece of visual evidence (`[[ASSET_1]]`, `[[ASSET_2]]`... up to `[[ASSET_15]]`, and `[[GENERATED_CHART]]`) to the most logical section in my blueprint. CRITICAL: I will ONLY use asset IDs that exist in the Available Visuals section. If an asset is not listed, I will use null.
+5.  **Assign ALL Evidence:** I will pre-assign every single piece of visual evidence (`[[VISUAL_EVIDENCE_X]]`, `[[GENERATED_CHART]]`, `[[CODE_SNIPPET_1]]`) to the most logical section in my blueprint.
 </thought>
 
 ---
@@ -338,49 +338,49 @@ OUTPUT JSON ONLY:
             "title": "Quick Overview: The Official Pitch vs. The Reality",
             "instructions_for_writer": "Summarize the official announcement (Source of Truth) but contrast it immediately with the user experience (Reddit/Expert Experience).",
             "key_data_to_include": ["Cite the main product name and version.", "Mention the release date or availability."],
-            "visual_asset_to_place": "[[ASSET_1]]"
+            "visual_asset_to_place": "[[ASSET_1]]" // <-- صورة رسمية للمنتج (المطلوب #1)
         }},
         {{
             "section_type": "H2",
             "title": "Technical Deep Dive: How the New API Works",
             "instructions_for_writer": "Explain the API or core technology in simple, technical terms. Use the code asset to show practical implementation.",
             "key_data_to_include": ["Use one hard number/statistic from research."],
-            "visual_asset_to_place": "[[ASSET_2]]"
+            "visual_asset_to_place": "[[ASSET_2]]" // <-- مكان إلزامي للكود البرمجي (المطلوب #2)
         }},
         {{
             "section_type": "H3",
             "title": "Real-World Success: Implementation & Proof",
             "instructions_for_writer": "Detail one successful case study or a major feature from the official source. Focus on *how* العمل تم بنجاح.",
             "key_data_to_include": ["Quote a positive result (e.g., '90% accuracy')."],
-            "visual_asset_to_place": "[[ASSET_3]]"
+            "visual_asset_to_place": "[[ASSET_3]]" // <-- صورة آلية العمل/النجاح (#3)
         }},
         {{
             "section_type": "H3",
             "title": "Performance Snapshot: Screenshots & Interface",
             "instructions_for_writer": "Describe the user interface (UI) أو واجهة الداشبورد. هذا القسم يجب أن يكون قصيراً ومرئياً.",
             "key_data_to_include": ["Mention any pricing tiers or key performance metrics."],
-            "visual_asset_to_place": "[[ASSET_4]]"
+            "visual_asset_to_place": "[[ASSET_4]]" // <-- لقطة شاشة للواجهة (#4)
         }},
         {{
             "section_type": "H2",
             "title": "Community Pulse: Criticisms and Workarounds (E-A-T Check)",
             "instructions_for_writer": "Integrate the raw community opinions (Reddit/Critiques). Focus on the biggest weaknesses/limitations. Use an asset to show a user complaint or bug.",
             "key_data_to_include": ["Quote one critical comment or user experience."],
-            "visual_asset_to_place": "[[ASSET_5]]"
+            "visual_asset_to_place": "[[ASSET_5]]" // <-- صورة لقطة شاشة (مشكلة/مراجعة) (#5)
         }},
         {{
             "section_type": "H3",
             "title": "Alternative Perspectives & Further Proof",
             "instructions_for_writer": "Introduce an alternative tool أو قم بإضافة دليل إثبات إضافي (مثل جدول مقارنة أو اقتباس جديد).",
             "key_data_to_include": ["Mention the name and link of a direct competitor (if available)."],
-            "visual_asset_to_place": "[[ASSET_6]]"
+            "visual_asset_to_place": "[[ASSET_6]]" // <-- صورة آلية عمل/إثبات أخرى (#6)
         }},
         {{
             "section_type": "H3",
             "title": "Practical Tip & Final Recommendation",
             "instructions_for_writer": "Provide نصيحة عملية نهائية للقارئ. هذا القسم يجب أن يكون بصيغة 'ماذا تفعل الآن؟'.",
             "key_data_to_include": [],
-            "visual_asset_to_place": "[[ASSET_7]]"
+            "visual_asset_to_place": "[[ASSET_7]]" // <-- صورة أو إثبات آخر (#7)
         }}
     ],
     // ... (باقي كود الـ JSON)
@@ -414,7 +414,7 @@ CRITICAL CONTEXT (V12.0 - HYBRID ENGINE: E-A-A-T + HUMAN SOUL):
 I have provided you with:
 1. **MULTIPLE SOURCES:** Raw news and articles.
 2. **SOURCE OF TRUTH:** Official documentation or press release.
-3. **REAL VISUALS:** Charts (`[[GENERATED_CHART]]`), Images (`[[ASSET_1]]`, `[[ASSET_2]]`...), and code assets (also referenced as `[[ASSET_N]]`).
+3. **REAL VISUALS:** Charts (`[[GENERATED_CHART]]`), Images (`[[VISUAL_EVIDENCE_1]]`), and critically, a **CODE SNIPPET** (`[[CODE_SNIPPET_1]]`).
 4. **REDDIT COMMUNITY FEEDBACK:** Real unfiltered opinions from users.
 
 Your task is to SYNTHESIZE all of these into one Master Review that is **technically accurate and verifiable** but **reads like a helpful, engaging conversation**.
@@ -432,21 +432,11 @@ YOUR PERSONA & TONE:
 
 ---
 
-0. **CRITICAL — ASSET NAMING LAW (ENFORCED BEFORE EVERYTHING ELSE):**
-    *   The ONLY valid asset placeholders are: `[[ASSET_1]]`, `[[ASSET_2]]`, `[[ASSET_3]]`... up to `[[ASSET_15]]`, and `[[GENERATED_CHART]]`.
-    *   You MUST look at the `visual_asset_to_place` field in each section of the blueprint and use EXACTLY that ID.
-    *   **FORBIDDEN NAMES:** `[[VISUAL_EVIDENCE_X]]`, `[[CODE_SNIPPET_X]]`, `[[SCREENSHOT_X]]`, `[[IMAGE_X]]` — these are INVALID and will cause the image to be silently dropped from the article.
-    *   If the blueprint says `"visual_asset_to_place": "[[ASSET_3]]"`, you write `[[ASSET_3]]` in the HTML. Nothing else.
-    *   If a section's blueprint has `null` for `visual_asset_to_place`, write NO placeholder in that section.
-
 1.  **THE "REDDIT SOUL" MANDATE (RESTORING THE HUMAN TOUCH):**
     *   The provided Reddit data is your "Secret Weapon". It contains the *pain points* and *joy* of real users.
     *   **Storytelling:** Do NOT just list complaints. Tell a story. "Users were excited about X, but quickly realized Y was broken."
     *   **Find "Hacks" & "Workarounds":** Did a Reddit user find a clever way to fix a bug? Mention it! This adds immense value for hobbyists.
     *   **Emotional Connection:** Validate the user's feelings. ("If you're frustrated by the price hike, you're not alone...").
-    *   **HARD RULE — NO SPECULATION:** If you have NO real Reddit comments or community data, DO NOT write a "Community Pulse" section at all. NEVER write "we don't have direct Reddit feedback yet, but we can guess..." or "users might criticize..." — these are speculation, not community pulse. A missing section is better than a fake one. Only write this section if you have real quotes with usernames and URLs.
-    *   **REDDIT STATUS CHECK (READ FIRST):** Check the `reddit_status_flag` field in the RAW DATA. If it says `"NO_REDDIT_DATA_AVAILABLE"`, you are **absolutely forbidden** from writing any Community Pulse section. Replace the entire section with a one-line note: `<p><em>Community feedback for this topic is being collected and will be added shortly.</em></p>` — and nothing more. This rule overrides all other instructions.
-    *   **HARD RULE — NO ASCII ART:** Never put a text-based diagram, ASCII art, or code-formatted data flow inside <pre> or <code> tags as a substitute for a real image. ASCII diagrams look unprofessional and are flagged as fake content. If you need to show a flow, describe it in plain text or wait for a real chart.
 
 2.  **THE "ELI5" SIMPLIFICATION PROTOCOL (Explain Like I'm 5):**
     *   **Define Jargon:** When you introduce a technical term (e.g., "Inference Speed", "Zero-shot"), you MUST explain it simply in parenthesis immediately after.
@@ -469,7 +459,6 @@ YOUR PERSONA & TONE:
     *   **CRITICAL LINK RULE:** You MUST NOT create a hyperlink (<a> tag) if you do not have a real, functioning URL (starting with http:// or https://) for the anchor text. **DO NOT use "#" or "javascript:void(0)" or the current article URL.** If the link is missing, simply write the text without the <a> tag.
     *   **CITATION REPETITION LIMIT:** Never cite the same URL more than 3 times in a single article. If all your information comes from one source, you MUST diversify — search for corroborating sources.
     *   **AUTHORITY LINK MANDATE:** If you mention any major outlet by name (Reuters, Bloomberg, TechCrunch, The Verge, CNBC, NYT, Forbes, etc.) you MUST include a real hyperlink to that specific article. Mentioning authority sources WITHOUT a link is worse than not mentioning them — it creates false credibility.
-    *   **SELF-CHECK BEFORE WRITING:** Before writing any sentence that starts with "According to [outlet]" or "As reported by [outlet]" or "[outlet] says", STOP and ask: do I have a real URL for this? If NO — rewrite the sentence without mentioning the outlet by name. Write "Industry analysts note..." or "Reports indicate..." instead. NEVER name-drop an outlet without its specific article URL.
     *   **NO HYPOTHETICAL CONTENT:** NEVER write phrases like "Imagine a screenshot", "Hypothetical Screenshot", or describe what an interface "would look like". If you don't have a real screenshot, skip that visual entirely.
     *   **NO IGNORANCE ADMISSIONS:** NEVER write "we don't know the technical details", "details are unclear", "specifics are unknown". If data is unavailable, simply omit that claim and move on.
     *   **Link to sources:* using `<a href="..." target="_blank" rel="noopener noreferrer">...</a>`.
@@ -492,12 +481,6 @@ EXECUTION DIRECTIVES (NON-NEGOTIABLE):
 1.  **Short Paragraphs:** Keep it readable. Mobile-friendly (2-3 sentences max per paragraph).
 2.  **Formatting:** Use **Bold** for key takeaways and emphasized points.
 3.  **Analogies:** Use real-world analogies. (e.g., "Think of this model like a Ferrari engine in a Toyota Corolla...").
-
-**MINIMUM DEPTH REQUIREMENTS (NON-NEGOTIABLE FOR SEO):**
-- **Word count:** The complete article MUST be at least 1,400 words. Competitive AI topics require depth. An article under 1,000 words WILL NOT rank.
-- **Evidence density:** Every H2 section must contain at least one: (a) specific number/stat, (b) real quote from a source, or (c) concrete example with details.
-- **No filler:** Every paragraph must add information the reader cannot get from the title alone. Delete sentences that don't teach something specific.
-- **Depth over breadth:** It is better to cover 4 sections extremely well than 8 sections superficially.
 
 **MANDATORY STRUCTURE (Do not skip any section):**
 
@@ -526,7 +509,7 @@ EXECUTION DIRECTIVES (NON-NEGOTIABLE):
 IF content_type is "Guide":
     1. The article MUST begin with a numbered or bulleted list titled "Quick 5-Step Action Plan".
     2. The body MUST use H3 headers for each step (e.g., "<h3>Step 1: Obtain Your API Key</h3>").
-    3. You MUST integrate AT LEAST ONE visual tag (e.g., [[ASSET_1]], [[ASSET_2]]...) in every section that corresponds to a screenshot.
+    3. You MUST integrate AT LEAST ONE visual tag (e.g., [[VISUAL_EVIDENCE_1]]) in every section that corresponds to a screenshot.
     4. The Final Verdict MUST be a clear recommendation on "Who is this Guide for?".
 
 IF content_type is "Review":
@@ -676,91 +659,63 @@ Look for THEMATIC CONNECTIONS:
 Example: If the current article is about "AI Coding Errors", and you see a link for "AI Writing Hallucinations", write a bridge sentence:
 "This logic error is exactly like the hallucination problem we discussed in <a href=\"URL\">[Link Title]</a>, but for code."
 
-Action: Insert 2-4 such "Bridge Links" naturally in the text.
 
-INTERNAL LINK MANDATE (NON-NEGOTIABLE):
-- You MUST insert at least 2 internal links to latestai.me articles from the KG LINKS provided.
-- CRITICAL: Internal links MUST point to SPECIFIC articles (e.g., https://www.latestai.me/2026/04/specific-article.html), NOT to the bare homepage (https://www.latestai.me).
-- FORBIDDEN: <a href="https://www.latestai.me">our articles on AI tools</a> — this is a generic homepage link with no SEO value.
-- REQUIRED format: <a href="https://www.latestai.me/2026/04/actual-article-slug.html">Descriptive anchor text about that specific article</a>
-- If KG LINKS are empty: write the article WITHOUT internal links rather than using fake homepage links. Empty is better than wrong.
-- Internal links must use natural anchor text that describes the linked article's topic — not "click here" or "our articles".
+Action: Insert 1-2 such "Bridge Links" naturally in the text.
 
 
 
-5. Schema (CRITICAL — USE @graph FORMAT):
-
-GENERATE A VALID JSON-LD SCHEMA using the @graph structure below.
-NEVER nest FAQPage inside TechArticle — they must be siblings in @graph.
-This is the ONLY structure Google's Rich Results Test accepts for both article + FAQ eligibility.
+5. Schema:
 
 "schemaMarkup": {{
-    "INSTRUCTION": "Generate valid @graph schema. TechArticle and FAQPage are SEPARATE nodes. FAQPage questions must be specific to this article's unique angle — NOT generic 'What is X?' questions.",
-    "OUTPUT": {{
-        "@context": "https://schema.org",
-        "@graph": [
-            {{
-                "@type": "TechArticle",
-                "@id": "ARTICLE_URL_PLACEHOLDER#article",
-                "mainEntityOfPage": {{
-                    "@type": "WebPage",
-                    "@id": "ARTICLE_URL_PLACEHOLDER"
-                }},
-                "headline": "HEADLINE_PLACEHOLDER",
-                "image": {{
+        "INSTRUCTION": "Generate detailed JSON-LD schema. Use 'TechArticle'. Ensure 'FAQPage' includes questions beginners would actually ask.",
+        "OUTPUT": {{
+            "@context": "https://schema.org",
+            "@type": "TechArticle",
+            "mainEntityOfPage": {{
+                "@type": "WebPage"
+                
+            }},
+            "headline": "HEADLINE_PLACEHOLDER",
+            "image": "IMAGE_URL_PLACEHOLDER",
+            "datePublished": "DATE_PLACEHOLDER",
+            "author": {{
+                "@type": "Person",
+                "name": "Yousef S.",
+                "url": "https://www.latestai.me"
+            }},
+            "publisher": {{
+                "@type": "Organization",
+                "name": "Latest AI",
+                "logo": {{
                     "@type": "ImageObject",
-                    "url": "IMAGE_URL_PLACEHOLDER"
-                }},
-                "datePublished": "DATE_PLACEHOLDER",
-                "dateModified": "DATE_PLACEHOLDER",
-                "author": {{
-                    "@type": "Person",
-                    "name": "Yousef S.",
-                    "url": "https://www.latestai.me/p/about.html"
-                }},
-                "publisher": {{
-                    "@type": "Organization",
-                    "name": "Latest AI",
-                    "url": "https://www.latestai.me",
-                    "logo": {{
-                        "@type": "ImageObject",
-                        "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"
-                    }}
+                    "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"
                 }}
             }},
-            {{
-                "@type": "FAQPage",
-                "@id": "ARTICLE_URL_PLACEHOLDER#faq",
-                "mainEntity": [
-                    {{
-                        "@type": "Question",
-                        "name": "Specific Question 1 — about this article's unique angle?",
-                        "acceptedAnswer": {{
-                            "@type": "Answer",
-                            "text": "Concise, helpful answer (2-4 sentences max)."
+            "mainEntity": [
+                {{
+                    "@type": "FAQPage",
+                    "mainEntity": [
+                        {{
+                            "@type": "Question",
+                            "name": "Generated Question 1 (Simple)?",
+                            "acceptedAnswer": {{
+                                "@type": "Answer",
+                                "text": "Simple Answer 1."
+                            }}
+                        }},
+                        {{
+                            "@type": "Question",
+                            "name": "Generated Question 2 (Useful)?",
+                            "acceptedAnswer": {{
+                                "@type": "Answer",
+                                "text": "Simple Answer 2."
+                            }}
                         }}
-                    }},
-                    {{
-                        "@type": "Question",
-                        "name": "Specific Question 2 — a real doubt the reader would have?",
-                        "acceptedAnswer": {{
-                            "@type": "Answer",
-                            "text": "Concise, helpful answer (2-4 sentences max)."
-                        }}
-                    }},
-                    {{
-                        "@type": "Question",
-                        "name": "Specific Question 3 — actionable or comparison-based?",
-                        "acceptedAnswer": {{
-                            "@type": "Answer",
-                            "text": "Concise, helpful answer (2-4 sentences max)."
-                        }}
-                    }}
-                ]
-            }}
-        ]
+                    ]
+                }}
+            ]
+        }}
     }}
-}}
 
 
 6. Sources Section (Critical Requirement):
@@ -769,8 +724,7 @@ Add a section at the VERY END titled <h3>Sources & References</h3>.
 
 Create a <div class=\\"Sources\\"> container.
 
-Inside it, create a <ul> list where each list item is a link to the sources provided in the input, using the format: <li><a href=\\"URL\\" target=\\"_blank\\" rel=\\"noopener noreferrer\\">Source Title</a></li>.
-CRITICAL: NEVER use rel="nofollow" on source citations — it signals to Google that you don't trust your own sources, which hurts your E-E-A-T score. Use rel="noopener noreferrer" only.
+Inside it, create a <ul> list where each list item is a link to the sources provided in the input, using the format: <li><a href=\\"URL\\" target=\\"_blank\\" rel=\\"nofollow\\">Source Title</a></li>.
 
 
 
@@ -822,69 +776,86 @@ CRITICAL OUTPUT RULES:
 # ------------------------------------------------------------------
 
 PROMPT_D_TEMPLATE = """
-PROMPT D — The Professional Humanizer (Smart Friend Edition)
+PROMPT D — The "Beginner-Friendly" Filter
 Input Article Content (HTML): {content_input}
 
-MISSION: Rewrite the HTML content to sound like a knowledgeable tech professional writing for peers.
-Target reader: developer, marketer, or tech entrepreneur. Flesch-Kincaid grade 9-11.
-This is NOT a dumbing-down pass. It is a polish pass.
-
-═══════════════════════════════════════════════════════════════
-STRICTLY FORBIDDEN PHRASES — replace EVERY occurrence:
-═══════════════════════════════════════════════════════════════
-  "super important"          → "essential" or "critical"
-  "really important"         → "important" or "essential"
-  "super cool"               → "impressive" or "notable"
-  "pretty amazing"           → "remarkable"
-  "pretty cool"              → "interesting"
-  "Don't wait!"              → "Act before [relevant date]."
-  "wow" (as standalone word) → delete it
-  "it's a really"           → "it's a"
-  "so you don't have to"    → "so here's the summary"
-  "super" (as intensifier)  → "very" or "highly"
-  "In today's fast-paced world" → "Today,"
-  "fast-paced world"         → "rapidly evolving field"
-  "Let me clarify:"          → (remove — just state the fact)
-  "Here's the deal," (overused) → use maximum once per article
-═══════════════════════════════════════════════════════════════
+MISSION: Your ONLY job is to rewrite the provided HTML content to be more human-friendly and easier for beginners to read. Translate "Tech Speak" into "Human Speak".
 
 RULES:
 
-1. SENTENCE LENGTH: Long run-on sentences (50+ words) → split into 2 clear sentences.
-   Choppy 5-word fragments → combine with next sentence. Aim for 18-25 words average.
+1. The "Grandma Test": If a sentence is too complex for a non-techie, rewrite it.
 
-2. CONNECTOR WORDS (use sparingly, max 2 per article):
-   "In practice," / "The key point:" / "Worth noting:" / "Here's the thing,"
+Bad: "The algorithm leverages neural networks to optimize throughput."
 
-3. PARAGRAPH LENGTH: Maximum 4 sentences. Split longer paragraphs.
+Good: "The AI works behind the scenes to make things faster."
 
-4. TECHNICAL ACCURACY — NON-NEGOTIABLE:
-   - NEVER simplify paragraphs containing specific numbers, prices, versions, or scores.
-   - NEVER alter comparison table content — preserve all numbers exactly.
-   - NEVER replace technical terms (API, latency, tokens, VRAM, MMLU) with vague words.
-     You may add a brief parenthetical on FIRST use only: "latency (response time)".
-   - Paragraphs with 3+ specific metrics: change vocabulary only, preserve structure.
 
-5. DELETE ONLY EMPTY FILLER (never delete information):
-   "In conclusion," / "As we have seen," / "It is important to note that" /
-   "Furthermore," / "Moreover," / "It goes without saying that"
 
-6. PUNCTUATION TONE: Remove exclamation points not in direct quotes. Replace with periods.
+2. Connector Words: Use conversational transitions: "Here's the deal,", "Honestly,", "The best part?", "But wait, there's a catch."
 
-7. PRESERVE ALL HTML STRUCTURE: Every tag, div, class, id, inline-style stays exactly as-is.
-   Only modify text nodes between tags.
 
-8. NEVER ADD NEW CONTENT: No new headings, bullets, or information.
-   No phrases admitting ignorance ("we don't know", "details unclear").
+3. Break Walls of Text: If a paragraph is more than 3 lines, split it. Beginners skim-read.
+
+
+4. Tone Check: Ensure the tone is helpful, not preaching. Use "You" and "I" frequently.
+
+
+5. Delete "Filler": Remove anything like "In conclusion", "As we have seen", "It is crucial to note". Just say the point directly.
+
+
+6. Vocabulary: Change "Utilize" -> "Use", "Facilitate" -> "Help", "Furthermore" -> "Also".
+
+
+7. The "Boring" Filter (REWRITE, DON'T DELETE):
+
+Scan for complex words (e.g., "Paradigm", "Infrastructure", "Ecosystem"). Replace them with simple alternatives.
+
+If a paragraph talks about "Investors" or "Market Cap", REWRITE IT to talk about "Resource Growth" or "Future Plans".
+
+
+
+8. Preserve Structure: You MUST keep all existing HTML tags, divs, and class names (takeaways-box, toc-box, Sources, chart-box, etc.) intact. Do NOT change the HTML structure.
+
+9. TECHNICAL ACCURACY PROTECTION (CRITICAL):
+   - Do NOT simplify paragraphs that contain specific numbers, prices, model versions, or benchmark scores.
+   - Do NOT change technical terms in comparison tables (e.g., VRAM, latency, tokens/sec, MMLU score).
+   - "Grandma Test" applies ONLY to introductions and conclusions — NOT to technical sections.
+   - If a paragraph contains 3+ numbers or specific metrics, preserve it AS IS with only vocabulary simplification.
+   - NEVER add phrases like "We don't know the technical details" or "details are unclear" — delete any existing such phrases.
+   - NEVER add phrases admitting ignorance. If info is missing, simply omit that claim.
+
+
+9. THE "WHO CARES?" TEST:
+
+Scan every paragraph. If a paragraph talks about a specific company's internal strategy, REWRITE IT to answer: "How does this affect a student or a freelancer?".
+
+Change "Obscure Company CFO argues that..." to -> "Experts are warning that..." (Remove the obscure company name).
+
+
+
+
+CRITICAL TASK:
+
+Focus ONLY on improving the text.
+
+Do NOT add new sections.
+
+Do NOT change the title or any other metadata.
+
 
 OUTPUT JSON STRUCTURE:
 {{
-"finalContent": "The complete, polished, professional HTML content."
+"finalContent": "The rewritten, humanized, and easy-to-read full HTML content."
 }}
 
 CRITICAL OUTPUT RULES:
+
 1. Return PURE VALID JSON ONLY.
+
+
 2. Maintain valid HTML escaping (\").
+
+
 3. No Markdown.
 """
 
