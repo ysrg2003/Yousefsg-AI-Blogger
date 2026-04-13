@@ -445,92 +445,45 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             full_body_html = linked_h1_title_html + full_body_html
 
 
-        # 1. Schema Injection — @graph format (TechArticle + FAQPage as siblings)
-        log("   🧬 Injecting JSON-LD Schema (@graph format)...")
+        # 1. Schema Injection
+        # SCHEMA: Always inject — build from scratch if AI didn't return one
+        log("   🧬 Injecting JSON-LD Schema (guaranteed)...")
         today_iso = datetime.date.today().isoformat()
-
-        _PUBLISHER_BLOCK = {
-            "@type": "Organization",
-            "name": "Latest AI",
-            "url": "https://www.latestai.me",
-            "logo": {
-                "@type": "ImageObject",
-                "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"
+        if json_c.get('schemaMarkup') and json_c['schemaMarkup'].get('OUTPUT'):
+            schema_data = json_c['schemaMarkup']['OUTPUT']
+        else:
+            # Build a complete schema from scratch — never skip this
+            log("   ⚠️ AI schema missing — building fallback schema...")
+            schema_data = {
+                "@context": "https://schema.org",
+                "@type": "TechArticle",
+                "mainEntityOfPage": {"@type": "WebPage", "@id": published_url_placeholder},
+                "publisher": {
+                    "@type": "Organization",
+                    "name": "Latest AI",
+                    "logo": {"@type": "ImageObject",
+                             "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"}
+                },
+                "mainEntity": [{
+                    "@type": "FAQPage",
+                    "mainEntity": []
+                }]
             }
-        }
-        _AUTHOR_BLOCK = {
-            "@type": "Person",
-            "name": "Yousef S.",
-            # Points to the about/author page, not the homepage — stronger E-E-A-T signal
-            "url": "https://www.latestai.me/p/about.html"
-        }
-
-        # --- Build TechArticle node ---
-        article_node = {
-            "@type": "TechArticle",
-            "@id": f"{published_url_placeholder}#article",
-            "mainEntityOfPage": {"@type": "WebPage", "@id": published_url_placeholder},
-            "headline": final_title,
-            "datePublished": today_iso,
-            "dateModified": today_iso,
-            "author": _AUTHOR_BLOCK,
-            "publisher": _PUBLISHER_BLOCK,
-        }
+        # Always override these critical fields
+        schema_data['headline'] = final_title
+        schema_data['datePublished'] = today_iso
+        schema_data['dateModified'] = today_iso
+        schema_data['author'] = {'@type': 'Person', 'name': 'Yousef S.', 'url': 'https://www.latestai.me'}
         if img_url:
-            article_node["image"] = {"@type": "ImageObject", "url": img_url}
-
-        # --- Extract FAQ entities from AI schema if present ---
-        faq_entities = []
-        ai_schema = json_c.get('schemaMarkup', {}).get('OUTPUT', {})
-        # Support both old nested format and new @graph format from AI
-        if isinstance(ai_schema, dict):
-            if "@graph" in ai_schema:
-                for node in ai_schema["@graph"]:
-                    if node.get("@type") == "FAQPage":
-                        faq_entities = node.get("mainEntity", [])
-                        break
-            elif "mainEntity" in ai_schema:
-                for item in ai_schema["mainEntity"]:
-                    if isinstance(item, dict) and item.get("@type") == "FAQPage":
-                        faq_entities = item.get("mainEntity", [])
-                        break
-
-        faq_node = {
-            "@type": "FAQPage",
-            "@id": f"{published_url_placeholder}#faq",
-            "mainEntity": faq_entities if faq_entities else []
-        }
-
-        # --- VideoObject node (only when a real YouTube video was uploaded) ---
-        graph_nodes = [article_node, faq_node]
-        if vid_main_url and vid_main_url.startswith("https://"):
-            video_node = {
-                "@type": "VideoObject",
-                "@id": f"{published_url_placeholder}#video",
-                "name": final_title,
-                "description": f"Video summary of: {final_title}",
-                "thumbnailUrl": f"https://img.youtube.com/vi/{vid_main_id}/hqdefault.jpg" if vid_main_id else img_url,
-                "uploadDate": today_iso,
-                "embedUrl": vid_main_url.replace("watch?v=", "embed/") if "watch?v=" in vid_main_url else vid_main_url,
-                "publisher": _PUBLISHER_BLOCK
-            }
-            if img_url:
-                video_node["thumbnailUrl"] = img_url
-            graph_nodes.append(video_node)
-            log("   🎬 VideoObject schema node added.")
-
-        final_schema = {
-            "@context": "https://schema.org",
-            "@graph": graph_nodes
-        }
-        schema_script = f'<script type="application/ld+json">{json.dumps(final_schema, indent=2, ensure_ascii=False)}</script>'
+            schema_data['image'] = img_url
+        if 'mainEntityOfPage' in schema_data:
+            schema_data['mainEntityOfPage']['@id'] = published_url_placeholder
+        schema_script = f'<script type="application/ld+json">{json.dumps(schema_data, indent=2, ensure_ascii=False)}</script>'
         full_body_html += schema_script
-
+        
         # 2. Hero Image Injection
-        # alt text: use a descriptive phrase from the title, not the raw headline (too long for alt)
-        _hero_alt = re.sub(r'[:\-–|"\']+', '', final_title)[:100].strip()
         if img_url:
-            img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{_hero_alt}" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" /></a></div>'
+            img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{final_title}" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" /></a></div>'
             full_body_html = img_html + full_body_html
 
         # 3. Dynamic Author Box Injection — ALWAYS inject (fallback to defaults)
@@ -587,8 +540,10 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             
             # Build a repair prompt from the issues
             repair_instructions = "\n".join(gate_result["blocking_issues"])
-            repair_prompt = f"""You are a precise HTML patcher. Review the HTML below and fix ONLY the following issues.
-To save output tokens, DO NOT return the entire HTML! Instead, return a JSON array containing the exact old snippets that need fixing, and the new fixed snippets.
+            repair_prompt = f"""You are an HTML editor. Fix ONLY the following issues in the article HTML below.
+Do NOT change any other content. Return the complete fixed HTML only.
+CRITICAL: The HTML may be long. Process it completely — do NOT truncate or omit any section.
+Return the FULL article HTML after fixing, including schema, author box, and sources at the end.
 
 ISSUES TO FIX:
 {repair_instructions}
@@ -599,43 +554,23 @@ MANDATORY RULES:
 - If authority source mentioned without link (Reuters, Bloomberg) — rewrite as "industry reports indicate" 
 - If same URL appears 4+ times, keep max 2 occurrences, remove the rest
 - Do NOT add placeholder links like # or javascript:void(0)
+- Preserve ALL content after the main article body (schema JSON-LD, author box, sources section)
 
-HTML TO ANALYZE:
-{full_body_html}
-
-OUTPUT FORMAT:
-Return PURE JSON in this specific array format:
-[
-  {{"original_text": "the exact old html snippet that has the issue", "fixed_text": "the new corrected string (or empty to delete)"}}
-]"""
+HTML TO FIX (COMPLETE — DO NOT TRUNCATE YOUR OUTPUT):
+{full_body_html}"""
             
             try:
-                # Force JSON structure detection by avoiding strictly expected keys
                 repaired = api_manager.generate_step_strict(
-                    model_name, repair_prompt, "Iron Gate Repair (JSON Patch)", []
+                    model_name, repair_prompt, "Iron Gate Repair", []
                 )
                 repaired_html = None
-                
-                # Check if we got a valid list of patches
-                if isinstance(repaired, list):
-                    temp_html = full_body_html
-                    changes_applied = 0
-                    for patch in repaired:
-                        orig = patch.get("original_text", "")
-                        fixed = patch.get("fixed_text", "")
-                        # Make sure original text snippet is non-empty and exists
-                        if orig and len(orig) >= 3 and orig in temp_html:
-                            temp_html = temp_html.replace(orig, fixed)
-                            changes_applied += 1
-                    
-                    if changes_applied > 0:
-                        repaired_html = temp_html
-                        log(f"   ✅ Successfully applied {changes_applied} patches.")
-                    else:
-                        log("   ⚠️ AI returned patches, but snippets did not exactly match the HTML.")
-                        # Fallback logic if needed could go here, for now it remains None
-                else:
-                    log("   ⚠️ Repair did not return a valid JSON list format.")
+                if isinstance(repaired, str) and len(repaired) > 2000:
+                    repaired_html = repaired
+                elif isinstance(repaired, dict):
+                    for v in repaired.values():
+                        if isinstance(v, str) and len(v) > 2000:
+                            repaired_html = v
+                            break
                 
                 if repaired_html:
                     # Re-run gate after repair
