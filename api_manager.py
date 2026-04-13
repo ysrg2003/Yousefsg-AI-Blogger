@@ -1,6 +1,5 @@
 # FILE: api_manager.py
 # ROLE: Advanced AI Orchestrator (Hybrid Waterfall Strategy)
-# STRATEGY: Puter.js (Claude/GPT) -> Gemini 2.0 -> Gemini 1.5 Pro -> Gemini Flash
 # DESCRIPTION: Ensures the highest quality model is always used, degrading gracefully only on failure.
 # FEATURES: Key Rotation, Self-Healing JSON, Multi-Provider Redundancy.
 
