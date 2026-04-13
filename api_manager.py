@@ -20,7 +20,7 @@ from config import log
 API_HEAT = 30  # Seconds to wait between heavy calls to prevent flooding
 
 # 1. Primary Engine (The Best Writer available via Puter)
-PUTER_MODEL = "claude-3-5-sonnet" 
+PUTER_MODEL = "gemini-3-flash" 
 
 # 2. Google Gemini Fallback Chain (Ordered from Strongest/Smartest to Fastest/Cheapest)
 # FIX v4.1: Removed non-existent models (gemini-3-flash-preview, gemini-robotics-er-1.5-preview)
