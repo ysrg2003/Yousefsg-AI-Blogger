@@ -62,6 +62,7 @@ jobs:
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
           GOOGLE_SEARCH_CX: ${{ secrets.GOOGLE_SEARCH_CX }}
           GOOGLE_SEARCH_API_KEY: ${{ secrets.GOOGLE_SEARCH_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python -u main.py # تشغيل سكريبت main.py مع إخراج غير مخزن مؤقتاً (-u)
 
       # 2. تغيير توقيت التشغيل العشوائي للـ workflow لليوم التالي
