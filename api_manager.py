@@ -1,5 +1,6 @@
 # FILE: api_manager.py
 # ROLE: Advanced AI Orchestrator (Hybrid Waterfall Strategy)
+# STRATEGY: Puter.js (Claude/GPT) -> Gemini 2.0 -> Gemini 1.5 Pro -> Gemini Flash
 # DESCRIPTION: Ensures the highest quality model is always used, degrading gracefully only on failure.
 # FEATURES: Key Rotation, Self-Healing JSON, Multi-Provider Redundancy.
 
@@ -19,16 +20,15 @@ from config import log
 API_HEAT = 30  # Seconds to wait between heavy calls to prevent flooding
 
 # 1. Primary Engine (The Best Writer available via Puter)
-PUTER_MODEL = "gemini-3-flash-preview" 
+PUTER_MODEL = "claude-3-5-sonnet" 
 
 # 2. Google Gemini Fallback Chain (Ordered from Strongest/Smartest to Fastest/Cheapest)
-# FIX v4.1: Removed non-existent models (gemini-3-flash-preview, gemini-robotics-er-1.5-preview)
-# that caused silent API errors and wasted retry cycles.
+# FIX: Removed non-existent models to prevent silent API errors and wasted retry cycles.
 GEMINI_FALLBACK_CHAIN = [
-    "gemini-3-flash-preview",
-    "gemini-2.5-flash",
-    "gemini-3.1-flash-lite-preview",
-    "gemini-2.5-flash-lite-preview",
+    "gemini-2.5-flash",       # Primary — best balance of speed and quality
+    "gemini-2.0-flash",       # Strong fallback
+    "gemini-1.5-pro",         # Deep context fallback
+    "gemini-1.5-flash"        # Last resort — fast and reliable
 ]
 
 class KeyManager:
