@@ -688,58 +688,79 @@ INTERNAL LINK MANDATE (NON-NEGOTIABLE):
 
 
 
-5. Schema:
+5. Schema (CRITICAL — USE @graph FORMAT):
+
+GENERATE A VALID JSON-LD SCHEMA using the @graph structure below.
+NEVER nest FAQPage inside TechArticle — they must be siblings in @graph.
+This is the ONLY structure Google's Rich Results Test accepts for both article + FAQ eligibility.
 
 "schemaMarkup": {{
-        "INSTRUCTION": "Generate detailed JSON-LD schema. Use 'TechArticle'. Ensure 'FAQPage' includes questions beginners would actually ask.",
-        "OUTPUT": {{
-            "@context": "https://schema.org",
-            "@type": "TechArticle",
-            "mainEntityOfPage": {{
-                "@type": "WebPage"
-                
-            }},
-            "headline": "HEADLINE_PLACEHOLDER",
-            "image": "IMAGE_URL_PLACEHOLDER",
-            "datePublished": "DATE_PLACEHOLDER",
-            "author": {{
-                "@type": "Person",
-                "name": "Yousef S.",
-                "url": "https://www.latestai.me"
-            }},
-            "publisher": {{
-                "@type": "Organization",
-                "name": "Latest AI",
-                "logo": {{
+    "INSTRUCTION": "Generate valid @graph schema. TechArticle and FAQPage are SEPARATE nodes. FAQPage questions must be specific to this article's unique angle — NOT generic 'What is X?' questions.",
+    "OUTPUT": {{
+        "@context": "https://schema.org",
+        "@graph": [
+            {{
+                "@type": "TechArticle",
+                "@id": "ARTICLE_URL_PLACEHOLDER#article",
+                "mainEntityOfPage": {{
+                    "@type": "WebPage",
+                    "@id": "ARTICLE_URL_PLACEHOLDER"
+                }},
+                "headline": "HEADLINE_PLACEHOLDER",
+                "image": {{
                     "@type": "ImageObject",
-                    "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"
+                    "url": "IMAGE_URL_PLACEHOLDER"
+                }},
+                "datePublished": "DATE_PLACEHOLDER",
+                "dateModified": "DATE_PLACEHOLDER",
+                "author": {{
+                    "@type": "Person",
+                    "name": "Yousef S.",
+                    "url": "https://www.latestai.me/p/about.html"
+                }},
+                "publisher": {{
+                    "@type": "Organization",
+                    "name": "Latest AI",
+                    "url": "https://www.latestai.me",
+                    "logo": {{
+                        "@type": "ImageObject",
+                        "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"
+                    }}
                 }}
             }},
-            "mainEntity": [
-                {{
-                    "@type": "FAQPage",
-                    "mainEntity": [
-                        {{
-                            "@type": "Question",
-                            "name": "Generated Question 1 (Simple)?",
-                            "acceptedAnswer": {{
-                                "@type": "Answer",
-                                "text": "Simple Answer 1."
-                            }}
-                        }},
-                        {{
-                            "@type": "Question",
-                            "name": "Generated Question 2 (Useful)?",
-                            "acceptedAnswer": {{
-                                "@type": "Answer",
-                                "text": "Simple Answer 2."
-                            }}
+            {{
+                "@type": "FAQPage",
+                "@id": "ARTICLE_URL_PLACEHOLDER#faq",
+                "mainEntity": [
+                    {{
+                        "@type": "Question",
+                        "name": "Specific Question 1 — about this article's unique angle?",
+                        "acceptedAnswer": {{
+                            "@type": "Answer",
+                            "text": "Concise, helpful answer (2-4 sentences max)."
                         }}
-                    ]
-                }}
-            ]
-        }}
+                    }},
+                    {{
+                        "@type": "Question",
+                        "name": "Specific Question 2 — a real doubt the reader would have?",
+                        "acceptedAnswer": {{
+                            "@type": "Answer",
+                            "text": "Concise, helpful answer (2-4 sentences max)."
+                        }}
+                    }},
+                    {{
+                        "@type": "Question",
+                        "name": "Specific Question 3 — actionable or comparison-based?",
+                        "acceptedAnswer": {{
+                            "@type": "Answer",
+                            "text": "Concise, helpful answer (2-4 sentences max)."
+                        }}
+                    }}
+                ]
+            }}
+        ]
     }}
+}}
 
 
 6. Sources Section (Critical Requirement):
@@ -748,7 +769,8 @@ Add a section at the VERY END titled <h3>Sources & References</h3>.
 
 Create a <div class=\\"Sources\\"> container.
 
-Inside it, create a <ul> list where each list item is a link to the sources provided in the input, using the format: <li><a href=\\"URL\\" target=\\"_blank\\" rel=\\"nofollow\\">Source Title</a></li>.
+Inside it, create a <ul> list where each list item is a link to the sources provided in the input, using the format: <li><a href=\\"URL\\" target=\\"_blank\\" rel=\\"noopener noreferrer\\">Source Title</a></li>.
+CRITICAL: NEVER use rel="nofollow" on source citations — it signals to Google that you don't trust your own sources, which hurts your E-E-A-T score. Use rel="noopener noreferrer" only.
 
 
 
@@ -800,86 +822,69 @@ CRITICAL OUTPUT RULES:
 # ------------------------------------------------------------------
 
 PROMPT_D_TEMPLATE = """
-PROMPT D — The "Beginner-Friendly" Filter
+PROMPT D — The Professional Humanizer (Smart Friend Edition)
 Input Article Content (HTML): {content_input}
 
-MISSION: Your ONLY job is to rewrite the provided HTML content to be more human-friendly and easier for beginners to read. Translate "Tech Speak" into "Human Speak".
+MISSION: Rewrite the HTML content to sound like a knowledgeable tech professional writing for peers.
+Target reader: developer, marketer, or tech entrepreneur. Flesch-Kincaid grade 9-11.
+This is NOT a dumbing-down pass. It is a polish pass.
+
+═══════════════════════════════════════════════════════════════
+STRICTLY FORBIDDEN PHRASES — replace EVERY occurrence:
+═══════════════════════════════════════════════════════════════
+  "super important"          → "essential" or "critical"
+  "really important"         → "important" or "essential"
+  "super cool"               → "impressive" or "notable"
+  "pretty amazing"           → "remarkable"
+  "pretty cool"              → "interesting"
+  "Don't wait!"              → "Act before [relevant date]."
+  "wow" (as standalone word) → delete it
+  "it's a really"           → "it's a"
+  "so you don't have to"    → "so here's the summary"
+  "super" (as intensifier)  → "very" or "highly"
+  "In today's fast-paced world" → "Today,"
+  "fast-paced world"         → "rapidly evolving field"
+  "Let me clarify:"          → (remove — just state the fact)
+  "Here's the deal," (overused) → use maximum once per article
+═══════════════════════════════════════════════════════════════
 
 RULES:
 
-1. The "Grandma Test": If a sentence is too complex for a non-techie, rewrite it.
+1. SENTENCE LENGTH: Long run-on sentences (50+ words) → split into 2 clear sentences.
+   Choppy 5-word fragments → combine with next sentence. Aim for 18-25 words average.
 
-Bad: "The algorithm leverages neural networks to optimize throughput."
+2. CONNECTOR WORDS (use sparingly, max 2 per article):
+   "In practice," / "The key point:" / "Worth noting:" / "Here's the thing,"
 
-Good: "The AI works behind the scenes to make things faster."
+3. PARAGRAPH LENGTH: Maximum 4 sentences. Split longer paragraphs.
 
+4. TECHNICAL ACCURACY — NON-NEGOTIABLE:
+   - NEVER simplify paragraphs containing specific numbers, prices, versions, or scores.
+   - NEVER alter comparison table content — preserve all numbers exactly.
+   - NEVER replace technical terms (API, latency, tokens, VRAM, MMLU) with vague words.
+     You may add a brief parenthetical on FIRST use only: "latency (response time)".
+   - Paragraphs with 3+ specific metrics: change vocabulary only, preserve structure.
 
+5. DELETE ONLY EMPTY FILLER (never delete information):
+   "In conclusion," / "As we have seen," / "It is important to note that" /
+   "Furthermore," / "Moreover," / "It goes without saying that"
 
-2. Connector Words: Use conversational transitions: "Here's the deal,", "Honestly,", "The best part?", "But wait, there's a catch."
+6. PUNCTUATION TONE: Remove exclamation points not in direct quotes. Replace with periods.
 
+7. PRESERVE ALL HTML STRUCTURE: Every tag, div, class, id, inline-style stays exactly as-is.
+   Only modify text nodes between tags.
 
-3. Break Walls of Text: If a paragraph is more than 3 lines, split it. Beginners skim-read.
-
-
-4. Tone Check: Ensure the tone is helpful, not preaching. Use "You" and "I" frequently.
-
-
-5. Delete "Filler": Remove anything like "In conclusion", "As we have seen", "It is crucial to note". Just say the point directly.
-
-
-6. Vocabulary: Change "Utilize" -> "Use", "Facilitate" -> "Help", "Furthermore" -> "Also".
-
-
-7. The "Boring" Filter (REWRITE, DON'T DELETE):
-
-Scan for complex words (e.g., "Paradigm", "Infrastructure", "Ecosystem"). Replace them with simple alternatives.
-
-If a paragraph talks about "Investors" or "Market Cap", REWRITE IT to talk about "Resource Growth" or "Future Plans".
-
-
-
-8. Preserve Structure: You MUST keep all existing HTML tags, divs, and class names (takeaways-box, toc-box, Sources, chart-box, etc.) intact. Do NOT change the HTML structure.
-
-9. TECHNICAL ACCURACY PROTECTION (CRITICAL):
-   - Do NOT simplify paragraphs that contain specific numbers, prices, model versions, or benchmark scores.
-   - Do NOT change technical terms in comparison tables (e.g., VRAM, latency, tokens/sec, MMLU score).
-   - "Grandma Test" applies ONLY to introductions and conclusions — NOT to technical sections.
-   - If a paragraph contains 3+ numbers or specific metrics, preserve it AS IS with only vocabulary simplification.
-   - NEVER add phrases like "We don't know the technical details" or "details are unclear" — delete any existing such phrases.
-   - NEVER add phrases admitting ignorance. If info is missing, simply omit that claim.
-
-
-9. THE "WHO CARES?" TEST:
-
-Scan every paragraph. If a paragraph talks about a specific company's internal strategy, REWRITE IT to answer: "How does this affect a student or a freelancer?".
-
-Change "Obscure Company CFO argues that..." to -> "Experts are warning that..." (Remove the obscure company name).
-
-
-
-
-CRITICAL TASK:
-
-Focus ONLY on improving the text.
-
-Do NOT add new sections.
-
-Do NOT change the title or any other metadata.
-
+8. NEVER ADD NEW CONTENT: No new headings, bullets, or information.
+   No phrases admitting ignorance ("we don't know", "details unclear").
 
 OUTPUT JSON STRUCTURE:
 {{
-"finalContent": "The rewritten, humanized, and easy-to-read full HTML content."
+"finalContent": "The complete, polished, professional HTML content."
 }}
 
 CRITICAL OUTPUT RULES:
-
 1. Return PURE VALID JSON ONLY.
-
-
 2. Maintain valid HTML escaping (\").
-
-
 3. No Markdown.
 """
 

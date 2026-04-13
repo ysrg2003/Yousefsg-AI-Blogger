@@ -445,45 +445,92 @@ def run_pipeline(category, config, forced_keyword=None, is_cluster_topic=False):
             full_body_html = linked_h1_title_html + full_body_html
 
 
-        # 1. Schema Injection
-        # SCHEMA: Always inject — build from scratch if AI didn't return one
-        log("   🧬 Injecting JSON-LD Schema (guaranteed)...")
+        # 1. Schema Injection — @graph format (TechArticle + FAQPage as siblings)
+        log("   🧬 Injecting JSON-LD Schema (@graph format)...")
         today_iso = datetime.date.today().isoformat()
-        if json_c.get('schemaMarkup') and json_c['schemaMarkup'].get('OUTPUT'):
-            schema_data = json_c['schemaMarkup']['OUTPUT']
-        else:
-            # Build a complete schema from scratch — never skip this
-            log("   ⚠️ AI schema missing — building fallback schema...")
-            schema_data = {
-                "@context": "https://schema.org",
-                "@type": "TechArticle",
-                "mainEntityOfPage": {"@type": "WebPage", "@id": published_url_placeholder},
-                "publisher": {
-                    "@type": "Organization",
-                    "name": "Latest AI",
-                    "logo": {"@type": "ImageObject",
-                             "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"}
-                },
-                "mainEntity": [{
-                    "@type": "FAQPage",
-                    "mainEntity": []
-                }]
+
+        _PUBLISHER_BLOCK = {
+            "@type": "Organization",
+            "name": "Latest AI",
+            "url": "https://www.latestai.me",
+            "logo": {
+                "@type": "ImageObject",
+                "url": "https://blogger.googleusercontent.com/img/a/AVvXsEiBbaQkbZWlda1fzUdjXD69xtyL8TDw44wnUhcPI_l2drrbyNq-Bd9iPcIdOCUGbonBc43Ld8vx4p7Zo0DxsM63TndOywKpXdoPINtGT7_S3vfBOsJVR5AGZMoE8CJyLMKo8KUi4iKGdI023U9QLqJNkxrBxD_bMVDpHByG2wDx_gZEFjIGaYHlXmEdZ14=s791"
             }
-        # Always override these critical fields
-        schema_data['headline'] = final_title
-        schema_data['datePublished'] = today_iso
-        schema_data['dateModified'] = today_iso
-        schema_data['author'] = {'@type': 'Person', 'name': 'Yousef S.', 'url': 'https://www.latestai.me'}
+        }
+        _AUTHOR_BLOCK = {
+            "@type": "Person",
+            "name": "Yousef S.",
+            # Points to the about/author page, not the homepage — stronger E-E-A-T signal
+            "url": "https://www.latestai.me/p/about.html"
+        }
+
+        # --- Build TechArticle node ---
+        article_node = {
+            "@type": "TechArticle",
+            "@id": f"{published_url_placeholder}#article",
+            "mainEntityOfPage": {"@type": "WebPage", "@id": published_url_placeholder},
+            "headline": final_title,
+            "datePublished": today_iso,
+            "dateModified": today_iso,
+            "author": _AUTHOR_BLOCK,
+            "publisher": _PUBLISHER_BLOCK,
+        }
         if img_url:
-            schema_data['image'] = img_url
-        if 'mainEntityOfPage' in schema_data:
-            schema_data['mainEntityOfPage']['@id'] = published_url_placeholder
-        schema_script = f'<script type="application/ld+json">{json.dumps(schema_data, indent=2, ensure_ascii=False)}</script>'
+            article_node["image"] = {"@type": "ImageObject", "url": img_url}
+
+        # --- Extract FAQ entities from AI schema if present ---
+        faq_entities = []
+        ai_schema = json_c.get('schemaMarkup', {}).get('OUTPUT', {})
+        # Support both old nested format and new @graph format from AI
+        if isinstance(ai_schema, dict):
+            if "@graph" in ai_schema:
+                for node in ai_schema["@graph"]:
+                    if node.get("@type") == "FAQPage":
+                        faq_entities = node.get("mainEntity", [])
+                        break
+            elif "mainEntity" in ai_schema:
+                for item in ai_schema["mainEntity"]:
+                    if isinstance(item, dict) and item.get("@type") == "FAQPage":
+                        faq_entities = item.get("mainEntity", [])
+                        break
+
+        faq_node = {
+            "@type": "FAQPage",
+            "@id": f"{published_url_placeholder}#faq",
+            "mainEntity": faq_entities if faq_entities else []
+        }
+
+        # --- VideoObject node (only when a real YouTube video was uploaded) ---
+        graph_nodes = [article_node, faq_node]
+        if vid_main_url and vid_main_url.startswith("https://"):
+            video_node = {
+                "@type": "VideoObject",
+                "@id": f"{published_url_placeholder}#video",
+                "name": final_title,
+                "description": f"Video summary of: {final_title}",
+                "thumbnailUrl": f"https://img.youtube.com/vi/{vid_main_id}/hqdefault.jpg" if vid_main_id else img_url,
+                "uploadDate": today_iso,
+                "embedUrl": vid_main_url.replace("watch?v=", "embed/") if "watch?v=" in vid_main_url else vid_main_url,
+                "publisher": _PUBLISHER_BLOCK
+            }
+            if img_url:
+                video_node["thumbnailUrl"] = img_url
+            graph_nodes.append(video_node)
+            log("   🎬 VideoObject schema node added.")
+
+        final_schema = {
+            "@context": "https://schema.org",
+            "@graph": graph_nodes
+        }
+        schema_script = f'<script type="application/ld+json">{json.dumps(final_schema, indent=2, ensure_ascii=False)}</script>'
         full_body_html += schema_script
-        
+
         # 2. Hero Image Injection
+        # alt text: use a descriptive phrase from the title, not the raw headline (too long for alt)
+        _hero_alt = re.sub(r'[:\-–|"\']+', '', final_title)[:100].strip()
         if img_url:
-            img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{final_title}" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" /></a></div>'
+            img_html = f'<div class="separator" style="clear: both; text-align: center; margin-bottom: 30px;"><a href="{img_url}" style="margin-left: 1em; margin-right: 1em;"><img border="0" src="{img_url}" alt="{_hero_alt}" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" /></a></div>'
             full_body_html = img_html + full_body_html
 
         # 3. Dynamic Author Box Injection — ALWAYS inject (fallback to defaults)

@@ -557,6 +557,285 @@ def clean_forbidden_phrases(html: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+# ============================================================
+# NEW CHECKS — Added for zero-defect SEO output
+# ============================================================
+
+# Patterns that indicate an API rate-limit or error crept into content
+API_ERROR_PATTERNS = [
+    r"slow down.*too many requests",
+    r"error code:\s*cloud_",
+    r"please retry again in",
+    r"rate limit exceeded",
+    r"429 too many requests",
+    r"you are being rate limited",
+    r"unauthorized.*api key",
+    r"api key.*invalid",
+    r"access denied.*quota",
+    r"quota exceeded",
+    r"internal server error",
+    r"503 service unavailable",
+    r"bad gateway",
+    r"connection timed out",
+    r"ssl handshake",
+]
+
+def check_api_error_in_code_blocks(soup) -> list:
+    """
+    Detects API error messages, rate-limit responses, or stack traces
+    accidentally published inside <pre>/<code> blocks.
+    Auto-removes the offending block.
+    """
+    issues = []
+    blocks = soup.find_all(["pre", "code"])
+    for block in blocks:
+        text = block.get_text(strip=True).lower()
+        for pattern in API_ERROR_PATTERNS:
+            if re.search(pattern, text, re.IGNORECASE):
+                # Walk up to remove the nearest wrapping div if present
+                parent = block.parent
+                if parent and parent.name == "div":
+                    parent.decompose()
+                else:
+                    block.decompose()
+                issues.append(QualityIssue(
+                    "BLOCK", "API_ERROR_IN_CONTENT",
+                    f"API error/rate-limit message published as content — removed: '{text[:80]}'",
+                    auto_fixed=True
+                ))
+                break
+    return issues
+
+
+def check_duplicate_images(soup) -> list:
+    """
+    Detects the same image URL appearing more than once in the article.
+    Auto-removes duplicate <figure> or <img> tags beyond the first occurrence.
+    Also detects images with identical alt text (same visual repeated).
+    """
+    issues = []
+    seen_urls = {}
+    seen_alts = {}
+
+    for fig in soup.find_all("figure"):
+        img = fig.find("img")
+        if not img:
+            continue
+        src = img.get("src", "").split("?")[0].strip()
+        alt = img.get("alt", "").strip().lower()
+
+        if src:
+            if src in seen_urls:
+                fig.decompose()
+                issues.append(QualityIssue(
+                    "BLOCK", "DUPLICATE_IMAGE",
+                    f"Same image URL used twice — duplicate removed: {src[:70]}",
+                    auto_fixed=True
+                ))
+                continue
+            seen_urls[src] = True
+
+        if alt and len(alt) > 20:  # Only flag meaningful alt texts, not short generics
+            if alt in seen_alts:
+                fig.decompose()
+                issues.append(QualityIssue(
+                    "BLOCK", "DUPLICATE_ALT_TEXT",
+                    f"Two images share identical alt text (visual duplication): '{alt[:60]}'",
+                    auto_fixed=True
+                ))
+                continue
+            seen_alts[alt] = True
+
+    return issues
+
+
+def check_and_fix_nofollow_on_sources(soup) -> list:
+    """
+    Detects and fixes rel="nofollow" on:
+    1. ALL internal latestai.me links (internal links must NEVER have nofollow)
+    2. External authority source links in the Sources section
+       (nofollow on your cited references signals low trust to Google)
+    Replaces with rel="noopener noreferrer" only.
+    """
+    issues = []
+
+    for link in soup.find_all("a", href=True):
+        href = link.get("href", "")
+        rel = link.get("rel", [])
+        if isinstance(rel, str):
+            rel = rel.split()
+
+        is_internal = "latestai.me" in href
+
+        if "nofollow" in rel:
+            # Fix it: remove nofollow, keep noopener noreferrer
+            new_rel = [r for r in rel if r != "nofollow"]
+            if "noopener" not in new_rel:
+                new_rel.append("noopener")
+            if "noreferrer" not in new_rel:
+                new_rel.append("noreferrer")
+            link["rel"] = new_rel
+
+            label = "internal latestai.me" if is_internal else "source reference"
+            issues.append(QualityIssue(
+                "BLOCK", "NOFOLLOW_ON_LINK",
+                f"rel=nofollow removed from {label} link: {href[:60]}",
+                auto_fixed=True
+            ))
+
+    return issues
+
+
+def auto_fix_url_repetition(soup, max_per_url: int = 3) -> list:
+    """
+    Enforces the max 3 citations per external URL rule.
+    Beyond the 3rd occurrence: converts the <a> to plain text (preserves anchor text).
+    Internal latestai.me links are exempt from this limit.
+    """
+    issues = []
+    citation_count = {}
+
+    for link in soup.find_all("a", href=True):
+        href = link.get("href", "")
+        if not href.startswith("http") or "latestai.me" in href:
+            continue
+        clean_url = href.split("?")[0]
+        citation_count[clean_url] = citation_count.get(clean_url, 0) + 1
+
+        if citation_count[clean_url] > max_per_url:
+            # Replace <a> with its text content only
+            anchor_text = link.get_text(strip=True)
+            link.replace_with(anchor_text)
+            issues.append(QualityIssue(
+                "BLOCK", "URL_OVER_CITED",
+                f"URL cited {citation_count[clean_url]}x (max {max_per_url}) — excess link removed: {clean_url[:60]}",
+                auto_fixed=True
+            ))
+
+    return issues
+
+
+def check_h1_self_link(soup) -> list:
+    """
+    Detects H1 tags that wrap a self-referencing link (<a> pointing to the article itself).
+    The H1 content is preserved but the <a> wrapper is removed.
+    A self-linked H1 confuses Google's entity understanding of the page.
+    """
+    issues = []
+    h1 = soup.find("h1")
+    if not h1:
+        return issues
+
+    link = h1.find("a")
+    if link:
+        href = link.get("href", "")
+        rel = link.get("rel", [])
+        # Detect bookmark/self-link: rel=bookmark or href contains temp-slug or latestai.me path
+        is_self = (
+            "bookmark" in (rel if isinstance(rel, list) else rel.split()) or
+            "temp-slug" in href or
+            ("latestai.me" in href and href.count("/") >= 4)
+        )
+        if is_self:
+            # Unwrap: replace <a> with its inner HTML
+            link.unwrap()
+            issues.append(QualityIssue(
+                "WARN", "H1_SELF_LINK",
+                "H1 wrapped in self-referencing bookmark link — unwrapped for clean SEO signal",
+                auto_fixed=True
+            ))
+    return issues
+
+
+def normalize_schema_to_graph(html: str, article_url: str = None) -> tuple:
+    """
+    Detects old-style schema (TechArticle with FAQPage nested inside mainEntity)
+    and rewrites it to the correct @graph format that Google's Rich Results Test accepts.
+    Returns (new_html, was_changed).
+    """
+    import json as _json
+    soup = BeautifulSoup(html, "html.parser")
+    changed = False
+
+    for script in soup.find_all("script", {"type": "application/ld+json"}):
+        raw = script.string
+        if not raw:
+            continue
+        try:
+            data = _json.loads(raw)
+        except Exception:
+            continue
+
+        is_old_format = (
+            isinstance(data, dict) and
+            data.get("@type") == "TechArticle" and
+            isinstance(data.get("mainEntity"), list) and
+            any(
+                isinstance(item, dict) and item.get("@type") == "FAQPage"
+                for item in data["mainEntity"]
+            )
+        )
+
+        if not is_old_format:
+            continue
+
+        # Extract embedded FAQPage
+        faq_entities = []
+        for item in data.get("mainEntity", []):
+            if isinstance(item, dict) and item.get("@type") == "FAQPage":
+                faq_entities = item.get("mainEntity", [])
+                break
+
+        # Build canonical URL
+        page_url = (
+            article_url or
+            data.get("mainEntityOfPage", {}).get("@id", "") or
+            ""
+        )
+
+        # Rebuild as @graph
+        new_data = {
+            "@context": "https://schema.org",
+            "@graph": [
+                {
+                    "@type": "TechArticle",
+                    "@id": f"{page_url}#article" if page_url else None,
+                    "mainEntityOfPage": {"@type": "WebPage", "@id": page_url} if page_url else None,
+                    "headline": data.get("headline", ""),
+                    "image": data.get("image"),
+                    "datePublished": data.get("datePublished", ""),
+                    "dateModified": data.get("dateModified", data.get("datePublished", "")),
+                    "author": {
+                        "@type": "Person",
+                        "name": "Yousef S.",
+                        "url": "https://www.latestai.me/p/about.html"
+                    },
+                    "publisher": data.get("publisher", {
+                        "@type": "Organization",
+                        "name": "Latest AI",
+                        "url": "https://www.latestai.me"
+                    })
+                },
+                {
+                    "@type": "FAQPage",
+                    "@id": f"{page_url}#faq" if page_url else None,
+                    "mainEntity": faq_entities
+                }
+            ]
+        }
+        # Remove None values
+        new_data["@graph"] = [
+            {k: v for k, v in node.items() if v is not None}
+            for node in new_data["@graph"]
+        ]
+
+        script.string = _json.dumps(new_data, indent=2, ensure_ascii=False)
+        changed = True
+        log("   🔧 Schema normalized: old TechArticle+FAQPage nested → @graph siblings")
+
+    return str(soup) if changed else html, changed
+
+
 def check_temp_slug_in_links(soup) -> list:
     """
     FIX v4.1: Detects if the temp-slug placeholder URL was never replaced with the real published URL.
@@ -607,15 +886,22 @@ def run_quality_gate(html: str, title: str, published_date: datetime.date = None
     soup = BeautifulSoup(html, "html.parser")
     all_issues = []
     
-    # Run all checks (order matters — some checks auto-fix via soup mutation)
+    # ── Phase 0: Structural / Auto-fix passes (mutate soup first) ─────────────
+    all_issues += check_api_error_in_code_blocks(soup)   # Remove API errors published as content
+    all_issues += check_duplicate_images(soup)            # Remove duplicate image blocks
+    all_issues += check_and_fix_nofollow_on_sources(soup) # Fix rel=nofollow → noopener noreferrer
+    all_issues += auto_fix_url_repetition(soup)           # Enforce max 3 citations per URL
+    all_issues += check_h1_self_link(soup)                # Unwrap H1 bookmark self-link
+
+    # ── Phase 1: Content quality checks ───────────────────────────────────────
     all_issues += check_placeholder_images(soup)
     all_issues += check_fake_content(soup)
     all_issues += check_ignorance_admissions(soup)
     all_issues += check_video_section_without_embed(soup)
     all_issues += check_bad_captions(soup)
     
-    # Additional checks — some of these also mutate soup (authority, promo)
-    all_issues += check_repeated_citations(soup)
+    # ── Phase 2: Citation, authority, table checks ────────────────────────────
+    all_issues += check_repeated_citations(soup)          # Report remaining over-cited URLs
     all_issues += check_authority_claims_without_links(soup)  # mutates soup text nodes
     all_issues += check_dead_link_anchors(soup)
     all_issues += check_promo_in_caption(soup)                # mutates soup captions
@@ -625,10 +911,13 @@ def run_quality_gate(html: str, title: str, published_date: datetime.date = None
     
     # Capture ALL mutations into cleaned_html AFTER all soup-mutating checks
     cleaned_html = str(soup)
-    
+
     # Apply forbidden phrase cleanup on the fully-mutated HTML
     cleaned_html = clean_forbidden_phrases(cleaned_html)
-    
+
+    # Normalize old nested schema → @graph (works on both new and old articles)
+    cleaned_html, _schema_changed = normalize_schema_to_graph(cleaned_html)
+
     # Inject publication date
     cleaned_html = inject_publication_date(cleaned_html, published_date)
     
