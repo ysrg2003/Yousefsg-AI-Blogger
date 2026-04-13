@@ -3,7 +3,7 @@ name: Daily Article Publishing
 on:
   schedule:
     # توقيت افتراضي (يمكن تعديله تلقائياً بواسطة السكربت)
-    - cron: '21 12 * * *' 
+    - cron: '54 20 * * *' 
   workflow_dispatch: 
 
 permissions:
