@@ -26,10 +26,10 @@ PUTER_MODEL = "claude-3-5-sonnet"
 # FIX v4.1: Removed non-existent models (gemini-3-flash-preview, gemini-robotics-er-1.5-preview)
 # that caused silent API errors and wasted retry cycles.
 GEMINI_FALLBACK_CHAIN = [
-    "gemini-2.5-flash",       # Primary — best balance of speed and quality
-    "gemini-2.0-flash",       # Strong fallback
-    "gemini-1.5-pro",         # Deep context fallback
-    "gemini-1.5-flash"        # Last resort — fast and reliable
+    "gemini-3-flash",       
+    "gemini-2.5-flash",       
+    "Gemini-3.1-Flash-Lite",         
+    "Gemini-3.1-Flash-Lite"       
 ]
 
 class KeyManager:
