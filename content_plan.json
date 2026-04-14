@@ -1,6 +1,9 @@
 {
-  "active_cluster": null,
-  "queue": [],
+  "active_cluster": "HubSpot Puts Growth Context to Work with New HubSpot AEO, AI Agents, Smart Deal Progression, and 100+ Updates Mastery Series",
+  "queue": [
+    "Mastering HubSpot's New Era: A Hands-On Guide to Implementing AEO, AI Agents, and Smart Deal Progression for Max Growth",
+    "HubSpot's AI-Powered Future: A Competitive Analysis of AEO & AI Agents Against Industry Leaders and Legacy CRM"
+  ],
   "completed": [
     "Changelog | Latest LALAL.AI Updates & Features Mastery Series",
     "Introducing Claude Opus 4.6 Mastery Series",
@@ -39,5 +42,5 @@
     "What to know about the Sora discontinuation Mastery Series",
     "Flik Unveils Breakthrough Generative AI Agent with 50,000 Already on Waitlist Mastery Series"
   ],
-  "last_generated": "2026-04-11"
+  "last_generated": "2026-04-14"
 }
