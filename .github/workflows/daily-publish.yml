@@ -1,4 +1,4 @@
-name: Daily Article Publishing
+-name: Daily Article Publishing
 
 on:
   schedule:
